@@ -39,6 +39,17 @@ android {
         kotlinCompilerExtensionVersion = "1.5.3"
     }
 
+    // Force Java 17 for Java compilation
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    // Force JVM target 17 for Kotlin compilation
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
