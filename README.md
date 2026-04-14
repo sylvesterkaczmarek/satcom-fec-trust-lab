@@ -12,9 +12,6 @@ diagnostics alongside the decoded payload.
 The public repo provides a scoped host-side replay demo, not a supported
 Android app or full SME2-optimized mobile decoder.
 
-The `app/` directory name is historical in this revision. Only
-`app/src/main/cpp/` is part of the supported public path.
-
 ## Repo status
 
 - Publication-safe today: the host-side canned replay flow
@@ -29,8 +26,8 @@ The `app/` directory name is historical in this revision. Only
   output
 - One local decoder-path timing comparison between `viterbi-neon` and
   `viterbi-sme2`
-- One healthy versus impaired trust comparison using checked-in synthetic
-  fixtures
+- One healthy versus impaired versus failed trust comparison using checked-in
+  synthetic fixtures
 
 ## What is included
 
@@ -38,10 +35,16 @@ The `app/` directory name is historical in this revision. Only
   `data/synthetic/canned_replay/demo_conv_bpsk.iq`
 - A checked-in impaired synthetic IQ recording at
   `data/synthetic/canned_replay/demo_conv_bpsk_impaired.iq`
+- A checked-in CRC-failing synthetic IQ recording at
+  `data/synthetic/canned_replay/demo_conv_bpsk_failed.iq`
 - Metadata for that recording at
   `data/synthetic/canned_replay/demo_conv_bpsk.json`
 - Metadata for the impaired recording at
   `data/synthetic/canned_replay/demo_conv_bpsk_impaired.json`
+- Metadata for the failed recording at
+  `data/synthetic/canned_replay/demo_conv_bpsk_failed.json`
+- Purpose-built host-side sources under `src/`
+- A top-level `CMakeLists.txt` for host builds
 - A host-side runner at `scripts/run_replay_demo.sh`
 - A host-side build helper at `scripts/build_host_tools.sh`
 - A verification script at `scripts/check_replay_demo.sh`
@@ -49,6 +52,7 @@ The `app/` directory name is historical in this revision. Only
 - A decoder alignment check at `scripts/validate_decoder_alignment.sh`
 - A local benchmark harness at `scripts/benchmark_decoder_paths.sh`
 - Automated tests at `tests/test_host_replay.py`
+- Golden structured-output subsets under `tests/golden/`
 - Host CI at `.github/workflows/host-replay.yml`
 - Native C++ modules for front-end processing, framing, Viterbi decode, a small
   LDPC-style bit-flip decoder, and trust scoring
@@ -68,11 +72,13 @@ The replay runner reports:
 - demodulation and framing statistics
 - trust features, trust-score breakdown, and a trust assessment band
 
-The checked-in synthetic asset set contains two scenarios:
+The checked-in synthetic asset set contains three scenarios:
 
 - `healthy`: the baseline replay used by the quick start
 - `impaired`: a replay with deterministic added noise, stronger amplitude
   ripple, and a short mid-frame fade
+- `failed`: a replay that still acquires sync but has a deliberately corrupted
+  coded-data segment, so the supported replay path reaches CRC rejection
 
 ## Quick start
 
@@ -103,6 +109,8 @@ bash scripts/check_replay_demo.sh
 Common follow-on commands:
 
 ```bash
+make replay-impaired
+make replay-failed
 make compare-trust
 make align
 make benchmark
@@ -155,7 +163,7 @@ Example output:
 }
 ```
 
-Healthy versus impaired trust comparison:
+Healthy versus impaired versus failed trust comparison:
 
 ```bash
 bash scripts/compare_trust_cases.sh
@@ -175,9 +183,15 @@ Example output:
     "trust_band": "guarded",
     "weak_llr_fraction": 0.147541
   },
+  "failed": {
+    "trust_score": 0.35,
+    "trust_band": "low-confidence",
+    "error": "CRC mismatch"
+  },
   "comparison": {
-    "same_payload": true,
-    "impaired_score_delta": 0.06355
+    "healthy_impaired_same_payload": true,
+    "trust_score_order_ok": true,
+    "failed_crc_rejected": true
   }
 }
 ```
@@ -219,7 +233,8 @@ What works today:
 
 - build and run the host-side canned replay flow
 - regenerate the synthetic IQ asset and its metadata
-- compare healthy and impaired trust-monitoring cases on checked-in inputs
+- compare healthy, impaired, and failed trust-monitoring cases on checked-in
+  inputs
 - compare the `viterbi-neon` and `viterbi-sme2` entrypoints on the same canned
   input and evaluation window
 
@@ -238,6 +253,8 @@ What is synthetic:
 - `data/synthetic/canned_replay/demo_conv_bpsk.json`
 - `data/synthetic/canned_replay/demo_conv_bpsk_impaired.iq`
 - `data/synthetic/canned_replay/demo_conv_bpsk_impaired.json`
+- `data/synthetic/canned_replay/demo_conv_bpsk_failed.iq`
+- `data/synthetic/canned_replay/demo_conv_bpsk_failed.json`
 - the replay payload and waveform produced by `scripts/generate_synthetic_iq.py`
 
 What is not included:
@@ -319,10 +336,11 @@ The replay runner prints JSON similar to:
 }
 ```
 
-The trust comparison script prints a compact healthy versus impaired summary. In
-the checked-in deterministic asset set, the healthy replay decodes with
-`high-confidence`, while the impaired replay still decodes but drops to
-`guarded` because its soft decisions are weaker.
+The trust comparison script prints a compact healthy versus impaired versus
+failed summary. In the checked-in deterministic asset set, the healthy replay decodes with
+`high-confidence`, the impaired replay still decodes but drops to `guarded`
+because its soft decisions are weaker, and the failed replay is capped at
+`low-confidence` because CRC rejection is treated as a hard trust limiter.
 
 The benchmark harness prints its assumptions inline. In the current repository
 those assumptions are:
@@ -347,10 +365,11 @@ portable performance claim.
 
 Key paths:
 
-- `app/src/main/cpp/`
-  Native replay pipeline, decoder wrappers, trust logic, and utilities
+- `src/`
+  Purpose-built host-side replay pipeline, decoder wrappers, trust logic, and
+  utilities
 - `data/synthetic/canned_replay/`
-  Checked-in healthy and impaired replay fixtures plus metadata
+  Checked-in healthy, impaired, and failed replay fixtures plus metadata
 - `scripts/`
   Supported host-side build, replay, trust, and validation entrypoints
 - `Makefile`
@@ -386,12 +405,13 @@ Automated validation:
 ```text
 satcom-fec-trust-lab/
 ├─ .github/workflows/host-replay.yml # Clean-checkout host CI
+├─ CMakeLists.txt                    # Host-side CMake entrypoint
 ├─ README.md
-├─ app/src/main/cpp/                 # Native replay pipeline sources
 ├─ assets/social/                   # Repository artwork
 ├─ data/synthetic/canned_replay/    # Checked-in demo IQ and metadata
 ├─ docs/                            # Short notes for the public demo
 ├─ scripts/                         # Host build, replay, and validation scripts
+├─ src/                             # Host-side replay, FEC, DSP, and trust code
 ├─ tests/                           # Automated host replay checks
 └─ tools/                           # Host-side replay runner source
 ```

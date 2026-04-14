@@ -31,10 +31,16 @@ The replay output also reports a simple trust-assessment band:
 - `guarded`
 - `low-confidence`
 
-The checked-in impaired replay fixture is useful here. It still decodes to the
-same payload as the healthy case, but it produces lower mean soft-bit strength,
-a higher weak-LLR fraction, and a `guarded` trust assessment. That makes the
-trust output useful even before the decode path fails outright.
+The checked-in synthetic fixtures exercise three trust states:
+
+- `healthy`: clean decode, CRC pass, `high-confidence`
+- `impaired`: same payload and CRC pass, but lower soft-bit strength and a
+  `guarded` assessment
+- `failed`: intact sync plus corrupted coded data, CRC rejection, and
+  `low-confidence`
+
+That progression makes the trust output useful both before and after the decode
+path fails outright.
 
 This is still a compact demo heuristic. It is meant to be inspectable and
 reproducible for the canned replay inputs, not an operational anomaly detector

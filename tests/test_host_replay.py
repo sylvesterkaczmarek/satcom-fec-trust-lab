@@ -7,17 +7,36 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 METADATA_PATH = ROOT_DIR / "data/synthetic/canned_replay/demo_conv_bpsk.json"
 IMPAIRED_METADATA_PATH = ROOT_DIR / "data/synthetic/canned_replay/demo_conv_bpsk_impaired.json"
+FAILED_METADATA_PATH = ROOT_DIR / "data/synthetic/canned_replay/demo_conv_bpsk_failed.json"
+GOLDEN_DIR = ROOT_DIR / "tests/golden"
 
 
-def run_json_command(*args: str) -> dict:
+def run_json_command(*args: str, check: bool = True) -> dict:
     completed = subprocess.run(
         args,
         cwd=ROOT_DIR,
-        check=True,
+        check=check,
         capture_output=True,
         text=True,
     )
     return json.loads(completed.stdout)
+
+
+def load_golden(name: str) -> dict:
+    return json.loads((GOLDEN_DIR / name).read_text(encoding="utf-8"))
+
+
+def assert_subset(test_case: unittest.TestCase, actual, expected) -> None:
+    if isinstance(expected, dict):
+        test_case.assertIsInstance(actual, dict)
+        for key, expected_value in expected.items():
+            test_case.assertIn(key, actual)
+            assert_subset(test_case, actual[key], expected_value)
+        return
+    if isinstance(expected, list):
+        test_case.assertEqual(actual, expected)
+        return
+    test_case.assertEqual(actual, expected)
 
 
 class HostReplayTests(unittest.TestCase):
@@ -27,9 +46,13 @@ class HostReplayTests(unittest.TestCase):
         cls.impaired_metadata = json.loads(
             IMPAIRED_METADATA_PATH.read_text(encoding="utf-8")
         )
+        cls.failed_metadata = json.loads(
+            FAILED_METADATA_PATH.read_text(encoding="utf-8")
+        )
 
     def test_canned_replay_decodes_expected_payload(self) -> None:
         result = run_json_command("bash", "scripts/run_replay_demo.sh")
+        assert_subset(self, result, load_golden("replay_healthy.json"))
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["decoded_text"], self.metadata["message"])
@@ -61,6 +84,7 @@ class HostReplayTests(unittest.TestCase):
             "1",
             "5",
         )
+        assert_subset(self, result, load_golden("benchmark_alignment.json"))
 
         self.assertTrue(result["ok"])
         self.assertTrue(result["outputs_match"])
@@ -105,6 +129,7 @@ class HostReplayTests(unittest.TestCase):
             "scripts/run_replay_demo.sh",
             "data/synthetic/canned_replay/demo_conv_bpsk_impaired.iq",
         )
+        assert_subset(self, impaired, load_golden("replay_impaired.json"))
 
         self.assertTrue(impaired["ok"])
         self.assertEqual(impaired["decoded_text"], self.impaired_metadata["message"])
@@ -123,6 +148,42 @@ class HostReplayTests(unittest.TestCase):
             healthy["trust_features"]["weak_llr_fraction"],
         )
 
+    def test_failed_replay_is_crc_rejected_and_low_confidence(self) -> None:
+        result = run_json_command(
+            "bash",
+            "scripts/run_replay_demo.sh",
+            "--allow-failure",
+            "data/synthetic/canned_replay/demo_conv_bpsk_failed.iq",
+        )
+        impaired = run_json_command(
+            "bash",
+            "scripts/run_replay_demo.sh",
+            "data/synthetic/canned_replay/demo_conv_bpsk_impaired.iq",
+        )
+        assert_subset(self, result, load_golden("replay_failed.json"))
+
+        self.assertFalse(result["ok"])
+        self.assertFalse(result["crc_ok"])
+        self.assertEqual(result["samples_per_symbol"], self.failed_metadata["samples_per_symbol"])
+        self.assertEqual(result["trust_assessment"]["band"], "low-confidence")
+        self.assertTrue(result["trust_assessment"]["crc_failed"])
+        self.assertLess(result["trust_score"], impaired["trust_score"])
+        self.assertEqual(result["error"], "CRC mismatch")
+
+    def test_trust_comparison_script_has_expected_progression(self) -> None:
+        result = run_json_command("bash", "scripts/compare_trust_cases.sh")
+        assert_subset(self, result, load_golden("trust_case_comparison.json"))
+
+        self.assertEqual(
+            result["comparison"]["trust_band_progression"],
+            ["high-confidence", "guarded", "low-confidence"],
+        )
+        self.assertTrue(result["comparison"]["trust_score_order_ok"])
+        self.assertGreater(
+            result["comparison"]["failed_score_delta"],
+            result["comparison"]["impaired_score_delta"],
+        )
+
     def test_metadata_fixture_is_in_sync_with_generator_contract(self) -> None:
         self.assertEqual(self.metadata["message"], "SATCOM DEMO OK")
         self.assertEqual(self.metadata["message_bytes"], 14)
@@ -133,6 +194,10 @@ class HostReplayTests(unittest.TestCase):
         self.assertEqual(self.impaired_metadata["scenario"], "impaired")
         self.assertEqual(self.impaired_metadata["message"], "SATCOM DEMO OK")
         self.assertEqual(self.impaired_metadata["samples_per_symbol"], 8)
+        self.assertEqual(self.failed_metadata["scenario"], "failed")
+        self.assertEqual(self.failed_metadata["message"], "SATCOM DEMO OK")
+        self.assertEqual(self.failed_metadata["samples_per_symbol"], 8)
+        self.assertEqual(self.failed_metadata["corruption_mode"], "invert")
 
 
 if __name__ == "__main__":

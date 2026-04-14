@@ -1,0 +1,21 @@
+{
+  "ok": false,
+  "decoder": "viterbi-neon",
+  "implementation_class": "real",
+  "samples_per_symbol": 8,
+  "frame_soft_bits": 244,
+  "expected_payload_bytes": 14,
+  "decoded_payload_bytes": 14,
+  "crc_ok": false,
+  "trust_assessment": {
+    "band": "low-confidence",
+    "weak_soft_bits": true,
+    "ambiguous_sync": false,
+    "demod_clipping": false,
+    "crc_failed": true
+  },
+  "trust_breakdown": {
+    "capped_by_crc_failure": true
+  },
+  "error": "CRC mismatch"
+}

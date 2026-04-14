@@ -39,6 +39,9 @@ class ScenarioConfig:
     fade_stop: int | None = None
     fade_scale: float = 1.0
     phase_ripple_degrees: float = 0.0
+    corruption_start_symbol: int | None = None
+    corruption_stop_symbol: int | None = None
+    corruption_mode: str = "none"
     description: str = ""
 
 
@@ -68,6 +71,26 @@ SCENARIOS = {
         description=(
             "Deterministic impaired replay with added noise, stronger amplitude ripple, "
             "and a short mid-frame fade."
+        ),
+    ),
+    "failed": ScenarioConfig(
+        name="failed",
+        seed=41,
+        i_dc=0.04,
+        q_dc=-0.02,
+        i_noise_stddev=0.10,
+        q_noise_stddev=0.05,
+        gain_ripple=0.12,
+        fade_start=92,
+        fade_stop=132,
+        fade_scale=0.35,
+        phase_ripple_degrees=10.0,
+        corruption_start_symbol=56,
+        corruption_stop_symbol=120,
+        corruption_mode="invert",
+        description=(
+            "Deterministic failed replay with an intact sync region but a corrupted "
+            "coded-data segment that drives CRC failure."
         ),
     ),
 }
@@ -133,6 +156,14 @@ def modulate_bpsk(frame_bits: list[int], scenario: ScenarioConfig) -> bytes:
         )
         i_symbol = symbol * symbol_gain * math.cos(phase_radians)
         q_symbol = symbol * symbol_gain * math.sin(phase_radians)
+        if (
+            scenario.corruption_mode == "invert"
+            and scenario.corruption_start_symbol is not None
+            and scenario.corruption_stop_symbol is not None
+            and scenario.corruption_start_symbol <= symbol_index < scenario.corruption_stop_symbol
+        ):
+            i_symbol *= -1.0
+            q_symbol *= -1.0
         for _ in range(SAMPLES_PER_SYMBOL):
             i_val = i_symbol + scenario.i_dc + rng.gauss(0.0, scenario.i_noise_stddev)
             q_val = q_symbol + scenario.q_dc + rng.gauss(0.0, scenario.q_noise_stddev)
@@ -159,6 +190,9 @@ def write_metadata(path: Path, frame_bits: list[int], scenario: ScenarioConfig) 
         "fade_stop_symbol": scenario.fade_stop,
         "fade_scale": scenario.fade_scale,
         "phase_ripple_degrees": scenario.phase_ripple_degrees,
+        "corruption_start_symbol": scenario.corruption_start_symbol,
+        "corruption_stop_symbol": scenario.corruption_stop_symbol,
+        "corruption_mode": scenario.corruption_mode,
     }
     path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
@@ -169,6 +203,8 @@ def default_output_paths(profile: str) -> tuple[Path, Path]:
         return base / "demo_conv_bpsk.iq", base / "demo_conv_bpsk.json"
     if profile == "impaired":
         return base / "demo_conv_bpsk_impaired.iq", base / "demo_conv_bpsk_impaired.json"
+    if profile == "failed":
+        return base / "demo_conv_bpsk_failed.iq", base / "demo_conv_bpsk_failed.json"
     raise ValueError(f"Unsupported profile {profile!r}")
 
 
@@ -189,7 +225,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--profile",
-        choices=["healthy", "impaired", "all"],
+        choices=["healthy", "impaired", "failed", "all"],
         default="all",
         help="Which deterministic replay scenario to generate",
     )
@@ -210,7 +246,7 @@ def main() -> None:
     if args.profile == "all":
         if args.output is not None or args.metadata is not None:
             parser.error("--output and --metadata may only be used with a single profile")
-        for profile in ("healthy", "impaired"):
+        for profile in ("healthy", "impaired", "failed"):
             output_path, metadata_path = default_output_paths(profile)
             generate_profile(output_path, metadata_path, SCENARIOS[profile])
         return

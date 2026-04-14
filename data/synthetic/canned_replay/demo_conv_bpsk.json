@@ -31,5 +31,8 @@
   "fade_start_symbol": null,
   "fade_stop_symbol": null,
   "fade_scale": 1.0,
-  "phase_ripple_degrees": 0.0
+  "phase_ripple_degrees": 0.0,
+  "corruption_start_symbol": null,
+  "corruption_stop_symbol": null,
+  "corruption_mode": "none"
 }

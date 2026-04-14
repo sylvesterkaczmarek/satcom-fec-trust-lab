@@ -1,0 +1,23 @@
+{
+  "ok": true,
+  "benchmark": {
+    "kind": "decoder-path-local-timing",
+    "local_timing_only": true,
+    "timer": "std::chrono::steady_clock"
+  },
+  "assumptions": {
+    "same_input_frame": true,
+    "same_decoder_settings": true,
+    "same_evaluation_window": true,
+    "same_traceback_core": true,
+    "same_state_machine": true,
+    "same_prepared_soft_bits": true
+  },
+  "alignment": {
+    "decoded_bit_count_match": true,
+    "decoded_bit_checksum_match": true,
+    "payload_text_match": true
+  },
+  "outputs_match": true,
+  "decoded_text": "SATCOM DEMO OK"
+}

@@ -5,10 +5,10 @@
 #include <string>
 #include <vector>
 
-#include "../app/src/main/cpp/demo/replay_pipeline.h"
-#include "../app/src/main/cpp/fec/convolutional_codec.h"
-#include "../app/src/main/cpp/fec/viterbi_decoder_neon.h"
-#include "../app/src/main/cpp/fec/viterbi_decoder_sme2.h"
+#include "../src/demo/replay_pipeline.h"
+#include "../src/fec/convolutional_codec.h"
+#include "../src/fec/viterbi_decoder_neon.h"
+#include "../src/fec/viterbi_decoder_sme2.h"
 #include "json_output.h"
 
 namespace {

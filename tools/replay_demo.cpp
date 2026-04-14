@@ -2,7 +2,7 @@
 #include <iostream>
 #include <string>
 
-#include "../app/src/main/cpp/demo/replay_pipeline.h"
+#include "../src/demo/replay_pipeline.h"
 #include "json_output.h"
 
 namespace {

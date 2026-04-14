@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "decoder": "viterbi-neon",
+  "implementation_class": "real",
+  "samples_per_symbol": 8,
+  "frame_soft_bits": 244,
+  "expected_payload_bytes": 14,
+  "decoded_payload_bytes": 14,
+  "decoded_text": "SATCOM DEMO OK",
+  "crc_ok": true,
+  "trust_assessment": {
+    "band": "guarded",
+    "weak_soft_bits": true,
+    "ambiguous_sync": false,
+    "demod_clipping": false,
+    "crc_failed": false
+  }
+}

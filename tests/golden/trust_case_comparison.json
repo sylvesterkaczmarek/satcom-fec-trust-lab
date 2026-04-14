@@ -1,0 +1,32 @@
+{
+  "healthy": {
+    "ok": true,
+    "crc_ok": true,
+    "trust_band": "high-confidence",
+    "decoded_text": "SATCOM DEMO OK"
+  },
+  "impaired": {
+    "ok": true,
+    "crc_ok": true,
+    "trust_band": "guarded",
+    "decoded_text": "SATCOM DEMO OK"
+  },
+  "failed": {
+    "ok": false,
+    "crc_ok": false,
+    "trust_band": "low-confidence",
+    "error": "CRC mismatch"
+  },
+  "comparison": {
+    "healthy_impaired_same_payload": true,
+    "trust_score_order_ok": true,
+    "impaired_has_more_weak_bits": true,
+    "impaired_has_lower_llr_strength": true,
+    "failed_crc_rejected": true,
+    "trust_band_progression": [
+      "high-confidence",
+      "guarded",
+      "low-confidence"
+    ]
+  }
+}
