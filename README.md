@@ -206,11 +206,11 @@ Example output:
 - `ldpc-neon` and `ldpc-sme2`: simplified implementations. Both use the same
   bit-flip reference decoder and are not benchmark targets in this repository.
 
-See [docs/simd_status.md](/Users/sk/GitHub/satcom-fec-trust-lab/docs/simd_status.md)
+See [docs/simd_status.md](docs/simd_status.md)
 for the exact wording used in the codebase.
-See [docs/benchmarking.md](/Users/sk/GitHub/satcom-fec-trust-lab/docs/benchmarking.md)
+See [docs/benchmarking.md](docs/benchmarking.md)
 for the exact benchmark scope and reporting notes.
-See [docs/reproducibility.md](/Users/sk/GitHub/satcom-fec-trust-lab/docs/reproducibility.md)
+See [docs/reproducibility.md](docs/reproducibility.md)
 for the clean-checkout rerun procedure.
 
 ## What this repository does not claim
