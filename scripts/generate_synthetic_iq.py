@@ -13,6 +13,7 @@ The frame format is intentionally small and fully documented in the repo:
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import json
 import math
 import random
@@ -23,7 +24,53 @@ from pathlib import Path
 SYNC_WORD = [1, 1, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1]
 MESSAGE = b"SATCOM DEMO OK"
 SAMPLES_PER_SYMBOL = 8
-SEED = 7
+
+
+@dataclass(frozen=True)
+class ScenarioConfig:
+    name: str
+    seed: int
+    i_dc: float
+    q_dc: float
+    i_noise_stddev: float
+    q_noise_stddev: float
+    gain_ripple: float
+    fade_start: int | None = None
+    fade_stop: int | None = None
+    fade_scale: float = 1.0
+    phase_ripple_degrees: float = 0.0
+    description: str = ""
+
+
+SCENARIOS = {
+    "healthy": ScenarioConfig(
+        name="healthy",
+        seed=7,
+        i_dc=0.03,
+        q_dc=-0.02,
+        i_noise_stddev=0.04,
+        q_noise_stddev=0.02,
+        gain_ripple=0.05,
+        description="Baseline replay used by the public host-side quick start.",
+    ),
+    "impaired": ScenarioConfig(
+        name="impaired",
+        seed=29,
+        i_dc=0.05,
+        q_dc=-0.03,
+        i_noise_stddev=0.20,
+        q_noise_stddev=0.08,
+        gain_ripple=0.25,
+        fade_start=88,
+        fade_stop=124,
+        fade_scale=0.28,
+        phase_ripple_degrees=16.0,
+        description=(
+            "Deterministic impaired replay with added noise, stronger amplitude ripple, "
+            "and a short mid-frame fade."
+        ),
+    ),
+}
 
 
 def crc8_bytes(data: bytes) -> int:
@@ -68,59 +115,115 @@ def build_frame_bits() -> list[int]:
     return SYNC_WORD + convolutional_encode(bytes_to_bits(payload))
 
 
-def modulate_bpsk(frame_bits: list[int], rng: random.Random) -> bytes:
+def modulate_bpsk(frame_bits: list[int], scenario: ScenarioConfig) -> bytes:
+    rng = random.Random(scenario.seed)
     samples: list[bytes] = []
     for symbol_index, bit in enumerate(frame_bits):
         symbol = 1.0 if bit else -1.0
-        symbol_gain = 1.0 + 0.05 * math.sin(symbol_index / 7.0)
+        symbol_gain = 1.0 + scenario.gain_ripple * math.sin(symbol_index / 7.0)
+        if (
+            scenario.fade_start is not None
+            and scenario.fade_stop is not None
+            and scenario.fade_start <= symbol_index < scenario.fade_stop
+        ):
+            symbol_gain *= scenario.fade_scale
+
+        phase_radians = math.radians(
+            scenario.phase_ripple_degrees * math.sin(symbol_index / 11.0)
+        )
+        i_symbol = symbol * symbol_gain * math.cos(phase_radians)
+        q_symbol = symbol * symbol_gain * math.sin(phase_radians)
         for _ in range(SAMPLES_PER_SYMBOL):
-            i_val = symbol * symbol_gain + 0.03 + rng.gauss(0.0, 0.04)
-            q_val = -0.02 + rng.gauss(0.0, 0.02)
+            i_val = i_symbol + scenario.i_dc + rng.gauss(0.0, scenario.i_noise_stddev)
+            q_val = q_symbol + scenario.q_dc + rng.gauss(0.0, scenario.q_noise_stddev)
             samples.append(struct.pack("<ff", i_val, q_val))
     return b"".join(samples)
 
 
-def write_metadata(path: Path, frame_bits: list[int]) -> None:
+def write_metadata(path: Path, frame_bits: list[int], scenario: ScenarioConfig) -> None:
     payload = MESSAGE + bytes([crc8_bytes(MESSAGE)])
     metadata = {
+        "scenario": scenario.name,
+        "description": scenario.description,
         "message": MESSAGE.decode("ascii"),
         "message_bytes": len(MESSAGE),
         "payload_bytes_with_crc": len(payload),
         "sync_word_bits": SYNC_WORD,
         "samples_per_symbol": SAMPLES_PER_SYMBOL,
         "coded_bits_per_frame": len(frame_bits) - len(SYNC_WORD),
-        "seed": SEED,
+        "seed": scenario.seed,
+        "i_noise_stddev": scenario.i_noise_stddev,
+        "q_noise_stddev": scenario.q_noise_stddev,
+        "gain_ripple": scenario.gain_ripple,
+        "fade_start_symbol": scenario.fade_start,
+        "fade_stop_symbol": scenario.fade_stop,
+        "fade_scale": scenario.fade_scale,
+        "phase_ripple_degrees": scenario.phase_ripple_degrees,
     }
     path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+
+
+def default_output_paths(profile: str) -> tuple[Path, Path]:
+    base = Path("data/synthetic/canned_replay")
+    if profile == "healthy":
+        return base / "demo_conv_bpsk.iq", base / "demo_conv_bpsk.json"
+    if profile == "impaired":
+        return base / "demo_conv_bpsk_impaired.iq", base / "demo_conv_bpsk_impaired.json"
+    raise ValueError(f"Unsupported profile {profile!r}")
+
+
+def generate_profile(output: Path, metadata: Path, scenario: ScenarioConfig) -> None:
+    frame_bits = build_frame_bits()
+    iq_bytes = modulate_bpsk(frame_bits, scenario)
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(iq_bytes)
+    metadata.parent.mkdir(parents=True, exist_ok=True)
+    write_metadata(metadata, frame_bits, scenario)
+
+    print(f"Wrote {output}")
+    print(f"Wrote {metadata}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--profile",
+        choices=["healthy", "impaired", "all"],
+        default="all",
+        help="Which deterministic replay scenario to generate",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
-        default=Path("data/synthetic/canned_replay/demo_conv_bpsk.iq"),
-        help="Path to the generated float32 IQ file",
+        default=None,
+        help="Path to the generated float32 IQ file for single-profile output",
     )
     parser.add_argument(
         "--metadata",
         type=Path,
-        default=Path("data/synthetic/canned_replay/demo_conv_bpsk.json"),
-        help="Path to the metadata JSON companion file",
+        default=None,
+        help="Path to the metadata JSON companion file for single-profile output",
     )
     args = parser.parse_args()
 
-    frame_bits = build_frame_bits()
-    rng = random.Random(SEED)
-    iq_bytes = modulate_bpsk(frame_bits, rng)
+    if args.profile == "all":
+        if args.output is not None or args.metadata is not None:
+            parser.error("--output and --metadata may only be used with a single profile")
+        for profile in ("healthy", "impaired"):
+            output_path, metadata_path = default_output_paths(profile)
+            generate_profile(output_path, metadata_path, SCENARIOS[profile])
+        return
 
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_bytes(iq_bytes)
-    args.metadata.parent.mkdir(parents=True, exist_ok=True)
-    write_metadata(args.metadata, frame_bits)
+    scenario = SCENARIOS[args.profile]
+    output_path = args.output
+    metadata_path = args.metadata
+    if output_path is None or metadata_path is None:
+        default_output, default_metadata = default_output_paths(args.profile)
+        output_path = output_path or default_output
+        metadata_path = metadata_path or default_metadata
 
-    print(f"Wrote {args.output}")
-    print(f"Wrote {args.metadata}")
+    generate_profile(output_path, metadata_path, scenario)
 
 
 if __name__ == "__main__":

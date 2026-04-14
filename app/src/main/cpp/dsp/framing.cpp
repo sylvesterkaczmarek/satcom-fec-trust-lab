@@ -35,15 +35,24 @@ bool find_frames(const SoftBitBuffer& soft_bits,
     }
 
     int best_score = std::numeric_limits<int>::min();
+    int second_best_score = std::numeric_limits<int>::min();
     size_t best_offset = 0;
+    size_t second_best_offset = 0;
     const size_t max_offset =
         soft_bits.size() - cfg.sync_word.size() - cfg.coded_bits_per_frame;
 
     for (size_t offset = 0; offset <= max_offset; ++offset) {
         const int score = correlate_sync(soft_bits, offset, cfg.sync_word);
         if (score > best_score) {
+            second_best_score = best_score;
+            second_best_offset = best_offset;
             best_score = score;
             best_offset = offset;
+            continue;
+        }
+        if (score > second_best_score) {
+            second_best_score = score;
+            second_best_offset = offset;
         }
     }
 
@@ -53,9 +62,15 @@ bool find_frames(const SoftBitBuffer& soft_bits,
     }
 
     FrameDescriptor frame;
+    frame.sync_start_index = best_offset;
     frame.start_index = best_offset + cfg.sync_word.size();
     frame.length = cfg.coded_bits_per_frame;
     frame.correlation_score = best_score;
+    frame.has_second_best_correlation =
+        (second_best_score != std::numeric_limits<int>::min());
+    frame.second_best_sync_start_index = second_best_offset;
+    frame.second_best_correlation_score =
+        frame.has_second_best_correlation ? second_best_score : best_score;
     frames.push_back(frame);
     log_info("find_frames: sync word located");
     return true;

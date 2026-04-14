@@ -2,12 +2,12 @@
 
 ![Satcom FEC Trust Lab](assets/social/github-social-card-satcom-fec-trust-lab.png)
 
-This repository ships a small, deterministic satcom replay demo built from the
-native C++ sources in `app/src/main/cpp/`. The supported public workflow is a
-host-side runner that loads a canned IQ file, performs front-end normalization,
-demodulates oversampled BPSK, finds a sync word, decodes a convolutionally
-coded frame with Viterbi, checks a CRC-8 byte, and reports a simple trust
-score.
+This repository is a scoped host-side satcom replay and decoder-comparison
+project built around deterministic synthetic IQ fixtures. The supported public
+workflow loads a checked-in IQ file, performs front-end normalization,
+demodulates oversampled BPSK, locates a sync word, decodes a convolutionally
+coded frame with Viterbi, checks a CRC-8 byte, and reports structured trust
+diagnostics alongside the decoded payload.
 
 The public repo provides a scoped host-side replay demo, not a supported
 Android app or full SME2-optimized mobile decoder.
@@ -23,14 +23,29 @@ The `app/` directory name is historical in this revision. Only
   SME2-specific decoder kernels, live RF capture, benchmark claims, or thermal
   claims
 
+## Supported scope
+
+- One host-side replay path from checked-in IQ to decoded payload plus trust
+  output
+- One local decoder-path timing comparison between `viterbi-neon` and
+  `viterbi-sme2`
+- One healthy versus impaired trust comparison using checked-in synthetic
+  fixtures
+
 ## What is included
 
 - A checked-in synthetic IQ recording at
   `data/synthetic/canned_replay/demo_conv_bpsk.iq`
+- A checked-in impaired synthetic IQ recording at
+  `data/synthetic/canned_replay/demo_conv_bpsk_impaired.iq`
 - Metadata for that recording at
   `data/synthetic/canned_replay/demo_conv_bpsk.json`
+- Metadata for the impaired recording at
+  `data/synthetic/canned_replay/demo_conv_bpsk_impaired.json`
 - A host-side runner at `scripts/run_replay_demo.sh`
+- A host-side build helper at `scripts/build_host_tools.sh`
 - A verification script at `scripts/check_replay_demo.sh`
+- A trust comparison script at `scripts/compare_trust_cases.sh`
 - A decoder alignment check at `scripts/validate_decoder_alignment.sh`
 - A local benchmark harness at `scripts/benchmark_decoder_paths.sh`
 - Automated tests at `tests/test_host_replay.py`
@@ -49,42 +64,55 @@ The replay runner reports:
 
 - decoded text
 - CRC result
-- sync correlation score
-- mean absolute LLR
-- trust score
+- front-end normalization statistics
+- demodulation and framing statistics
+- trust features, trust-score breakdown, and a trust assessment band
+
+The checked-in synthetic asset set contains two scenarios:
+
+- `healthy`: the baseline replay used by the quick start
+- `impaired`: a replay with deterministic added noise, stronger amplitude
+  ripple, and a short mid-frame fade
 
 ## Quick start
 
 Requirements for the supported quick start:
 
 - `bash`
+- `make`
 - `c++` with C++17 support
 - `python3`
 - `jq` for the validation scripts
 
-Run the checked-in replay:
+Recommended first run:
 
 ```bash
-bash scripts/run_replay_demo.sh
+make build
+make replay
+make check
 ```
 
-Verify the canned replay result:
+Equivalent direct commands:
 
 ```bash
+bash scripts/build_host_tools.sh all
+bash scripts/run_replay_demo.sh
 bash scripts/check_replay_demo.sh
 ```
 
-Validate that both decoder entrypoints operate on the same prepared frame and
-produce the same decoded output:
+Common follow-on commands:
 
 ```bash
-bash scripts/validate_decoder_alignment.sh
+make compare-trust
+make align
+make benchmark
+make test
 ```
 
-Regenerate the canned IQ asset and metadata:
+Regenerate the checked-in synthetic fixtures:
 
 ```bash
-python3 scripts/generate_synthetic_iq.py
+make regenerate
 ```
 
 Run the alternate decoder entrypoint:
@@ -93,14 +121,66 @@ Run the alternate decoder entrypoint:
 bash scripts/run_replay_demo.sh data/synthetic/canned_replay/demo_conv_bpsk.iq viterbi-sme2
 ```
 
-Run the local timing harness:
-
-```bash
-bash scripts/benchmark_decoder_paths.sh
-```
+The benchmark is intentionally narrow. It compares the checked-in
+`viterbi-neon` and `viterbi-sme2` entrypoints on the same prepared replay frame
+inside one process and reports local timing plus decoded-bit alignment data. It
+does not claim a general NEON or SME2 speed result.
 
 The supported quick start does not use Gradle. No Gradle wrapper or Android
 build entrypoint is included in this publication-scoped revision.
+
+## Example sessions
+
+Healthy replay:
+
+```bash
+bash scripts/run_replay_demo.sh | jq '{decoder, decoded_text, crc_ok, trust_score, trust_assessment}'
+```
+
+Example output:
+
+```json
+{
+  "decoder": "viterbi-neon",
+  "decoded_text": "SATCOM DEMO OK",
+  "crc_ok": true,
+  "trust_score": 1,
+  "trust_assessment": {
+    "band": "high-confidence",
+    "weak_soft_bits": false,
+    "ambiguous_sync": false,
+    "demod_clipping": false,
+    "crc_failed": false
+  }
+}
+```
+
+Healthy versus impaired trust comparison:
+
+```bash
+bash scripts/compare_trust_cases.sh
+```
+
+Example output:
+
+```json
+{
+  "healthy": {
+    "trust_score": 1.0,
+    "trust_band": "high-confidence",
+    "weak_llr_fraction": 0.0
+  },
+  "impaired": {
+    "trust_score": 0.93645,
+    "trust_band": "guarded",
+    "weak_llr_fraction": 0.147541
+  },
+  "comparison": {
+    "same_payload": true,
+    "impaired_score_delta": 0.06355
+  }
+}
+```
 
 ## SIMD implementation status
 
@@ -112,7 +192,12 @@ build entrypoint is included in this publication-scoped revision.
 - `ldpc-neon` and `ldpc-sme2`: simplified implementations. Both use the same
   bit-flip reference decoder and are not benchmark targets in this repository.
 
-See `docs/simd_status.md` for the exact wording used in the codebase.
+See [docs/simd_status.md](/Users/sk/GitHub/satcom-fec-trust-lab/docs/simd_status.md)
+for the exact wording used in the codebase.
+See [docs/benchmarking.md](/Users/sk/GitHub/satcom-fec-trust-lab/docs/benchmarking.md)
+for the exact benchmark scope and reporting notes.
+See [docs/reproducibility.md](/Users/sk/GitHub/satcom-fec-trust-lab/docs/reproducibility.md)
+for the clean-checkout rerun procedure.
 
 ## What this repository does not claim
 
@@ -134,6 +219,7 @@ What works today:
 
 - build and run the host-side canned replay flow
 - regenerate the synthetic IQ asset and its metadata
+- compare healthy and impaired trust-monitoring cases on checked-in inputs
 - compare the `viterbi-neon` and `viterbi-sme2` entrypoints on the same canned
   input and evaluation window
 
@@ -150,6 +236,8 @@ What is synthetic:
 
 - `data/synthetic/canned_replay/demo_conv_bpsk.iq`
 - `data/synthetic/canned_replay/demo_conv_bpsk.json`
+- `data/synthetic/canned_replay/demo_conv_bpsk_impaired.iq`
+- `data/synthetic/canned_replay/demo_conv_bpsk_impaired.json`
 - the replay payload and waveform produced by `scripts/generate_synthetic_iq.py`
 
 What is not included:
@@ -168,17 +256,73 @@ The replay runner prints JSON similar to:
 ```json
 {
   "ok": true,
+  "iq_path": "data/synthetic/canned_replay/demo_conv_bpsk.iq",
   "decoder": "viterbi-neon",
   "implementation_class": "real",
   "implementation_summary": "Real implementation on Arm NEON targets: NEON precomputes branch metrics; add-compare-select and traceback remain shared scalar reference code.",
+  "samples_per_symbol": 8,
+  "frame_soft_bits": 244,
+  "expected_payload_bytes": 14,
+  "decoded_payload_bytes": 14,
   "decoded_text": "SATCOM DEMO OK",
   "crc_ok": true,
-  "sync_score": 16,
-  "mean_abs_llr": 123.619,
-  "trust_score": 1,
+  "front_end": {
+    "sample_count": 2080,
+    "dc_i": 0.070320,
+    "dc_q": -0.019993,
+    "rms_before_normalization": 1.001070,
+    "rms_after_normalization": 1.0
+  },
+  "demod": {
+    "symbol_count": 260,
+    "samples_per_symbol": 8,
+    "max_abs_symbol_mean": 1.116615,
+    "clipped_symbol_count": 0
+  },
+  "framing": {
+    "sync_start_index": 0,
+    "frame_start_index": 16,
+    "frame_length": 244,
+    "sync_score": 16,
+    "has_second_best_correlation": false,
+    "second_best_sync_start_index": 0,
+    "second_best_sync_score": 16
+  },
+  "trust_features": {
+    "mean_abs_llr": 113.213,
+    "normalized_mean_abs_llr": 1.0,
+    "weak_llr_fraction": 0.0,
+    "normalized_sync_score": 1.0,
+    "normalized_sync_margin": 1.0,
+    "clipped_symbol_fraction": 0.0,
+    "crc_pass": 1.0
+  },
+  "trust_breakdown": {
+    "llr_strength": 1.0,
+    "llr_consistency": 1.0,
+    "sync_quality": 1.0,
+    "sync_margin_quality": 1.0,
+    "demod_quality": 1.0,
+    "crc_quality": 1.0,
+    "capped_by_crc_failure": false,
+    "score": 1.0
+  },
+  "trust_assessment": {
+    "band": "high-confidence",
+    "weak_soft_bits": false,
+    "ambiguous_sync": false,
+    "demod_clipping": false,
+    "crc_failed": false
+  },
+  "trust_score": 1.0,
   "error": ""
 }
 ```
+
+The trust comparison script prints a compact healthy versus impaired summary. In
+the checked-in deterministic asset set, the healthy replay decodes with
+`high-confidence`, while the impaired replay still decodes but drops to
+`guarded` because its soft decisions are weaker.
 
 The benchmark harness prints its assumptions inline. In the current repository
 those assumptions are:
@@ -189,12 +333,45 @@ those assumptions are:
 - same decoder state machine and traceback logic
 - same timed iteration count inside one process
 
+The benchmark report also includes:
+
+- compile target
+- implementation class and summary for each path
+- prepared-frame metadata and checksum
+- decoded-bit counts and decoded-bit checksums for both paths
+
+These fields are there to make the comparison auditable, not to imply a
+portable performance claim.
+
+## Repository map
+
+Key paths:
+
+- `app/src/main/cpp/`
+  Native replay pipeline, decoder wrappers, trust logic, and utilities
+- `data/synthetic/canned_replay/`
+  Checked-in healthy and impaired replay fixtures plus metadata
+- `scripts/`
+  Supported host-side build, replay, trust, and validation entrypoints
+- `Makefile`
+  Thin top-level command surface for the supported host-side workflow
+- `tools/`
+  Host-side CLI binaries used by the shell wrappers
+- `tests/`
+  Python regression tests for replay correctness, trust behavior, and decoder
+  alignment
+- `docs/`
+  Scope, architecture, trust, benchmarking, and reproducibility notes
+
 ## Script inventory
 
 Supported host-side scripts:
 
+- `make help`
+- `scripts/build_host_tools.sh`
 - `scripts/run_replay_demo.sh`
 - `scripts/check_replay_demo.sh`
+- `scripts/compare_trust_cases.sh`
 - `scripts/validate_decoder_alignment.sh`
 - `scripts/benchmark_decoder_paths.sh`
 - `scripts/generate_synthetic_iq.py`
@@ -214,7 +391,7 @@ satcom-fec-trust-lab/
 ├─ assets/social/                   # Repository artwork
 ├─ data/synthetic/canned_replay/    # Checked-in demo IQ and metadata
 ├─ docs/                            # Short notes for the public demo
-├─ scripts/                         # Asset generation and replay scripts
+├─ scripts/                         # Host build, replay, and validation scripts
 ├─ tests/                           # Automated host replay checks
 └─ tools/                           # Host-side replay runner source
 ```

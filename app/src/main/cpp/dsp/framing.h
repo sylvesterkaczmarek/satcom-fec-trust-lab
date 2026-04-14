@@ -6,21 +6,18 @@
 
 namespace satcomfec {
 
-/**
- * Represents a frame of soft bits after demodulation.
- * Each entry is a signed 8 bit LLR style value.
- */
+// Each entry is a signed 8-bit soft decision value after demodulation.
 using SoftBit = int8_t;
 using SoftBitBuffer = std::vector<SoftBit>;
 
-/**
- * Very simple frame descriptor, just start index and length
- * into a soft bit stream.
- */
 struct FrameDescriptor {
+    size_t sync_start_index = 0;
     size_t start_index = 0;
     size_t length = 0;
     int correlation_score = 0;
+    bool has_second_best_correlation = false;
+    size_t second_best_sync_start_index = 0;
+    int second_best_correlation_score = 0;
 };
 
 struct FramingConfig {

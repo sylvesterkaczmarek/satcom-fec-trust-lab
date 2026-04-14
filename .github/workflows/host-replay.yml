@@ -28,6 +28,9 @@ jobs:
       - name: Check canned replay output
         run: bash scripts/check_replay_demo.sh
 
+      - name: Compare healthy and impaired trust cases
+        run: bash scripts/compare_trust_cases.sh
+
       - name: Check decoder alignment
         run: bash scripts/validate_decoder_alignment.sh
 

@@ -68,14 +68,18 @@ PreparedReplayFrame prepare_demo_frame(const ReplayConfig& config) {
     }
 
     std::vector<ComplexF> front_end_iq;
-    if (!run_front_end(raw_iq, front_end_iq, FrontEndConfig {})) {
+    if (!run_front_end(raw_iq,
+                       front_end_iq,
+                       FrontEndConfig {},
+                       &prepared.front_end_stats)) {
         prepared.error_message = "Front-end processing failed";
         return prepared;
     }
 
     SoftBitBuffer soft_bits;
     if (!soft_demodulate_bpsk(front_end_iq, soft_bits,
-                              DemodConfig {config.samples_per_symbol})) {
+                              DemodConfig {config.samples_per_symbol},
+                              &prepared.demod_stats)) {
         prepared.error_message = "Soft demodulation failed";
         return prepared;
     }
@@ -92,18 +96,21 @@ PreparedReplayFrame prepare_demo_frame(const ReplayConfig& config) {
         return prepared;
     }
 
-    const FrameDescriptor& frame = frames.front();
-    const auto frame_begin = soft_bits.begin() + static_cast<long>(frame.start_index);
+    prepared.frame = frames.front();
+    const auto frame_begin =
+        soft_bits.begin() + static_cast<long>(prepared.frame.start_index);
     const auto frame_end =
-        frame_begin + static_cast<long>(frame.length);
+        frame_begin + static_cast<long>(prepared.frame.length);
     prepared.frame_soft_bits.assign(frame_begin, frame_end);
-    prepared.sync_score = frame.correlation_score;
     prepared.ok = true;
     return prepared;
 }
 
 ReplayResult run_demo_replay(const ReplayConfig& config) {
     ReplayResult result;
+    result.iq_path = config.iq_path;
+    result.samples_per_symbol = config.samples_per_symbol;
+    result.expected_payload_bytes = kDemoPayloadBytes;
     const ImplementationInfo& info = decoder_info(config.decoder);
     result.decoder_name = info.path_name;
     result.implementation_class = implementation_class_label(info.implementation_class);
@@ -114,6 +121,10 @@ ReplayResult run_demo_replay(const ReplayConfig& config) {
         result.error_message = prepared.error_message;
         return result;
     }
+    result.front_end_stats = prepared.front_end_stats;
+    result.demod_stats = prepared.demod_stats;
+    result.frame = prepared.frame;
+    result.frame_soft_bits = prepared.frame_soft_bits.size();
 
     std::vector<uint8_t> decoded_bits;
     if (!dispatch_decoder(config.decoder,
@@ -128,6 +139,7 @@ ReplayResult run_demo_replay(const ReplayConfig& config) {
         result.error_message = "Decoded payload length did not match the canned frame";
         return result;
     }
+    result.decoded_payload_bytes = decoded_bytes.size() - 1;
 
     const std::vector<uint8_t> payload(decoded_bytes.begin(),
                                        decoded_bytes.end() - 1);
@@ -136,13 +148,17 @@ ReplayResult run_demo_replay(const ReplayConfig& config) {
 
     result.decoded_text = bytes_to_ascii(payload);
     result.crc_ok = (observed_crc == expected_crc);
-    result.sync_score = prepared.sync_score;
     result.trust_features = compute_trust_features(
         prepared.frame_soft_bits,
-        prepared.sync_score,
+        prepared.frame,
         static_cast<int>(demo_sync_word().size()),
+        prepared.demod_stats,
         result.crc_ok);
-    result.trust_score = compute_trust_score(result.trust_features);
+    result.trust_breakdown =
+        compute_trust_score_breakdown(result.trust_features);
+    result.trust_assessment =
+        assess_trust(result.trust_features, result.trust_breakdown);
+    result.trust_score = result.trust_breakdown.score;
     result.ok = result.crc_ok;
     if (!result.crc_ok) {
         result.error_message = "CRC mismatch";

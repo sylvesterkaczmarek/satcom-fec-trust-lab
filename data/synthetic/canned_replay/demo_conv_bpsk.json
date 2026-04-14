@@ -1,4 +1,6 @@
 {
+  "scenario": "healthy",
+  "description": "Baseline replay used by the public host-side quick start.",
   "message": "SATCOM DEMO OK",
   "message_bytes": 14,
   "payload_bytes_with_crc": 15,
@@ -22,5 +24,12 @@
   ],
   "samples_per_symbol": 8,
   "coded_bits_per_frame": 244,
-  "seed": 7
+  "seed": 7,
+  "i_noise_stddev": 0.04,
+  "q_noise_stddev": 0.02,
+  "gain_ripple": 0.05,
+  "fade_start_symbol": null,
+  "fade_stop_symbol": null,
+  "fade_scale": 1.0,
+  "phase_ripple_degrees": 0.0
 }

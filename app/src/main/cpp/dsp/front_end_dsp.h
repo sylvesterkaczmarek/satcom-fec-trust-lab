@@ -15,9 +15,18 @@ struct FrontEndConfig {
     bool normalize_rms = true;
 };
 
+struct FrontEndStats {
+    size_t sample_count = 0;
+    float dc_i = 0.0f;
+    float dc_q = 0.0f;
+    float rms_before_normalization = 0.0f;
+    float rms_after_normalization = 0.0f;
+};
+
 bool run_front_end(const std::vector<ComplexF>& iq_in,
                    std::vector<ComplexF>& iq_out,
-                   const FrontEndConfig& cfg);
+                   const FrontEndConfig& cfg,
+                   FrontEndStats* stats = nullptr);
 
 }  // namespace satcomfec
 

@@ -28,6 +28,18 @@ echo "${OUTPUT}"
 echo "${OUTPUT}" | jq -e '.ok == true' >/dev/null
 echo "${OUTPUT}" | jq -e '.outputs_match == true' >/dev/null
 echo "${OUTPUT}" | jq -e '.decoded_text == "SATCOM DEMO OK"' >/dev/null
+echo "${OUTPUT}" | jq -e '.benchmark.local_timing_only == true' >/dev/null
 echo "${OUTPUT}" | jq -e '.assumptions.same_input_frame == true' >/dev/null
 echo "${OUTPUT}" | jq -e '.assumptions.same_decoder_settings == true' >/dev/null
 echo "${OUTPUT}" | jq -e '.assumptions.same_evaluation_window == true' >/dev/null
+echo "${OUTPUT}" | jq -e '.assumptions.same_traceback_core == true' >/dev/null
+echo "${OUTPUT}" | jq -e '.assumptions.same_state_machine == true' >/dev/null
+echo "${OUTPUT}" | jq -e '.assumptions.same_prepared_soft_bits == true' >/dev/null
+echo "${OUTPUT}" | jq -e '.prepared_frame.frame_length == .assumptions.coded_bits_per_frame' >/dev/null
+echo "${OUTPUT}" | jq -e '.alignment.decoded_bit_count_match == true' >/dev/null
+echo "${OUTPUT}" | jq -e '.alignment.decoded_bit_checksum_match == true' >/dev/null
+echo "${OUTPUT}" | jq -e '.alignment.payload_text_match == true' >/dev/null
+echo "${OUTPUT}" | jq -e '.paths[0].decode_ok == true' >/dev/null
+echo "${OUTPUT}" | jq -e '.paths[1].decode_ok == true' >/dev/null
+echo "${OUTPUT}" | jq -e '.paths[0].implementation_class == "real"' >/dev/null
+echo "${OUTPUT}" | jq -e '.paths[1].implementation_class == "simplified"' >/dev/null

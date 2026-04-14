@@ -8,8 +8,12 @@ namespace satcomfec {
 
 bool run_front_end(const std::vector<ComplexF>& iq_in,
                    std::vector<ComplexF>& iq_out,
-                   const FrontEndConfig& cfg) {
+                   const FrontEndConfig& cfg,
+                   FrontEndStats* stats) {
     iq_out.clear();
+    if (stats != nullptr) {
+        *stats = FrontEndStats {};
+    }
     if (iq_in.empty()) {
         log_error("run_front_end: empty IQ buffer");
         return false;
@@ -31,14 +35,26 @@ bool run_front_end(const std::vector<ComplexF>& iq_in,
         iq_out.push_back(corrected);
     }
 
+    const float rms_before_normalization =
+        std::sqrt(energy_sum / static_cast<float>(iq_out.size()));
+    float rms_after_normalization = rms_before_normalization;
+
     if (cfg.normalize_rms) {
-        const float rms = std::sqrt(energy_sum / static_cast<float>(iq_out.size()));
-        if (rms > 1.0e-6f) {
-            const float scale = 1.0f / rms;
+        if (rms_before_normalization > 1.0e-6f) {
+            const float scale = 1.0f / rms_before_normalization;
             for (auto& sample : iq_out) {
                 sample *= scale;
             }
+            rms_after_normalization = 1.0f;
         }
+    }
+
+    if (stats != nullptr) {
+        stats->sample_count = iq_in.size();
+        stats->dc_i = mean.real();
+        stats->dc_q = mean.imag();
+        stats->rms_before_normalization = rms_before_normalization;
+        stats->rms_after_normalization = rms_after_normalization;
     }
 
     log_info("run_front_end: dc removal and RMS normalization complete");

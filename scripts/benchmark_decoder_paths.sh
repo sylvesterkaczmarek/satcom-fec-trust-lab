@@ -20,35 +20,12 @@ EOF
   exit 0
 fi
 
-if ! command -v c++ >/dev/null 2>&1; then
-  echo "error: c++ compiler not found in PATH" >&2
-  exit 1
-fi
-
 if [[ ! -f "${IQ_PATH}" ]]; then
   echo "error: IQ file not found: ${IQ_PATH}" >&2
   exit 1
 fi
 
 mkdir -p "${BUILD_DIR}"
-
-c++ -std=c++17 -O2 \
-  -I"${ROOT_DIR}/app/src/main/cpp" \
-  "${ROOT_DIR}/tools/benchmark_decoders.cpp" \
-  "${ROOT_DIR}/app/src/main/cpp/demo/replay_pipeline.cpp" \
-  "${ROOT_DIR}/app/src/main/cpp/dsp/front_end_dsp.cpp" \
-  "${ROOT_DIR}/app/src/main/cpp/dsp/framing.cpp" \
-  "${ROOT_DIR}/app/src/main/cpp/dsp/soft_demod.cpp" \
-  "${ROOT_DIR}/app/src/main/cpp/fec/convolutional_codec.cpp" \
-  "${ROOT_DIR}/app/src/main/cpp/fec/ldpc_bitflip.cpp" \
-  "${ROOT_DIR}/app/src/main/cpp/fec/ldpc_decoder_neon.cpp" \
-  "${ROOT_DIR}/app/src/main/cpp/fec/ldpc_decoder_sme2.cpp" \
-  "${ROOT_DIR}/app/src/main/cpp/fec/viterbi_decoder_neon.cpp" \
-  "${ROOT_DIR}/app/src/main/cpp/fec/viterbi_decoder_sme2.cpp" \
-  "${ROOT_DIR}/app/src/main/cpp/trust/trust_features.cpp" \
-  "${ROOT_DIR}/app/src/main/cpp/trust/trust_score.cpp" \
-  "${ROOT_DIR}/app/src/main/cpp/util/iq_reader.cpp" \
-  "${ROOT_DIR}/app/src/main/cpp/util/logging.cpp" \
-  -o "${BIN_PATH}"
+"${ROOT_DIR}/scripts/build_host_tools.sh" benchmark_decoders
 
 "${BIN_PATH}" --iq "${IQ_PATH}" --warmup "${WARMUP}" --iterations "${ITERATIONS}"
