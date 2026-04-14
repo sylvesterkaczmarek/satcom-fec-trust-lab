@@ -5,11 +5,6 @@
 
 namespace satcomfec {
 
-/**
- * Convert trust features into a scalar score in [0, 1].
- *
- * Stub implementation: clamps a simple heuristic.
- */
 float compute_trust_score(const TrustFeatures& features);
 
 }  // namespace satcomfec

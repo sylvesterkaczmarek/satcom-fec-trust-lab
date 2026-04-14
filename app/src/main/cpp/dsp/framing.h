@@ -20,15 +20,18 @@ using SoftBitBuffer = std::vector<SoftBit>;
 struct FrameDescriptor {
     size_t start_index = 0;
     size_t length = 0;
+    int correlation_score = 0;
 };
 
-/**
- * Stub framing function.
- *
- * For now, this treats the entire soft bit buffer as one frame.
- */
-void find_frames(const SoftBitBuffer& soft_bits,
-                 std::vector<FrameDescriptor>& frames);
+struct FramingConfig {
+    std::vector<uint8_t> sync_word;
+    size_t coded_bits_per_frame = 0;
+    int min_correlation_score = 0;
+};
+
+bool find_frames(const SoftBitBuffer& soft_bits,
+                 std::vector<FrameDescriptor>& frames,
+                 const FramingConfig& cfg);
 
 }  // namespace satcomfec
 

@@ -8,10 +8,10 @@
 
 namespace satcomfec {
 
-/**
- * Stub LDPC decoder using SME2 optimised kernels (later).
- *
- * For now it just thresholds soft bits into hard bits.
+/*
+ * Simplified implementation.
+ * This path currently uses the shared bit-flip reference decoder with no
+ * SME2-specific kernel.
  */
 bool ldpc_decode_sme2(const SoftBitBuffer& soft_in,
                       std::vector<uint8_t>& hard_out);

@@ -5,9 +5,12 @@ project("satcom_fec_trust_lab")
 add_library(
     satcomfec
     SHARED
+    demo/replay_pipeline.cpp
     dsp/front_end_dsp.cpp
     dsp/framing.cpp
     dsp/soft_demod.cpp
+    fec/convolutional_codec.cpp
+    fec/ldpc_bitflip.cpp
     fec/ldpc_decoder_sme2.cpp
     fec/ldpc_decoder_neon.cpp
     fec/viterbi_decoder_sme2.cpp

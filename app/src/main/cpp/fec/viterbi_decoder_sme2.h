@@ -8,10 +8,11 @@
 
 namespace satcomfec {
 
-/**
- * Stub Viterbi decoder for SME2 path.
- *
- * For now it just thresholds soft bits.
+/*
+ * Simplified implementation.
+ * The SME2 entrypoint exists so the replay and benchmark harnesses can compare
+ * like-for-like decoder plumbing, but it currently uses the shared scalar
+ * reference implementation rather than an SME2-specific kernel.
  */
 bool viterbi_decode_sme2(const SoftBitBuffer& soft_in,
                          std::vector<uint8_t>& hard_out);

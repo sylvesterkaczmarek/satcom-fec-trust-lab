@@ -8,16 +8,17 @@
 namespace satcomfec {
 
 float compute_trust_score(const TrustFeatures& features) {
-    // Very naive heuristic:
-    // - large |mean_llr| is "good"
-    // - higher FER is "bad"
-    float llr_quality = std::min(std::fabs(features.mean_llr) / 64.0f, 1.0f);
-    float fer_penalty = std::min(features.fer_window, 1.0f);
+    const float llr_quality = std::min(features.mean_abs_llr / 96.0f, 1.0f);
+    const float sync_quality = std::max(0.0f, std::min(features.sync_score, 1.0f));
+    const float crc_quality = std::max(0.0f, std::min(features.crc_pass, 1.0f));
 
-    float score = llr_quality * (1.0f - fer_penalty);
+    float score = 0.45f * llr_quality + 0.25f * sync_quality + 0.30f * crc_quality;
+    if (crc_quality < 0.5f) {
+        score = std::min(score, 0.45f);
+    }
     score = std::max(0.0f, std::min(score, 1.0f));
 
-    log_info("compute_trust_score stub");
+    log_info("compute_trust_score: score computed");
     return score;
 }
 

@@ -16,7 +16,6 @@ bool load_iq_from_file(const std::string& path,
         return false;
     }
 
-    // Simple, non optimised stub: read in small chunks.
     constexpr size_t kChunkSize = 1024;
     float buffer[2 * kChunkSize];
 
@@ -37,7 +36,7 @@ bool load_iq_from_file(const std::string& path,
     }
 
     std::fclose(f);
-    log_info("Loaded IQ file (stub implementation)");
+    log_info("load_iq_from_file: IQ samples loaded");
     return true;
 }
 

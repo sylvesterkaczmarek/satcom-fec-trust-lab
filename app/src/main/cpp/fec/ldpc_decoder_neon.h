@@ -8,10 +8,10 @@
 
 namespace satcomfec {
 
-/**
- * Stub LDPC decoder using a NEON baseline (later).
- *
- * For now this mirrors the SME2 version for A/B plumbing.
+/*
+ * Simplified implementation.
+ * This path currently uses the shared bit-flip reference decoder with no
+ * NEON-specific intrinsics.
  */
 bool ldpc_decode_neon(const SoftBitBuffer& soft_in,
                       std::vector<uint8_t>& hard_out);
