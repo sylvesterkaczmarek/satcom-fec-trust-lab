@@ -8,14 +8,13 @@
 
 namespace satcomfec {
 
-/**
- * Stub soft demodulation.
- *
- * In a real implementation this would take complex samples and produce
- * soft bits (LLRs). For now we just quantise the real part.
- */
+struct DemodConfig {
+    size_t samples_per_symbol = 8;
+};
+
 bool soft_demodulate_bpsk(const std::vector<ComplexF>& iq,
-                          SoftBitBuffer& soft_bits);
+                          SoftBitBuffer& soft_bits,
+                          const DemodConfig& cfg = {});
 
 }  // namespace satcomfec
 

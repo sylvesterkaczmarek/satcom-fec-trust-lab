@@ -1,0 +1,35 @@
+name: Host replay
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  host-replay:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Regenerate the canned replay asset
+        run: python3 scripts/generate_synthetic_iq.py
+
+      - name: Check canned replay output
+        run: bash scripts/check_replay_demo.sh
+
+      - name: Check decoder alignment
+        run: bash scripts/validate_decoder_alignment.sh
+
+      - name: Run automated host replay tests
+        run: python3 -m unittest discover -s tests -v

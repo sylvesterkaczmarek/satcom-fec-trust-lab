@@ -1,20 +1,21 @@
-# Architecture overview
+# Architecture
 
-The project has three main layers.
+The supported public demo is a single offline replay path:
 
-1. Capture and front end  
-   - Phone connects to an RTL-SDR over USB.  
-   - IQ samples stream into a C / C++ front end that currently passes them through but later hosts filtering, resampling, and carrier recovery.
+1. `load_iq_from_file` reads an interleaved float32 IQ recording.
+2. `run_front_end` removes DC bias and normalizes RMS level.
+3. `soft_demodulate_bpsk` performs integrate-and-dump demodulation at a fixed
+   samples-per-symbol setting.
+4. `find_frames` locates the 16-bit sync word by correlation and slices the
+   coded frame.
+5. `viterbi_decode_neon` or `viterbi_decode_sme2` decodes the convolutionally
+   coded frame. The NEON path uses a checked-in NEON branch-metric kernel, while
+   the SME2 path keeps the shared scalar decode core.
+6. The decoded bytes are checked with CRC-8.
+7. `compute_trust_features` and `compute_trust_score` summarize replay
+   confidence from sync quality, soft-bit magnitude, and CRC success.
 
-2. Demodulation and FEC  
-   - A simple BPSK soft demodulator converts complex samples into signed 8 bit soft bits.  
-   - Framing logic identifies frame boundaries in the soft stream.  
-   - LDPC and Viterbi decoders consume frame soft bits and emit hard bits.  
-   - Each decoder has two build variants: SME2 vector kernels and a NEON baseline.
-
-3. Trust layer and UI  
-   - Trust features (for example mean LLR and short window FER) are computed over decoded windows.  
-   - A scalar trust score is produced from these features and used to highlight low confidence regions.  
-   - The Android UI shows basic status, metrics, and trust score trends.
-
-A more detailed diagram with call flow and JNI boundaries will live here once the code stabilises.
+The host-side entrypoint for this flow is `tools/replay_demo.cpp`, built and
+run by `scripts/run_replay_demo.sh`. Decoder alignment and local timing are
+handled by `scripts/validate_decoder_alignment.sh` and
+`scripts/benchmark_decoder_paths.sh`.

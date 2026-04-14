@@ -1,23 +1,8 @@
-# Safety and trust considerations
+# Safety Notes
 
-This project is a demo and research tool. It is not a certified flight or ground system.
+This repository is a developer demo for offline replay and decoder plumbing. It
+is not a certified communications or mission-support system.
 
-## Known hazards
-
-- Misleading link quality metrics under interference or hardware problems  
-- Silent data corruption if FEC logic is misconfigured  
-- Over reliance on a single trust score in complex scenarios
-
-## Current mitigations
-
-- Simple trust score that can go low when basic indicators look bad  
-- Clear separation between demo signals and real mission data  
-- Golden vector tests to protect against obvious decoder regressions
-
-## Recommended usage
-
-- Treat the tool as a support instrument during tests, not as the sole authority on link health.  
-- Validate new configurations with synthetic data and known good vectors before using them in the field.  
-- Keep the trust logic conservative and prefer abstention over false confidence.
-
-As the trust layer matures, additional monitors and tests should be added here together with their rationale.
+Use the trust score as a compact diagnostic for the canned replay path, not as a
+standalone authority. The score is derived from a small set of replay-specific
+signals and is meant to stay transparent rather than ambitious.

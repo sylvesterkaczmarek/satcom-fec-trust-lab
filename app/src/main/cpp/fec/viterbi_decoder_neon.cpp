@@ -1,20 +1,16 @@
 #include "viterbi_decoder_neon.h"
 
-#include "../util/logging.h"
+#include "convolutional_codec.h"
 
 namespace satcomfec {
 
 bool viterbi_decode_neon(const SoftBitBuffer& soft_in,
                          std::vector<uint8_t>& hard_out) {
-    hard_out.clear();
-    hard_out.reserve(soft_in.size());
-
-    for (auto s : soft_in) {
-        hard_out.push_back(s >= 0 ? 1U : 0U);
+    BranchMetricTables tables;
+    if (!prepare_branch_metrics_neon(soft_in, tables)) {
+        return false;
     }
-
-    log_info("viterbi_decode_neon stub: simple threshold decode");
-    return true;
+    return viterbi_decode_from_metrics(tables, hard_out);
 }
 
 }  // namespace satcomfec

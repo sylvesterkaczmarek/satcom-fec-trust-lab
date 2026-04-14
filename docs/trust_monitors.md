@@ -1,25 +1,14 @@
-# Trust monitors
+# Trust Monitors
 
-The trust layer starts simple and can grow over time.
+The replay demo computes three trust features for the decoded frame:
 
-## Current stub
+- mean absolute LLR over the coded frame
+- normalized sync correlation score
+- CRC pass or fail
 
-Right now, the stub implementation computes:
+`compute_trust_score` combines those features into a scalar value in `[0, 1]`.
+CRC failure caps the score, so a frame with weak integrity evidence cannot
+appear highly trusted.
 
-- Mean LLR over a window of soft bits  
-- A supplied windowed frame error rate  
-- A scalar score that increases when mean LLR magnitude is high and FER is low
-
-This is intentionally basic so the rest of the pipeline can be wired up.
-
-## Planned monitors
-
-Future versions intend to add:
-
-- Spectral kurtosis based indicators for interference  
-- Preamble correlation strength and timing jitter  
-- Error vector magnitude and carrier frequency offset trends  
-- LDPC syndrome statistics and iteration counts  
-- Change detectors over FER and other features
-
-The key idea is that the trust layer can abstain when the feature pattern falls outside calibrated ranges, instead of always returning a confident answer.
+This score is a simple demo heuristic. It is useful for the canned replay path,
+but it is not presented as an operational link-health model.

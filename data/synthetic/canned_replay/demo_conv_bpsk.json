@@ -1,0 +1,26 @@
+{
+  "message": "SATCOM DEMO OK",
+  "message_bytes": 14,
+  "payload_bytes_with_crc": 15,
+  "sync_word_bits": [
+    1,
+    1,
+    0,
+    1,
+    0,
+    0,
+    1,
+    1,
+    1,
+    0,
+    1,
+    0,
+    0,
+    1,
+    0,
+    1
+  ],
+  "samples_per_symbol": 8,
+  "coded_bits_per_frame": 244,
+  "seed": 7
+}
