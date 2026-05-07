@@ -76,7 +76,7 @@ class HostReplayTests(unittest.TestCase):
             places=6,
         )
 
-    def test_neon_and_sme2_entrypoints_align_on_same_prepared_frame(self) -> None:
+    def test_decoder_entrypoints_align_on_same_prepared_frame(self) -> None:
         result = run_json_command(
             "bash",
             "scripts/benchmark_decoder_paths.sh",
@@ -95,6 +95,8 @@ class HostReplayTests(unittest.TestCase):
         self.assertTrue(result["assumptions"]["same_evaluation_window"])
         self.assertTrue(result["assumptions"]["same_traceback_core"])
         self.assertTrue(result["assumptions"]["same_state_machine"])
+        self.assertTrue(result["assumptions"]["branch_metric_timed_separately"])
+        self.assertTrue(result["assumptions"]["full_decode_includes_branch_metric_preparation"])
         self.assertTrue(result["assumptions"]["same_prepared_soft_bits"])
         self.assertEqual(
             result["prepared_frame"]["frame_length"],
@@ -105,18 +107,61 @@ class HostReplayTests(unittest.TestCase):
         self.assertTrue(result["alignment"]["payload_text_match"])
 
         paths = {path["decoder"]: path for path in result["paths"]}
-        self.assertEqual(paths["viterbi-neon"]["implementation_class"], "real")
-        self.assertEqual(paths["viterbi-sme2"]["implementation_class"], "simplified")
+        self.assertEqual(paths["viterbi-neon"]["implementation_class"], "partial")
+        self.assertEqual(paths["viterbi-reference"]["implementation_class"], "real")
+        self.assertIn(
+            paths["viterbi-sme2"]["implementation_class"],
+            {"partial", "fallback"},
+        )
         self.assertTrue(paths["viterbi-neon"]["decode_ok"])
+        self.assertTrue(paths["viterbi-reference"]["decode_ok"])
         self.assertTrue(paths["viterbi-sme2"]["decode_ok"])
+        self.assertIn(
+            paths["viterbi-neon"]["branch_metric"]["selected_implementation"],
+            {"neon", "fallback"},
+        )
+        self.assertEqual(
+            paths["viterbi-reference"]["branch_metric"]["selected_implementation"],
+            "reference",
+        )
+        self.assertIn(
+            paths["viterbi-sme2"]["branch_metric"]["selected_implementation"],
+            {"sme2", "fallback"},
+        )
+        for path in paths.values():
+            self.assertGreaterEqual(path["branch_metric"]["elapsed_ms"], 0.0)
+            self.assertGreaterEqual(path["branch_metric"]["ns_per_iteration"], 0.0)
+            self.assertGreater(path["branch_metric"]["metric_checksum"], 0)
+            self.assertGreaterEqual(path["full_decode"]["elapsed_ms"], 0.0)
+            self.assertGreaterEqual(path["full_decode"]["ns_per_iteration"], 0.0)
         self.assertEqual(
             paths["viterbi-neon"]["decoded_bit_count"],
+            paths["viterbi-reference"]["decoded_bit_count"],
+        )
+        self.assertEqual(
             paths["viterbi-sme2"]["decoded_bit_count"],
+            paths["viterbi-reference"]["decoded_bit_count"],
         )
         self.assertEqual(
             paths["viterbi-neon"]["decoded_bit_checksum"],
-            paths["viterbi-sme2"]["decoded_bit_checksum"],
+            paths["viterbi-reference"]["decoded_bit_checksum"],
         )
+        self.assertEqual(
+            paths["viterbi-sme2"]["decoded_bit_checksum"],
+            paths["viterbi-reference"]["decoded_bit_checksum"],
+        )
+
+    def test_branch_metric_paths_match_reference_on_deterministic_inputs(self) -> None:
+        result = run_json_command("bash", "scripts/check_branch_metrics.sh")
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["implementations"]["reference"]["selected"], "reference")
+        self.assertIn(result["implementations"]["neon"]["selected"], {"neon", "fallback"})
+        self.assertIn(result["implementations"]["sme2"]["selected"], {"sme2", "fallback"})
+        self.assertGreaterEqual(len(result["cases"]), 10)
+        for case in result["cases"]:
+            self.assertTrue(case["neon_matches_reference"])
+            self.assertTrue(case["sme2_matches_reference"])
 
     def test_impaired_replay_scores_lower_than_healthy(self) -> None:
         healthy = run_json_command(

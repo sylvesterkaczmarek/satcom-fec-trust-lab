@@ -1,4 +1,4 @@
-.PHONY: help build replay replay-impaired replay-failed check compare-trust align benchmark test regenerate
+.PHONY: help build replay replay-impaired replay-failed check compare-trust align check-metrics verify-arm benchmark test regenerate
 
 help:
 	@printf '%s\n' \
@@ -10,6 +10,8 @@ help:
 	  '  make check           Verify the baseline replay output' \
 	  '  make compare-trust   Compare healthy, impaired, and failed trust results' \
 	  '  make align           Validate decoder-path alignment' \
+	  '  make check-metrics   Validate branch-metric path equivalence' \
+	  '  make verify-arm      Verify portable and optional Arm build modes' \
 	  '  make benchmark       Run the local decoder-path timing harness' \
 	  '  make test            Run the host-side automated tests' \
 	  '  make regenerate      Regenerate the checked-in synthetic fixtures'
@@ -34,6 +36,12 @@ compare-trust:
 
 align:
 	bash scripts/validate_decoder_alignment.sh
+
+check-metrics:
+	bash scripts/check_branch_metrics.sh
+
+verify-arm:
+	bash scripts/verify_arm_paths.sh
 
 benchmark:
 	bash scripts/benchmark_decoder_paths.sh

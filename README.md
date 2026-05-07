@@ -10,22 +10,22 @@ coded frame with Viterbi, checks a CRC-8 byte, and reports structured trust
 diagnostics alongside the decoded payload.
 
 The public repo provides a scoped host-side replay demo, not a supported
-Android app or full SME2-optimized mobile decoder.
+Android app or full SME2-optimized Viterbi decoder.
 
 ## Repo status
 
 - Publication-safe today: the host-side canned replay flow
 - Included validation: host-side automated tests and host CI
 - Not included: Android app packaging, JNI/mobile replay wiring,
-  SME2-specific decoder kernels, live RF capture, benchmark claims, or thermal
-  claims
+  SME2-accelerated Viterbi trellis recurrence or traceback, live RF capture,
+  benchmark claims, or thermal claims
 
 ## Supported scope
 
 - One host-side replay path from checked-in IQ to decoded payload plus trust
   output
-- One local decoder-path timing comparison between `viterbi-neon` and
-  `viterbi-sme2`
+- One local decoder-path timing comparison across `viterbi-reference`,
+  `viterbi-neon`, and `viterbi-sme2`
 - One healthy versus impaired versus failed trust comparison using checked-in
   synthetic fixtures
 
@@ -50,6 +50,7 @@ Android app or full SME2-optimized mobile decoder.
 - A verification script at `scripts/check_replay_demo.sh`
 - A trust comparison script at `scripts/compare_trust_cases.sh`
 - A decoder alignment check at `scripts/validate_decoder_alignment.sh`
+- A branch-metric equivalence check at `scripts/check_branch_metrics.sh`
 - A local benchmark harness at `scripts/benchmark_decoder_paths.sh`
 - Automated tests at `tests/test_host_replay.py`
 - Golden structured-output subsets under `tests/golden/`
@@ -87,6 +88,8 @@ Requirements for the supported quick start:
 - `bash`
 - `make`
 - `c++` with C++17 support
+- `cmake` is optional; scripts fall back to direct `c++` builds when CMake is
+  unavailable
 - `python3`
 - `jq` for the validation scripts
 
@@ -113,6 +116,8 @@ make replay-impaired
 make replay-failed
 make compare-trust
 make align
+make check-metrics
+make verify-arm
 make benchmark
 make test
 ```
@@ -127,12 +132,15 @@ Run the alternate decoder entrypoint:
 
 ```bash
 bash scripts/run_replay_demo.sh data/synthetic/canned_replay/demo_conv_bpsk.iq viterbi-sme2
+bash scripts/run_replay_demo.sh data/synthetic/canned_replay/demo_conv_bpsk.iq viterbi-reference
 ```
 
 The benchmark is intentionally narrow. It compares the checked-in
-`viterbi-neon` and `viterbi-sme2` entrypoints on the same prepared replay frame
-inside one process and reports local timing plus decoded-bit alignment data. It
-does not claim a general NEON or SME2 speed result.
+`viterbi-reference`, `viterbi-neon`, and `viterbi-sme2` entrypoints on the same
+prepared replay frame inside one process and reports local timing plus
+decoded-bit alignment data. `viterbi-sme2` uses SME2/SME streaming mode only for
+branch-metric preparation when `__ARM_FEATURE_SME2` is available; otherwise it
+reports fallback behavior.
 
 The supported quick start does not use Gradle. No Gradle wrapper or Android
 build entrypoint is included in this publication-scoped revision.
@@ -196,15 +204,47 @@ Example output:
 }
 ```
 
-## SIMD implementation status
+## Arm implementation paths
 
-- `viterbi-neon`: real implementation on Arm NEON targets. The checked-in NEON
-  work is branch-metric preparation; add-compare-select and traceback remain
-  shared with the reference decode core.
-- `viterbi-sme2`: simplified implementation. It uses the same scalar decode
-  core and does not include an SME2-specific kernel.
-- `ldpc-neon` and `ldpc-sme2`: simplified implementations. Both use the same
-  bit-flip reference decoder and are not benchmark targets in this repository.
+- Reference path: `viterbi-reference` uses scalar branch-metric preparation,
+  scalar add-compare-select, and scalar traceback.
+- Neon path: `viterbi-neon` uses Neon intrinsics for branch-metric preparation
+  when `__ARM_NEON` or `__ARM_NEON__` is available. Add-compare-select and
+  traceback remain scalar.
+- SME2 path: `viterbi-sme2` is a partial decoder path. It uses SME2/SME
+  streaming-mode branch-metric preparation only when the code is built for a
+  suitable Armv9 SME2 target and `__ARM_FEATURE_SME2` is defined.
+  Add-compare-select and traceback remain scalar.
+- Auto-selection behavior: the replay CLI selects the named decoder path. Within
+  the Neon and SME2 paths, branch-metric preparation reports `neon`, `sme2`, or
+  `fallback` depending on the compile target. Fallback means scalar reference
+  branch metrics, not hardware acceleration.
+
+LDPC support is limited to the small bit-flip reference helper; there is no
+public LDPC Neon or SME2 path.
+
+## SME2 verification notes
+
+A technical reviewer can inspect these files and commands:
+
+- SME2 source: `src/fec/branch_metrics_sme2.cpp` and
+  `src/fec/branch_metrics_sme2.h`
+- Decoder metadata and scalar Viterbi core:
+  `src/fec/convolutional_codec.cpp` and `src/fec/convolutional_codec.h`
+- SME2 wrapper: `src/fec/viterbi_decoder_sme2.cpp`
+- Build flag: `SATCOMFEC_ENABLE_SME2=ON`
+- CMake build command:
+  `cmake -S . -B build/sme2 -DSATCOMFEC_ENABLE_SME2=ON`
+- Direct build command:
+  `SATCOMFEC_ENABLE_SME2=ON bash scripts/build_host_tools.sh all`
+- Verification command: `bash scripts/verify_arm_paths.sh`
+- Branch-metric equivalence command: `bash scripts/check_branch_metrics.sh`
+
+Expected output on a compiler with SME2 ACLE support includes
+`SME2 compiler support detected`, an SME2 object symbol named
+`prepare_branch_metrics_sme2`, and branch-metric selected implementation
+`sme2` in an SME2-targeted build. On x86 or non-SME2 Arm builds, expected output
+is an explicit `fallback` or skipped SME2 build probe.
 
 See [docs/simd_status.md](docs/simd_status.md)
 for the exact wording used in the codebase.
@@ -218,7 +258,7 @@ for the clean-checkout rerun procedure.
 - It does not ship a live RTL-SDR capture path.
 - It does not ship an Android replay app path.
 - It does not ship a mobile JNI bridge or on-device replay workflow.
-- It does not claim an SME2 acceleration result.
+- It does not claim end-to-end SME2 Viterbi acceleration.
 - It does not ship a mission-derived or Φsat-2 replay asset.
 - It does not claim benchmark reproducibility, thermal behavior, or cross-device
   performance conclusions.
@@ -235,8 +275,10 @@ What works today:
 - regenerate the synthetic IQ asset and its metadata
 - compare healthy, impaired, and failed trust-monitoring cases on checked-in
   inputs
-- compare the `viterbi-neon` and `viterbi-sme2` entrypoints on the same canned
-  input and evaluation window
+- compare `viterbi-reference`, `viterbi-neon`, and `viterbi-sme2` entrypoints
+  on the same canned input and evaluation window
+- verify that reference, NEON-or-fallback, and SME2-or-fallback branch-metric
+  preparation produce identical metric arrays on deterministic inputs
 
 Required hardware:
 
@@ -244,8 +286,22 @@ Required hardware:
 
 Optional hardware:
 
-- an Arm64 machine with NEON support if you want the checked-in NEON kernel to
-  execute as NEON rather than the portable fallback
+- an Arm64 machine with NEON support if you want the checked-in branch-metric
+  preparation to execute NEON intrinsics rather than the portable fallback
+- an Arm machine and compiler targeting SME2 if you want `viterbi-sme2` to
+  compile and run the SME2/SME streaming-mode branch-metric kernel
+
+Build modes:
+
+- default portable: `bash scripts/build_host_tools.sh all`
+- explicit NEON: `SATCOMFEC_ENABLE_NEON=ON bash scripts/build_host_tools.sh all`
+- explicit SME2: `SATCOMFEC_ENABLE_SME2=ON bash scripts/build_host_tools.sh all`
+- CMake SME2 equivalent:
+  `cmake -S . -B build/sme2 -DSATCOMFEC_ENABLE_SME2=ON`
+
+`SATCOMFEC_ENABLE_SME2=ON` fails at configure/build time with a clear message
+when the compiler does not accept the SME2 target flag or ACLE streaming
+attribute. The default CI path does not require SME2 hardware.
 
 What is synthetic:
 
@@ -264,7 +320,7 @@ What is not included:
 - mission-derived replay data
 - a checked-in Gradle wrapper or Android build workflow
 - a supported Android app
-- an SME2-specific kernel
+- SME2-accelerated Viterbi add-compare-select or traceback
 
 ## Expected output
 
@@ -275,8 +331,8 @@ The replay runner prints JSON similar to:
   "ok": true,
   "iq_path": "data/synthetic/canned_replay/demo_conv_bpsk.iq",
   "decoder": "viterbi-neon",
-  "implementation_class": "real",
-  "implementation_summary": "Real implementation on Arm NEON targets: NEON precomputes branch metrics; add-compare-select and traceback remain shared scalar reference code.",
+  "implementation_class": "partial",
+  "implementation_summary": "Partial NEON implementation: Arm NEON precomputes branch metrics when __ARM_NEON is available; add-compare-select and traceback use the shared scalar reference core.",
   "samples_per_symbol": 8,
   "frame_soft_bits": 244,
   "expected_payload_bytes": 14,
@@ -345,18 +401,24 @@ because its soft decisions are weaker, and the failed replay is capped at
 The benchmark harness prints its assumptions inline. In the current repository
 those assumptions are:
 
-- same canned IQ file for both paths
+- same canned IQ file for all paths
 - same samples-per-symbol setting
 - same framed coded-bit window
-- same decoder state machine and traceback logic
+- same scalar decoder state machine and traceback logic
+- branch-metric preparation timed separately from full decode
+- full decode timing includes branch-metric preparation plus scalar Viterbi
+  recurrence and traceback
 - same timed iteration count inside one process
 
 The benchmark report also includes:
 
 - compile target
 - implementation class and summary for each path
+- selected branch-metric implementation for each path
+- branch-metric preparation time for each path
+- full decode time for each path
 - prepared-frame metadata and checksum
-- decoded-bit counts and decoded-bit checksums for both paths
+- decoded-bit counts and decoded-bit checksums for all paths
 
 These fields are there to make the comparison auditable, not to imply a
 portable performance claim.
@@ -392,6 +454,8 @@ Supported host-side scripts:
 - `scripts/check_replay_demo.sh`
 - `scripts/compare_trust_cases.sh`
 - `scripts/validate_decoder_alignment.sh`
+- `scripts/check_branch_metrics.sh`
+- `scripts/verify_arm_paths.sh`
 - `scripts/benchmark_decoder_paths.sh`
 - `scripts/generate_synthetic_iq.py`
 

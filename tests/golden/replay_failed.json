@@ -1,7 +1,7 @@
 {
   "ok": false,
   "decoder": "viterbi-neon",
-  "implementation_class": "real",
+  "implementation_class": "partial",
   "samples_per_symbol": 8,
   "frame_soft_bits": 244,
   "expected_payload_bytes": 14,

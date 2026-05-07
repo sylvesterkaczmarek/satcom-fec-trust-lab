@@ -16,6 +16,7 @@ namespace satcomfec {
 enum class ReplayDecoder {
     kViterbiNeon,
     kViterbiSme2,
+    kViterbiReference,
 };
 
 struct ReplayConfig {

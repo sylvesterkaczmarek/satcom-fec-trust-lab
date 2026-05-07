@@ -7,6 +7,7 @@
 #include "../dsp/soft_demod.h"
 #include "../fec/convolutional_codec.h"
 #include "../fec/viterbi_decoder_neon.h"
+#include "../fec/viterbi_decoder_reference.h"
 #include "../fec/viterbi_decoder_sme2.h"
 #include "../trust/trust_score.h"
 #include "../util/iq_reader.h"
@@ -31,9 +32,11 @@ const ImplementationInfo& decoder_info(ReplayDecoder decoder) {
             return viterbi_neon_implementation_info();
         case ReplayDecoder::kViterbiSme2:
             return viterbi_sme2_implementation_info();
+        case ReplayDecoder::kViterbiReference:
+            return viterbi_reference_implementation_info();
     }
 
-    return viterbi_sme2_implementation_info();
+    return viterbi_reference_implementation_info();
 }
 
 bool dispatch_decoder(ReplayDecoder decoder,
@@ -44,6 +47,8 @@ bool dispatch_decoder(ReplayDecoder decoder,
             return viterbi_decode_neon(frame_soft_bits, decoded_bits);
         case ReplayDecoder::kViterbiSme2:
             return viterbi_decode_sme2(frame_soft_bits, decoded_bits);
+        case ReplayDecoder::kViterbiReference:
+            return viterbi_decode_reference_path(frame_soft_bits, decoded_bits);
     }
 
     return false;

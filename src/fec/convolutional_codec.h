@@ -16,6 +16,8 @@ constexpr uint8_t kConvGenerator1 = 0b101;
 
 enum class ImplementationClass {
     kReal,
+    kPartial,
+    kFallback,
     kSimplified,
     kPlaceholder,
 };
@@ -38,11 +40,14 @@ bool prepare_branch_metrics_reference(const SoftBitBuffer& soft_in,
                                       BranchMetricTables& tables);
 bool prepare_branch_metrics_neon(const SoftBitBuffer& soft_in,
                                  BranchMetricTables& tables);
+bool branch_metrics_neon_kernel_compiled();
+const char* branch_metrics_neon_selected_implementation();
 bool viterbi_decode_from_metrics(const BranchMetricTables& tables,
                                  std::vector<uint8_t>& hard_out);
 
 const ImplementationInfo& viterbi_neon_implementation_info();
 const ImplementationInfo& viterbi_sme2_implementation_info();
+const ImplementationInfo& viterbi_reference_implementation_info();
 const char* implementation_class_label(ImplementationClass value);
 
 uint8_t crc8_bytes(const std::vector<uint8_t>& bytes);

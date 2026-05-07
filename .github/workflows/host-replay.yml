@@ -34,5 +34,11 @@ jobs:
       - name: Check decoder alignment
         run: bash scripts/validate_decoder_alignment.sh
 
+      - name: Check branch-metric path alignment
+        run: bash scripts/check_branch_metrics.sh
+
+      - name: Verify Arm build modes
+        run: bash scripts/verify_arm_paths.sh
+
       - name: Run automated host replay tests
         run: python3 -m unittest discover -s tests -v

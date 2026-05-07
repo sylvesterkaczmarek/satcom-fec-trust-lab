@@ -34,10 +34,12 @@ Usage: scripts/run_replay_demo.sh [--allow-failure] [iq_path] [decoder]
 Supported decoders:
   viterbi-neon
   viterbi-sme2
+  viterbi-reference
 
 Examples:
   bash scripts/run_replay_demo.sh
   bash scripts/run_replay_demo.sh data/synthetic/canned_replay/demo_conv_bpsk.iq viterbi-sme2
+  bash scripts/run_replay_demo.sh data/synthetic/canned_replay/demo_conv_bpsk.iq viterbi-reference
   bash scripts/run_replay_demo.sh --allow-failure data/synthetic/canned_replay/demo_conv_bpsk_failed.iq
 EOF
   exit 0
@@ -49,7 +51,7 @@ if [[ ! -f "${IQ_PATH}" ]]; then
 fi
 
 case "${DECODER}" in
-  viterbi-neon|viterbi-sme2)
+  viterbi-neon|viterbi-sme2|viterbi-reference)
     ;;
   *)
     echo "error: unsupported decoder '${DECODER}'" >&2

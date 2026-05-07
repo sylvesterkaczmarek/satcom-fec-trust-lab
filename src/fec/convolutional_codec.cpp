@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <limits>
 
+#include "branch_metrics_sme2.h"
+
 #if defined(__ARM_NEON) || defined(__ARM_NEON__)
 #include <arm_neon.h>
 #endif
@@ -40,19 +42,41 @@ void resize_metric_tables(size_t symbol_count, BranchMetricTables& tables) {
 const ImplementationInfo& viterbi_neon_implementation_info() {
     static const ImplementationInfo info {
         "viterbi-neon",
-        ImplementationClass::kReal,
-        "Real implementation on Arm NEON targets: NEON precomputes branch metrics; "
-        "add-compare-select and traceback remain shared scalar reference code.",
+        ImplementationClass::kPartial,
+        "Partial NEON implementation: Arm NEON precomputes branch metrics when "
+        "__ARM_NEON is available; add-compare-select and traceback use the shared "
+        "scalar reference core.",
     };
     return info;
 }
 
 const ImplementationInfo& viterbi_sme2_implementation_info() {
+#if defined(__ARM_FEATURE_SME2)
     static const ImplementationInfo info {
         "viterbi-sme2",
-        ImplementationClass::kSimplified,
-        "Simplified implementation: shared scalar reference Viterbi decode with "
-        "no SME2-specific kernel checked in.",
+        ImplementationClass::kPartial,
+        "Partial SME2 implementation: SME2/SME streaming mode is used for "
+        "branch metric preparation; Viterbi trellis recurrence and traceback "
+        "remain scalar because of temporal dependency.",
+    };
+#else
+    static const ImplementationInfo info {
+        "viterbi-sme2",
+        ImplementationClass::kFallback,
+        "SME2 branch metric kernel was not compiled for this target; this path "
+        "falls back to scalar reference branch metrics. Viterbi trellis "
+        "recurrence and traceback remain scalar.",
+    };
+#endif
+    return info;
+}
+
+const ImplementationInfo& viterbi_reference_implementation_info() {
+    static const ImplementationInfo info {
+        "viterbi-reference",
+        ImplementationClass::kReal,
+        "Scalar reference Viterbi implementation with reference branch-metric "
+        "preparation, add-compare-select, and traceback.",
     };
     return info;
 }
@@ -61,6 +85,10 @@ const char* implementation_class_label(ImplementationClass value) {
     switch (value) {
         case ImplementationClass::kReal:
             return "real";
+        case ImplementationClass::kPartial:
+            return "partial";
+        case ImplementationClass::kFallback:
+            return "fallback";
         case ImplementationClass::kSimplified:
             return "simplified";
         case ImplementationClass::kPlaceholder:
@@ -172,6 +200,22 @@ bool prepare_branch_metrics_neon(const SoftBitBuffer& soft_in,
     return true;
 #else
     return prepare_branch_metrics_reference(soft_in, tables);
+#endif
+}
+
+bool branch_metrics_neon_kernel_compiled() {
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+    return true;
+#else
+    return false;
+#endif
+}
+
+const char* branch_metrics_neon_selected_implementation() {
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+    return "neon";
+#else
+    return "fallback";
 #endif
 }
 

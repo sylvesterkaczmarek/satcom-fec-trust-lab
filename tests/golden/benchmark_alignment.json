@@ -11,6 +11,8 @@
     "same_evaluation_window": true,
     "same_traceback_core": true,
     "same_state_machine": true,
+    "branch_metric_timed_separately": true,
+    "full_decode_includes_branch_metric_preparation": true,
     "same_prepared_soft_bits": true
   },
   "alignment": {

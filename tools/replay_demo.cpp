@@ -11,6 +11,9 @@ satcomfec::ReplayDecoder parse_decoder(const std::string& value) {
     if (value == "viterbi-sme2") {
         return satcomfec::ReplayDecoder::kViterbiSme2;
     }
+    if (value == "viterbi-reference") {
+        return satcomfec::ReplayDecoder::kViterbiReference;
+    }
     return satcomfec::ReplayDecoder::kViterbiNeon;
 }
 
@@ -32,7 +35,7 @@ int main(int argc, char** argv) {
         }
         if (arg == "--help") {
             std::cout
-                << "Usage: replay_demo [--iq path] [--decoder viterbi-neon|viterbi-sme2]\n";
+                << "Usage: replay_demo [--iq path] [--decoder viterbi-neon|viterbi-sme2|viterbi-reference]\n";
             return 0;
         }
         std::cerr << "Unknown or incomplete argument: " << arg << "\n";

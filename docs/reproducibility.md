@@ -20,6 +20,8 @@ make replay-failed
 make check
 make compare-trust
 make align
+make check-metrics
+make verify-arm
 make test
 ```
 
@@ -33,6 +35,8 @@ bash scripts/run_replay_demo.sh --allow-failure data/synthetic/canned_replay/dem
 bash scripts/check_replay_demo.sh
 bash scripts/compare_trust_cases.sh
 bash scripts/validate_decoder_alignment.sh
+bash scripts/check_branch_metrics.sh
+bash scripts/verify_arm_paths.sh
 python3 -m unittest discover -s tests -v
 ```
 
@@ -53,13 +57,16 @@ What CI verifies:
 
 - baseline replay decode correctness
 - healthy versus impaired versus failed trust comparison
-- NEON versus simplified-SME2 path alignment on the same prepared replay frame
+- reference versus partial-NEON versus SME2-or-fallback path alignment on the
+  same prepared replay frame
+- reference, NEON-or-fallback, and SME2-or-fallback branch-metric equivalence on
+  deterministic short and full-frame-sized inputs
 - Python host-side regression tests
 - golden structured-output subsets for replay, trust comparison, and benchmark reports
 
 What reproducibility does not mean here:
 
 - no claim of device-level performance reproducibility
-- no claim of SME2 acceleration
+- no claim of end-to-end SME2 Viterbi acceleration
 - no live RF capture path
 - no mission-derived waveform fidelity claim
