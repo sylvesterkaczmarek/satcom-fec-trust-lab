@@ -32,3 +32,5 @@ Publication-safe wording for this repo:
 - Viterbi add-compare-select and traceback remain scalar in every public path.
 - The benchmark is a like-for-like local timing comparison over one prepared
   replay frame, not a general performance claim.
+- Small replay frames can make SME2 branch-metric preparation slower when
+  setup and streaming-mode overhead dominate.

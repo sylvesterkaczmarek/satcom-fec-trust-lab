@@ -30,6 +30,9 @@ echo "${OUTPUT}"
 
 echo "${OUTPUT}" | jq -e '.ok == true' >/dev/null
 echo "${OUTPUT}" | jq -e '.implementations.reference.selected == "reference"' >/dev/null
-echo "${OUTPUT}" | jq -e '.implementations.neon.selected == "neon" or .implementations.neon.selected == "fallback"' >/dev/null
-echo "${OUTPUT}" | jq -e '.implementations.sme2.selected == "sme2" or .implementations.sme2.selected == "fallback"' >/dev/null
-echo "${OUTPUT}" | jq -e 'all(.cases[]; .neon_matches_reference == true and .sme2_matches_reference == true)' >/dev/null
+echo "${OUTPUT}" |
+  jq -e '.implementations.neon.selected == "neon" or .implementations.neon.selected == "fallback"' >/dev/null
+echo "${OUTPUT}" |
+  jq -e '.implementations.sme2.selected == "sme2" or .implementations.sme2.selected == "fallback"' >/dev/null
+echo "${OUTPUT}" |
+  jq -e 'all(.cases[]; .neon_matches_reference == true and .sme2_matches_reference == true)' >/dev/null

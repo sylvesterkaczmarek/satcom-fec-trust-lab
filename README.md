@@ -142,6 +142,11 @@ decoded-bit alignment data. `viterbi-sme2` uses SME2/SME streaming mode only for
 branch-metric preparation when `__ARM_FEATURE_SME2` is available; otherwise it
 reports fallback behavior.
 
+Benchmark results are local timing only. Small replay frames can make the SME2
+branch-metric path slower than reference or Neon because setup and streaming-mode
+overhead may dominate. Do not present these numbers as a general SME2 speedup
+result.
+
 The supported quick start does not use Gradle. No Gradle wrapper or Android
 build entrypoint is included in this publication-scoped revision.
 
@@ -301,7 +306,8 @@ Build modes:
 
 `SATCOMFEC_ENABLE_SME2=ON` fails at configure/build time with a clear message
 when the compiler does not accept the SME2 target flag or ACLE streaming
-attribute. The default CI path does not require SME2 hardware.
+attribute. On Darwin arm64, the build tries a native+sme2 target before generic
+Armv9 SME2 targets. The default CI path does not require SME2 hardware.
 
 What is synthetic:
 
@@ -409,6 +415,7 @@ those assumptions are:
 - full decode timing includes branch-metric preparation plus scalar Viterbi
   recurrence and traceback
 - same timed iteration count inside one process
+- small replay frames may be dominated by SME2 setup and streaming-mode overhead
 
 The benchmark report also includes:
 

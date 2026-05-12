@@ -65,17 +65,27 @@ function(satcomfec_check_sme2_flag flag out_var)
 endfunction()
 
 set(SATCOMFEC_ARCH_FLAGS "")
+set(SATCOMFEC_SME2_CANDIDATE_FLAGS "-march=armv9.4-a+sme2" "-march=armv9.2-a+sme2")
+
+if(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$")
+    list(
+        PREPEND
+        SATCOMFEC_SME2_CANDIDATE_FLAGS
+        "-mcpu=native+sme2"
+        "-march=native+sme2"
+    )
+endif()
 
 if(SATCOMFEC_ENABLE_SME2)
     satcomfec_find_supported_flag(
         SATCOMFEC_SME2_FLAG
-        "-march=armv9.4-a+sme2"
-        "-march=armv9.2-a+sme2"
+        ${SATCOMFEC_SME2_CANDIDATE_FLAGS}
     )
     if(NOT SATCOMFEC_SME2_FLAG)
         message(FATAL_ERROR
             "SATCOMFEC_ENABLE_SME2=ON requires a compiler that accepts "
-            "-march=armv9.4-a+sme2 or -march=armv9.2-a+sme2."
+            "an SME2 target flag. On Darwin arm64, native+sme2 is tried first; "
+            "generic fallbacks include -march=armv9.4-a+sme2 and -march=armv9.2-a+sme2."
         )
     endif()
     satcomfec_check_sme2_flag("${SATCOMFEC_SME2_FLAG}" SATCOMFEC_SME2_ACLE_OK)

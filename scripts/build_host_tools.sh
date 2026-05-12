@@ -61,7 +61,12 @@ neon_acle_supported() {
 
 select_sme2_flag() {
   local flag
-  for flag in -march=armv9.4-a+sme2 -march=armv9.2-a+sme2; do
+  local flags=(-march=armv9.4-a+sme2 -march=armv9.2-a+sme2)
+  if [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]]; then
+    flags=(-mcpu=native+sme2 -march=native+sme2 "${flags[@]}")
+  fi
+
+  for flag in "${flags[@]}"; do
     if flag_supported "${flag}" && sme2_acle_supported "${flag}"; then
       printf '%s\n' "${flag}"
       return 0
@@ -91,7 +96,8 @@ build_with_compiler() {
   if [[ "${SATCOMFEC_ENABLE_SME2:-OFF}" == "ON" ]]; then
     local sme2_flag
     if ! sme2_flag="$(select_sme2_flag)"; then
-      echo "error: SATCOMFEC_ENABLE_SME2=ON requires -march=armv9.4-a+sme2 or -march=armv9.2-a+sme2 plus ACLE SME2 attributes" >&2
+      echo "error: SATCOMFEC_ENABLE_SME2=ON requires a supported SME2 target flag plus ACLE SME2 attributes" >&2
+      echo "       tried Darwin arm64 native+sme2 when applicable, then -march=armv9.4-a+sme2 and -march=armv9.2-a+sme2" >&2
       exit 1
     fi
     arch_flags+=("${sme2_flag}")

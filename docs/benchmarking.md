@@ -20,6 +20,7 @@ What the benchmark does:
 What the benchmark does not prove:
 
 - end-to-end SME2 Viterbi acceleration
+- a general SME2 speedup result
 - device-level performance
 - thermal behavior
 - cross-platform ranking
@@ -34,6 +35,10 @@ Implementation maturity in this benchmark:
   the shared scalar decode core; non-SME2 builds report scalar fallback for this
   path
 - `viterbi-reference`: scalar reference Viterbi decode
+
+Small replay frames can make the SME2 branch-metric path slower than reference
+or Neon because setup and streaming-mode overhead may dominate. Treat the output
+as local timing for this canned frame only.
 
 The benchmark JSON is intended to be auditable rather than promotional. It
 includes:

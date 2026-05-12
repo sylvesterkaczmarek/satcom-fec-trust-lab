@@ -33,7 +33,12 @@ sme2_acle_supported() {
 
 select_sme2_flag() {
   local flag
-  for flag in -march=armv9.4-a+sme2 -march=armv9.2-a+sme2; do
+  local flags=(-march=armv9.4-a+sme2 -march=armv9.2-a+sme2)
+  if [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]]; then
+    flags=(-mcpu=native+sme2 -march=native+sme2 "${flags[@]}")
+  fi
+
+  for flag in "${flags[@]}"; do
     if flag_supported "${flag}" && sme2_acle_supported "${flag}"; then
       printf '%s\n' "${flag}"
       return 0
