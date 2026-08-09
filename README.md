@@ -4,9 +4,9 @@
 
 This repository is a host-side satcom signal-processing project built around
 deterministic synthetic IQ fixtures. It contains two public workflows: a
-timing/CFO acquisition search with scalar reference and optional Arm NEON
-implementations, and a compact BPSK replay path from IQ through framing,
-Viterbi decode, CRC, and structured trust diagnostics.
+timing/CFO acquisition search with scalar reference, Arm NEON, and explicitly
+enabled Arm SME2 implementations, and a compact BPSK replay path from IQ
+through framing, Viterbi decode, CRC, and structured trust diagnostics.
 
 The public repo provides scoped host-side acquisition and replay demos, not a
 supported Android app or full SME2-optimized Viterbi decoder.
@@ -24,9 +24,10 @@ supported Android app or full SME2-optimized Viterbi decoder.
 
 - One host-side replay path from checked-in IQ to decoded payload plus trust
   output
-- Scalar reference and explicit Arm NEON acquisition paths over 4,096-sample IQ
-  windows, 3,841 timing hypotheses, 9 CFO hypotheses, and a 256-sample complex
-  preamble; unavailable NEON builds do not use a labeled scalar fallback
+- Scalar reference, Arm NEON, and opt-in Arm SME2 acquisition paths over
+  4,096-sample IQ windows, 3,841 timing hypotheses, 9 CFO hypotheses, and a
+  256-sample complex preamble; unavailable accelerated paths do not use a
+  labeled scalar fallback
 - One local decoder-path timing comparison across `viterbi-reference`,
   `viterbi-neon`, and `viterbi-sme2`
 - One healthy versus impaired versus failed trust comparison using checked-in
@@ -60,11 +61,11 @@ supported Android app or full SME2-optimized Viterbi decoder.
 - A branch-metric equivalence check at `scripts/check_branch_metrics.sh`
 - A local benchmark harness at `scripts/benchmark_decoder_paths.sh`
 - Automated tests at `tests/test_host_replay.py`
-- Reference/NEON acquisition tests at `tests/test_acquisition.py`
+- Reference/NEON/SME2 acquisition tests at `tests/test_acquisition.py`
 - Golden structured-output subsets under `tests/golden/`
 - Host CI at `.github/workflows/host-replay.yml`
 - Native C++ modules for front-end processing, framing, Viterbi decode, a small
-  LDPC-style bit-flip decoder, reference/NEON acquisition, and trust scoring
+  LDPC-style bit-flip decoder, reference/NEON/SME2 acquisition, and trust scoring
 
 ## What the replay demo does
 
@@ -138,6 +139,17 @@ make benchmark
 make test
 ```
 
+On a host and compiler with SME2 support, build and verify the ZA-based
+acquisition path explicitly:
+
+```bash
+SATCOMFEC_ENABLE_SME2=ON bash scripts/run_acquisition_demo.sh \
+  data/synthetic/acquisition/clean.iq \
+  data/synthetic/acquisition/clean.json sme2
+bash scripts/check_sme2_acquisition.sh --require-sme2
+bash scripts/verify_sme2_acquisition_assembly.sh
+```
+
 Regenerate the checked-in synthetic fixtures:
 
 ```bash
@@ -190,6 +202,8 @@ Example output:
 The acquisition design, score definition, fixture parameters, and correctness
 criteria are documented in
 [docs/acquisition_design.md](docs/acquisition_design.md).
+The SME2 data layout, ZA accumulation, streaming boundary, and validation are
+documented in [docs/sme2_acquisition.md](docs/sme2_acquisition.md).
 
 Healthy replay:
 
@@ -250,6 +264,20 @@ Example output:
 
 ## Arm implementation paths
 
+Acquisition:
+
+- Reference uses scalar double-precision complex accumulation and is the
+  correctness oracle.
+- NEON uses four-lane float32 complex multiply-accumulate in a separate
+  translation unit.
+- SME2 packs timing hypotheses into four scalable vectors and uses SME2 VGx4
+  `FMLA`/`FMLS` operations to accumulate real and imaginary correlations in ZA.
+  Workspace packing, score calculation, and top-two selection remain scalar.
+- An unavailable NEON or SME2 request fails explicitly; neither path silently
+  executes the reference kernel.
+
+Viterbi replay:
+
 - Reference path: `viterbi-reference` uses scalar branch-metric preparation,
   scalar add-compare-select, and scalar traceback.
 - Neon path: `viterbi-neon` uses Neon intrinsics for branch-metric preparation
@@ -269,14 +297,24 @@ public LDPC Neon or SME2 path.
 
 ## SME2 verification notes
 
-A technical reviewer can inspect these files and commands:
+Acquisition implementation and verification:
+
+- SME2 source: `src/acquisition/acquisition_sme2.cpp` and
+  `src/acquisition/acquisition_sme2.h`
+- Shared plan and API: `src/acquisition/acquisition_plan.cpp` and
+  `src/acquisition/acquisition_runner.cpp`
+- Build flag: `SATCOMFEC_ENABLE_SME2=ON`
+- Correctness command:
+  `bash scripts/check_sme2_acquisition.sh --require-sme2`
+- Instruction command: `bash scripts/verify_sme2_acquisition_assembly.sh`
+
+Viterbi branch-metric implementation and verification:
 
 - SME2 source: `src/fec/branch_metrics_sme2.cpp` and
   `src/fec/branch_metrics_sme2.h`
 - Decoder metadata and scalar Viterbi core:
   `src/fec/convolutional_codec.cpp` and `src/fec/convolutional_codec.h`
 - SME2 wrapper: `src/fec/viterbi_decoder_sme2.cpp`
-- Build flag: `SATCOMFEC_ENABLE_SME2=ON`
 - CMake build command:
   `cmake -S . -B build/sme2 -DSATCOMFEC_ENABLE_SME2=ON`
 - Direct build command:
@@ -284,11 +322,9 @@ A technical reviewer can inspect these files and commands:
 - Verification command: `bash scripts/verify_arm_paths.sh`
 - Branch-metric equivalence command: `bash scripts/check_branch_metrics.sh`
 
-Expected output on a compiler with SME2 ACLE support includes
-`SME2 compiler support detected`, an SME2 object symbol named
-`prepare_branch_metrics_sme2`, and branch-metric selected implementation
-`sme2` in an SME2-targeted build. On x86 or non-SME2 Arm builds, expected output
-is an explicit `fallback` or skipped SME2 build probe.
+The acquisition assembly verifier requires `smstart`/`smstop`, VGx4 ZA
+`fmla`/`fmls`, and ZA transfer instructions in the SME2 object. On x86 or
+non-SME2 builds, the portable checker reports `implementation = unavailable`.
 
 See [docs/simd_status.md](docs/simd_status.md)
 for the exact wording used in the codebase.
@@ -304,8 +340,8 @@ for the clean-checkout rerun procedure.
 - It does not ship a mobile JNI bridge or on-device replay workflow.
 - It does not claim end-to-end SME2 Viterbi acceleration.
 - It does not ship a mission-derived or Φsat-2 replay asset.
-- It does not include SVE or SME2 acquisition kernels or claim acquisition
-  performance results.
+- It does not claim SME2 acquisition performance results or a general SME2
+  speedup.
 - It does not claim benchmark reproducibility, thermal behavior, or cross-device
   performance conclusions.
 
@@ -321,6 +357,9 @@ What works today:
 - run the reference timing/CFO acquisition search on five checked-in fixtures
 - run the NEON acquisition path on native Arm64 builds and verify its numerical
   equivalence to the reference path
+- compile and execute the SME2 acquisition path on supported SME2 hardware,
+  verify every candidate correlation against the reference, and inspect the
+  object for ZA VGx4 instructions
 - regenerate the synthetic IQ asset and its metadata
 - compare healthy, impaired, and failed trust-monitoring cases on checked-in
   inputs
@@ -338,7 +377,8 @@ Optional hardware:
 - an Arm64 machine with NEON support if you want to execute the acquisition
   NEON kernel or the checked-in NEON branch-metric preparation path
 - an Arm machine and compiler targeting SME2 if you want `viterbi-sme2` to
-  compile and run the SME2/SME streaming-mode branch-metric kernel
+  compile and run the SME2/SME streaming-mode branch-metric kernel or the SME2
+  acquisition kernel
 
 Build modes:
 
@@ -376,6 +416,7 @@ What is not included:
 - a checked-in Gradle wrapper or Android build workflow
 - a supported Android app
 - SME2-accelerated Viterbi add-compare-select or traceback
+- acquisition benchmark or acquisition speedup claim
 
 ## Expected output
 
@@ -511,6 +552,8 @@ Supported host-side scripts:
 - `scripts/run_acquisition_demo.sh`
 - `scripts/check_acquisition_neon.sh`
 - `scripts/verify_acquisition_neon.sh`
+- `scripts/check_sme2_acquisition.sh`
+- `scripts/verify_sme2_acquisition_assembly.sh`
 - `scripts/run_replay_demo.sh`
 - `scripts/check_acquisition_demo.sh`
 - `scripts/check_replay_demo.sh`

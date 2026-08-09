@@ -19,6 +19,7 @@ make acquisition
 make check-acquisition
 make check-acquisition-neon
 make verify-acquisition-neon
+make check-acquisition-sme2
 make replay
 make replay-impaired
 make replay-failed
@@ -38,6 +39,7 @@ bash scripts/run_acquisition_demo.sh
 bash scripts/check_acquisition_demo.sh
 bash scripts/check_acquisition_neon.sh
 bash scripts/verify_acquisition_neon.sh
+bash scripts/check_sme2_acquisition.sh
 bash scripts/run_replay_demo.sh
 bash scripts/run_replay_demo.sh data/synthetic/canned_replay/demo_conv_bpsk_impaired.iq
 bash scripts/run_replay_demo.sh --allow-failure data/synthetic/canned_replay/demo_conv_bpsk_failed.iq
@@ -72,8 +74,11 @@ What CI verifies:
 - scalar acquisition timing/CFO recovery on five deterministic fixtures
 - reference/NEON acquisition equivalence on native Arm64 CI
 - explicit NEON-unavailable reporting on portable x86 CI
+- explicit SME2-unavailable reporting on portable and Arm64 CI without SME2
 - direct NEON kernel equivalence over vector-width, tail, weak-signal, and
   high-amplitude cases
+- local SME2 kernel equivalence over preamble, timing-grid, CFO-grid, and
+  scalable-vector tail cases when SME2 execution is available
 - deterministic byte-for-byte acquisition fixture regeneration
 - healthy versus impaired versus failed trust comparison
 - reference versus partial-NEON versus SME2-or-fallback path alignment on the

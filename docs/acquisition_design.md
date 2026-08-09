@@ -61,11 +61,19 @@ four. The NEON path uses float32 prepared weights and accumulation, while the
 reference path retains double-precision weights and accumulation. Supporting
 GCC/Clang builds disable loop and SLP auto-vectorization specifically for the
 reference translation unit; Arm target flags are applied only to intrinsic
-sources. No SVE, streaming-mode, or SME2 acquisition kernel is included.
+sources.
 
-The CLI accepts `--implementation reference|neon`. A NEON request on a build
-without the intrinsic kernel returns `implementation = "unavailable"`; it does
-not execute or label a scalar fallback.
+The opt-in SME2 translation unit evaluates the same grid with float32 weights
+and accumulation. It groups timing hypotheses into four scalable vectors and
+uses SME2 VGx4 multiply-add and multiply-subtract operations with ZA
+accumulators. Its packed workspace is prepared before the kernel call. Score
+calculation and top-two candidate selection remain scalar. The implementation
+and streaming boundary are specified in `docs/sme2_acquisition.md`.
+
+The CLI accepts `--implementation reference|neon|sme2`. A NEON or SME2 request
+on a build without the selected intrinsic kernel returns
+`implementation = "unavailable"`; it does not execute or label a scalar
+fallback.
 
 Fixture equivalence requires identical best and second-best timing/CFO
 candidates. Best and second-best scores use an absolute tolerance of `1e-3`
@@ -78,8 +86,8 @@ forward-error bound per real/imaginary correlation component:
 ```
 
 The score bound is propagated from that complex-correlation bound. The safety
-factor covers float32 weight rounding, vector reduction order, fused
-multiply-add behavior, and scalar-tail accumulation.
+factor covers float32 weight rounding, accumulation order, fused multiply-add
+behavior, and path-specific tail handling.
 
 ## Workload size
 

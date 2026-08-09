@@ -26,7 +26,14 @@ sme2_acle_supported() {
     '#else' \
     '#include <arm_sme.h>' \
     '#endif' \
-    '__arm_locally_streaming void probe() {}' \
+    '__arm_locally_streaming __arm_new("za") void probe() {' \
+    '  const svfloat32_t zero = svdup_f32(0.0F);' \
+    '  const svfloat32x4_t group = svcreate4_f32(zero, zero, zero, zero);' \
+    '  svwrite_za32_f32_vg1x4(0, group);' \
+    '  svmla_single_za32_f32_vg1x4(0, group, zero);' \
+    '  svmls_single_za32_f32_vg1x4(0, group, zero);' \
+    '  (void)svread_za32_f32_vg1x4(0);' \
+    '}' \
     'int main() { return 0; }' |
     "${CXX_BIN}" -std=c++17 "${flag}" -x c++ -fsyntax-only - >/dev/null 2>&1
 }
@@ -56,7 +63,7 @@ build_with_cmake_or_script() {
     cmake -S "${ROOT_DIR}" -B "${build_dir}" \
       -DCMAKE_BUILD_TYPE=Release \
       "${cmake_options[@]}"
-    cmake --build "${build_dir}" --target replay_demo benchmark_decoders check_branch_metrics
+    cmake --build "${build_dir}" --target replay_demo benchmark_decoders check_branch_metrics acquisition_demo check_acquisition_kernels check_sme2_acquisition
     return
   fi
 
@@ -91,9 +98,15 @@ if sme2_flag="$(select_sme2_flag)"; then
   if command -v cmake >/dev/null 2>&1; then
     build_with_cmake_or_script "${BUILD_ROOT}/sme2" \
       -DSATCOMFEC_ENABLE_SME2=ON
+    sme2_acquisition_checker="${BUILD_ROOT}/sme2/check_sme2_acquisition"
   else
     SATCOMFEC_ENABLE_SME2=ON bash "${ROOT_DIR}/scripts/build_host_tools.sh" all
+    sme2_acquisition_checker="${ROOT_DIR}/build/host_replay/check_sme2_acquisition"
   fi
+
+  echo
+  echo "Checking SME2 acquisition correctness and runtime availability:"
+  "${sme2_acquisition_checker}"
 
   sme2_obj="${BUILD_ROOT}/branch_metrics_sme2.o"
   mkdir -p "${BUILD_ROOT}"

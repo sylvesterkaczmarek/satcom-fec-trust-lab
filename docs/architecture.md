@@ -2,10 +2,12 @@
 
 The repository has two independent host-side IQ workflows. The acquisition
 workflow loads a generated complex preamble and receive window, prepares a grid
-of timing/CFO hypotheses, and runs the selected reference or Arm NEON
-matched-filter search described in `docs/acquisition_design.md`. Its entrypoint
-is `tools/acquisition_demo.cpp`. Unsupported NEON builds report unavailable;
-there is no scalar fallback under the NEON label.
+of timing/CFO hypotheses, and runs the selected reference, Arm NEON, or Arm
+SME2 matched-filter search described in `docs/acquisition_design.md`. Its
+entrypoint is `tools/acquisition_demo.cpp`. The SME2 path prepares a packed
+timing-hypothesis workspace, then accumulates complex correlations with SME2
+VGx4 operations in ZA. Unsupported NEON and SME2 builds report unavailable;
+there is no labeled scalar fallback.
 
 The replay workflow is:
 

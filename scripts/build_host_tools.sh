@@ -9,7 +9,7 @@ CXX_BIN="${CXX:-c++}"
 
 if [[ "${TARGET}" == "--help" || "${TARGET}" == "-h" ]]; then
   cat <<'EOF'
-Usage: scripts/build_host_tools.sh [replay_demo|benchmark_decoders|check_branch_metrics|acquisition_demo|check_acquisition_kernels|all]
+Usage: scripts/build_host_tools.sh [replay_demo|benchmark_decoders|check_branch_metrics|acquisition_demo|check_acquisition_kernels|check_sme2_acquisition|all]
 
 Configures and builds the supported host-side executables into build/host_replay/.
 
@@ -43,7 +43,14 @@ sme2_acle_supported() {
     '#else' \
     '#include <arm_sme.h>' \
     '#endif' \
-    '__arm_locally_streaming void probe() {}' \
+    '__arm_locally_streaming __arm_new("za") void probe() {' \
+    '  const svfloat32_t zero = svdup_f32(0.0F);' \
+    '  const svfloat32x4_t group = svcreate4_f32(zero, zero, zero, zero);' \
+    '  svwrite_za32_f32_vg1x4(0, group);' \
+    '  svmla_single_za32_f32_vg1x4(0, group, zero);' \
+    '  svmls_single_za32_f32_vg1x4(0, group, zero);' \
+    '  (void)svread_za32_f32_vg1x4(0);' \
+    '}' \
     'int main() { return 0; }' |
     "${CXX_BIN}" -std=c++17 "${flag}" -x c++ -fsyntax-only - >/dev/null 2>&1
 }
@@ -106,6 +113,7 @@ build_with_compiler() {
   local sme2_source_flag=""
   local acquisition_neon_flag=""
   local acquisition_neon_definition=""
+  local acquisition_sme2_definition=""
   local reference_no_loop_vectorize_flag=""
   local reference_no_slp_vectorize_flag=""
   if flag_supported "-fno-vectorize"; then
@@ -126,6 +134,7 @@ build_with_compiler() {
       exit 1
     fi
     sme2_source_flag="${sme2_flag}"
+    acquisition_sme2_definition="-DSATCOMFEC_ACQUISITION_SME2_COMPILED=1"
     echo "info: SME2 build enabled with ${sme2_flag}" >&2
   elif [[ "${SATCOMFEC_ENABLE_NEON:-OFF}" == "ON" ]]; then
     local neon_flag
@@ -148,6 +157,7 @@ build_with_compiler() {
     "${ROOT_DIR}/src/acquisition/acquisition_plan.cpp"
     "${ROOT_DIR}/src/acquisition/acquisition_reference.cpp"
     "${ROOT_DIR}/src/acquisition/acquisition_runner.cpp"
+    "${ROOT_DIR}/src/acquisition/acquisition_sme2.cpp"
     "${ROOT_DIR}/src/demo/replay_pipeline.cpp"
     "${ROOT_DIR}/src/dsp/front_end_dsp.cpp"
     "${ROOT_DIR}/src/dsp/framing.cpp"
@@ -185,6 +195,13 @@ build_with_compiler() {
       fi
       if [[ -n "${reference_no_slp_vectorize_flag}" ]]; then
         source_flags+=("${reference_no_slp_vectorize_flag}")
+      fi
+    elif [[ "${source}" == "${ROOT_DIR}/src/acquisition/acquisition_sme2.cpp" ]]; then
+      if [[ -n "${sme2_source_flag}" ]]; then
+        source_flags+=("${sme2_source_flag}")
+      fi
+      if [[ -n "${acquisition_sme2_definition}" ]]; then
+        source_flags+=("${acquisition_sme2_definition}")
       fi
     elif [[ "${source}" == "${ROOT_DIR}/src/fec/branch_metrics_sme2.cpp" ]]; then
       if [[ -n "${sme2_source_flag}" ]]; then
@@ -233,12 +250,16 @@ build_with_compiler() {
     check_acquisition_kernels)
       build_binary "check_acquisition_kernels" "${ROOT_DIR}/tools/check_acquisition_kernels.cpp"
       ;;
+    check_sme2_acquisition)
+      build_binary "check_sme2_acquisition" "${ROOT_DIR}/tools/check_sme2_acquisition.cpp"
+      ;;
     all)
       build_binary "replay_demo" "${ROOT_DIR}/tools/replay_demo.cpp"
       build_binary "benchmark_decoders" "${ROOT_DIR}/tools/benchmark_decoders.cpp"
       build_binary "check_branch_metrics" "${ROOT_DIR}/tools/check_branch_metrics.cpp"
       build_binary "acquisition_demo" "${ROOT_DIR}/tools/acquisition_demo.cpp"
       build_binary "check_acquisition_kernels" "${ROOT_DIR}/tools/check_acquisition_kernels.cpp"
+      build_binary "check_sme2_acquisition" "${ROOT_DIR}/tools/check_sme2_acquisition.cpp"
       ;;
     *)
       echo "error: unsupported build target '${TARGET}'" >&2
@@ -274,8 +295,11 @@ case "${TARGET}" in
   check_acquisition_kernels)
     cmake --build "${BUILD_DIR}" --target check_acquisition_kernels >/dev/null
     ;;
+  check_sme2_acquisition)
+    cmake --build "${BUILD_DIR}" --target check_sme2_acquisition >/dev/null
+    ;;
   all)
-    cmake --build "${BUILD_DIR}" --target replay_demo benchmark_decoders check_branch_metrics acquisition_demo check_acquisition_kernels >/dev/null
+    cmake --build "${BUILD_DIR}" --target replay_demo benchmark_decoders check_branch_metrics acquisition_demo check_acquisition_kernels check_sme2_acquisition >/dev/null
     ;;
   *)
     echo "error: unsupported build target '${TARGET}'" >&2

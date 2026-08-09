@@ -40,6 +40,10 @@ bool parse_implementation(
         implementation = satcomfec::acquisition::AcquisitionImplementation::kNeon;
         return true;
     }
+    if (name == "sme2") {
+        implementation = satcomfec::acquisition::AcquisitionImplementation::kSme2;
+        return true;
+    }
     return false;
 }
 
@@ -202,6 +206,20 @@ bool build_timing_hypotheses(
     return true;
 }
 
+const char* implementation_class(
+    const satcomfec::acquisition::AcquisitionResult& result) {
+    if (result.implementation == "reference") {
+        return "scalar-reference";
+    }
+    if (result.implementation == "neon") {
+        return "neon-intrinsics";
+    }
+    if (result.implementation == "sme2") {
+        return "sme2-za-vgx4";
+    }
+    return "unavailable";
+}
+
 void print_error_json(
     const std::string& iq_path,
     const std::string& metadata_path,
@@ -218,6 +236,16 @@ void print_error_json(
               << "  \"implementation\": \"not-run\",\n"
               << "  \"neon_kernel_compiled\": "
               << (satcomfec::acquisition::acquisition_neon_kernel_compiled()
+                      ? "true"
+                      : "false")
+              << ",\n"
+              << "  \"sme2_kernel_compiled\": "
+              << (satcomfec::acquisition::acquisition_sme2_kernel_compiled()
+                      ? "true"
+                      : "false")
+              << ",\n"
+              << "  \"sme2_runtime_supported\": "
+              << (satcomfec::acquisition::acquisition_sme2_runtime_supported()
                       ? "true"
                       : "false")
               << ",\n"
@@ -250,7 +278,7 @@ int main(int argc, char** argv) {
         if (argument == "--help") {
             std::cout << "Usage: acquisition_demo [--iq fixture.iq] "
                          "[--metadata fixture.json] "
-                         "[--implementation reference|neon]\n";
+                         "[--implementation reference|neon|sme2]\n";
             return EXIT_SUCCESS;
         }
         std::cerr << "Unknown or incomplete argument: " << argument << "\n";
@@ -389,11 +417,30 @@ int main(int argc, char** argv) {
               << satcomfec::tools::escape_json(implementation_name) << "\",\n";
     std::cout << "  \"implementation\": \""
               << satcomfec::tools::escape_json(result.implementation) << "\",\n";
+    std::cout << "  \"implementation_class\": \""
+              << implementation_class(result) << "\",\n";
     std::cout << "  \"neon_kernel_compiled\": "
               << (satcomfec::acquisition::acquisition_neon_kernel_compiled()
                       ? "true"
                       : "false")
               << ",\n";
+    std::cout << "  \"sme2_kernel_compiled\": "
+              << (satcomfec::acquisition::acquisition_sme2_kernel_compiled()
+                      ? "true"
+                      : "false")
+              << ",\n";
+    std::cout << "  \"sme2_runtime_supported\": "
+              << (satcomfec::acquisition::acquisition_sme2_runtime_supported()
+                      ? "true"
+                      : "false")
+              << ",\n";
+    std::cout << "  \"sme2_streaming_lanes_f32\": "
+              << satcomfec::acquisition::acquisition_sme2_streaming_lanes_f32()
+              << ",\n";
+    std::cout << "  \"sme2_mechanism\": \""
+              << satcomfec::tools::escape_json(
+                     satcomfec::acquisition::acquisition_sme2_mechanism())
+              << "\",\n";
     std::cout << "  \"error\": \""
               << satcomfec::tools::escape_json(result.error_message) << "\"\n";
     std::cout << "}\n";

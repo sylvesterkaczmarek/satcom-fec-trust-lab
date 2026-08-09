@@ -22,6 +22,8 @@ struct AcquisitionPlan {
     std::size_t preamble_length = 0;
     std::vector<std::size_t> timing_offsets;
     std::vector<PreparedFrequencyHypothesis> frequency_hypotheses;
+    std::vector<float> matched_filter_weights_real_f32;
+    std::vector<float> matched_filter_weights_imag_f32;
 };
 
 bool prepare_acquisition_plan(

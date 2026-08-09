@@ -45,6 +45,9 @@ jobs:
       - name: Check portable NEON availability reporting
         run: bash scripts/check_acquisition_neon.sh
 
+      - name: Check portable SME2 availability reporting
+        run: bash scripts/check_sme2_acquisition.sh
+
       - name: Verify Arm build modes
         run: bash scripts/verify_arm_paths.sh
 
@@ -81,6 +84,9 @@ jobs:
 
       - name: Require NEON execution and inspect instructions
         run: bash scripts/verify_acquisition_neon.sh
+
+      - name: Check SME2 availability without requiring SME2 hardware
+        run: bash scripts/check_sme2_acquisition.sh
 
       - name: Run all host tests on Arm64
         env:

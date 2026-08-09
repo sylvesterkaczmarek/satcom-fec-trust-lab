@@ -1,4 +1,4 @@
-.PHONY: help build replay replay-impaired replay-failed acquisition check check-acquisition check-acquisition-neon verify-acquisition-neon compare-trust align check-metrics verify-arm benchmark test regenerate
+.PHONY: help build replay replay-impaired replay-failed acquisition check check-acquisition check-acquisition-neon verify-acquisition-neon check-acquisition-sme2 verify-acquisition-sme2 compare-trust align check-metrics verify-arm benchmark test regenerate
 
 help:
 	@printf '%s\n' \
@@ -12,6 +12,8 @@ help:
 	  '  make check-acquisition Verify all scalar acquisition fixtures' \
 	  '  make check-acquisition-neon Check direct NEON kernel equivalence' \
 	  '  make verify-acquisition-neon Verify NEON execution and instructions' \
+	  '  make check-acquisition-sme2 Check SME2 equivalence or availability' \
+	  '  make verify-acquisition-sme2 Verify SME2 execution and instructions' \
 	  '  make compare-trust   Compare healthy, impaired, and failed trust results' \
 	  '  make align           Validate decoder-path alignment' \
 	  '  make check-metrics   Validate branch-metric path equivalence' \
@@ -46,6 +48,12 @@ check-acquisition-neon:
 
 verify-acquisition-neon:
 	bash scripts/verify_acquisition_neon.sh
+
+check-acquisition-sme2:
+	bash scripts/check_sme2_acquisition.sh
+
+verify-acquisition-sme2:
+	bash scripts/verify_sme2_acquisition_assembly.sh
 
 compare-trust:
 	bash scripts/compare_trust_cases.sh

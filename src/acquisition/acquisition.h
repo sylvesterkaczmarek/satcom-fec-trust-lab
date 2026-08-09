@@ -31,6 +31,7 @@ struct AcquisitionConfig {
 enum class AcquisitionImplementation {
     kReference,
     kNeon,
+    kSme2,
 };
 
 struct AcquisitionResult {

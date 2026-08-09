@@ -2,6 +2,7 @@
 #define SATCOMFEC_ACQUISITION_ACQUISITION_RUNNER_H
 
 #include "acquisition/acquisition_neon.h"
+#include "acquisition/acquisition_sme2.h"
 
 namespace satcomfec::acquisition {
 

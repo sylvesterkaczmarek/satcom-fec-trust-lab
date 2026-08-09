@@ -5,12 +5,17 @@ public benchmark scope narrow.
 
 | Path | Status | Benchmarked in public repo | What is implemented |
 | --- | --- | --- | --- |
+| Acquisition reference | real scalar oracle | no | scalar double-precision correlation across the complete timing/CFO grid |
+| Acquisition NEON | real target-specific kernel | no | float32 NEON complex multiply-accumulate with explicit tail handling |
+| Acquisition SME2 | real when explicitly compiled and runtime-supported | no | float32 SME2 VGx4 `FMLA`/`FMLS` into ZA across four scalable vectors of timing hypotheses; setup, scoring, and ranking remain scalar |
 | `viterbi-neon` | partial | yes | Neon branch-metric preparation gated by `__ARM_NEON` / `__ARM_NEON__`, followed by the shared scalar add-compare-select and traceback core |
 | `viterbi-sme2` | partial decoder path; real branch-metric kernel when compiled for SME2, fallback otherwise | yes | SME2/SME streaming-mode branch-metric preparation gated by `__ARM_FEATURE_SME2`; non-SME2 builds use scalar branch metrics |
 | `viterbi-reference` | real scalar reference | yes | scalar branch-metric preparation plus shared scalar add-compare-select and traceback core |
 | LDPC bit-flip reference | real simplified algorithm | no | small reference bit-flip decoder; no public NEON or SME2 LDPC path |
 
-There is no checked-in placeholder SIMD path in the supported replay workflow.
+Unavailable acquisition paths report `unavailable` rather than running a
+scalar fallback under an accelerated label. The acquisition paths currently
+have correctness checks, not a public timing benchmark or speedup claim.
 
 The benchmark harness compares `viterbi-reference`, `viterbi-neon`, and
 `viterbi-sme2` on the same prepared frame window. It reports branch-metric

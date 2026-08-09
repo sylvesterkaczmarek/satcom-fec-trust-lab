@@ -75,10 +75,20 @@ bool prepare_acquisition_plan(
         }
     }
 
+    if (config.frequency_offsets_hz.size() >
+        std::numeric_limits<std::size_t>::max() / preamble.size()) {
+        error_message = "acquisition weight table size overflows size_t";
+        return false;
+    }
+    const std::size_t flattened_weight_count =
+        config.frequency_offsets_hz.size() * preamble.size();
+
     plan.sample_rate_hz = config.sample_rate_hz;
     plan.preamble_length = preamble.size();
     plan.timing_offsets = config.timing_offsets;
     plan.frequency_hypotheses.reserve(config.frequency_offsets_hz.size());
+    plan.matched_filter_weights_real_f32.reserve(flattened_weight_count);
+    plan.matched_filter_weights_imag_f32.reserve(flattened_weight_count);
 
     for (double frequency_offset_hz : config.frequency_offsets_hz) {
         PreparedFrequencyHypothesis prepared;
@@ -97,6 +107,10 @@ bool prepare_acquisition_plan(
             prepared.matched_filter_weights.push_back(weight);
             prepared.matched_filter_weights_f32.emplace_back(
                 static_cast<float>(weight.real()), static_cast<float>(weight.imag()));
+            plan.matched_filter_weights_real_f32.push_back(
+                static_cast<float>(weight.real()));
+            plan.matched_filter_weights_imag_f32.push_back(
+                static_cast<float>(weight.imag()));
         }
         plan.frequency_hypotheses.push_back(std::move(prepared));
     }

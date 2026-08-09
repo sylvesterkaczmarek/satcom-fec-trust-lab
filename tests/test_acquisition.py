@@ -54,7 +54,13 @@ class AcquisitionReferenceTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        cls.neon_available = run_acquisition("clean")["neon_kernel_compiled"]
+        implementation_status = run_acquisition("clean")
+        cls.neon_available = implementation_status["neon_kernel_compiled"]
+        cls.sme2_compiled = implementation_status["sme2_kernel_compiled"]
+        cls.sme2_available = (
+            cls.sme2_compiled
+            and implementation_status["sme2_runtime_supported"]
+        )
 
     def test_clean_fixture_matches_golden_output(self) -> None:
         result = run_acquisition("clean")
@@ -254,6 +260,110 @@ class AcquisitionReferenceTests(unittest.TestCase):
                     case["score_difference"],
                     case["score_tolerance"],
                 )
+        else:
+            self.assertEqual(report["implementation"], "unavailable")
+            self.assertEqual(report["cases"], [])
+
+    def test_sme2_fixture_results_align_with_reference_and_neon(self) -> None:
+        if not self.sme2_available:
+            self.skipTest("SME2 acquisition execution requires an SME2 build and host")
+
+        for fixture_name in FIXTURE_NAMES:
+            with self.subTest(fixture=fixture_name):
+                reference = run_acquisition(fixture_name, "reference")
+                sme2 = run_acquisition(fixture_name, "sme2")
+
+                self.assertTrue(sme2["ok"])
+                self.assertTrue(sme2["acquisition_success"])
+                self.assertTrue(sme2["sme2_kernel_compiled"])
+                self.assertTrue(sme2["sme2_runtime_supported"])
+                self.assertEqual(sme2["requested_implementation"], "sme2")
+                self.assertEqual(sme2["implementation"], "sme2")
+                self.assertEqual(sme2["implementation_class"], "sme2-za-vgx4")
+                self.assertEqual(sme2["sme2_mechanism"], "za-vgx4-fmla-fmls")
+                self.assertEqual(
+                    sme2["detected_timing_offset"],
+                    reference["detected_timing_offset"],
+                )
+                self.assertEqual(sme2["detected_cfo_hz"], reference["detected_cfo_hz"])
+                self.assertEqual(
+                    sme2["second_best_timing_offset"],
+                    reference["second_best_timing_offset"],
+                )
+                self.assertEqual(
+                    sme2["second_best_cfo_hz"],
+                    reference["second_best_cfo_hz"],
+                )
+                for score_name in ("best_score", "second_best_score"):
+                    tolerance = (
+                        SCORE_ABSOLUTE_TOLERANCE
+                        + SCORE_RELATIVE_TOLERANCE * abs(reference[score_name])
+                    )
+                    self.assertAlmostEqual(
+                        sme2[score_name],
+                        reference[score_name],
+                        delta=tolerance,
+                    )
+
+                if self.neon_available:
+                    neon = run_acquisition(fixture_name, "neon")
+                    for field in (
+                        "detected_timing_offset",
+                        "detected_cfo_hz",
+                        "second_best_timing_offset",
+                        "second_best_cfo_hz",
+                    ):
+                        self.assertEqual(sme2[field], neon[field])
+
+    def test_sme2_request_never_silently_falls_back(self) -> None:
+        result = run_acquisition("clean", "sme2", check=self.sme2_available)
+        if self.sme2_available:
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["implementation"], "sme2")
+            self.assertEqual(result["sme2_mechanism"], "za-vgx4-fmla-fmls")
+        else:
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["requested_implementation"], "sme2")
+            self.assertEqual(result["implementation"], "unavailable")
+            expected_error = (
+                "SME2 acquisition kernel is compiled but SME2 execution is unavailable on this host"
+                if self.sme2_compiled
+                else "SME2 acquisition kernel is not compiled for this target"
+            )
+            self.assertEqual(result["error"], expected_error)
+
+    def test_direct_sme2_equivalence_report(self) -> None:
+        completed = subprocess.run(
+            ("bash", "scripts/check_sme2_acquisition.sh"),
+            cwd=ROOT_DIR,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        report = json.loads(completed.stdout)
+
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["sme2_kernel_compiled"], self.sme2_compiled)
+        self.assertEqual(report["sme2_executed"], self.sme2_available)
+        if self.sme2_available:
+            self.assertEqual(report["implementation"], "sme2")
+            self.assertEqual(report["mechanism"], "za-vgx4-fmla-fmls")
+            self.assertGreaterEqual(len(report["cases"]), 7)
+            self.assertTrue(any(case["preamble_length"] % 2 for case in report["cases"]))
+            self.assertTrue(
+                any(
+                    case["timing_count"] > report["timing_batch_width"]
+                    and case["timing_count"] % report["timing_batch_width"] != 0
+                    for case in report["cases"]
+                )
+            )
+            self.assertTrue(any(case["frequency_count"] > 4 for case in report["cases"]))
+            for case in report["cases"]:
+                self.assertTrue(case["all_correlations_within_tolerance"])
+                self.assertTrue(case["best_candidate_match"])
+                self.assertTrue(case["second_best_candidate_match"])
+                self.assertTrue(case["three_path_candidate_identity_match"])
+                self.assertTrue(case["passed"])
         else:
             self.assertEqual(report["implementation"], "unavailable")
             self.assertEqual(report["cases"], [])

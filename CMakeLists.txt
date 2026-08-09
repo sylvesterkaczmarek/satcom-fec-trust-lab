@@ -58,7 +58,14 @@ function(satcomfec_check_sme2_flag flag out_var)
         #else
         #include <arm_sme.h>
         #endif
-        __arm_locally_streaming void satcomfec_sme2_probe() {}
+        __arm_locally_streaming __arm_new(\"za\") void satcomfec_sme2_probe() {
+            const svfloat32_t zero = svdup_f32(0.0F);
+            const svfloat32x4_t group = svcreate4_f32(zero, zero, zero, zero);
+            svwrite_za32_f32_vg1x4(0, group);
+            svmla_single_za32_f32_vg1x4(0, group, zero);
+            svmls_single_za32_f32_vg1x4(0, group, zero);
+            (void)svread_za32_f32_vg1x4(0);
+        }
         int main() { return 0; }
     " "${out_var}")
     set(CMAKE_REQUIRED_FLAGS "${saved_required_flags}")
@@ -105,7 +112,7 @@ if(SATCOMFEC_ENABLE_SME2)
     if(NOT SATCOMFEC_SME2_ACLE_OK)
         message(FATAL_ERROR
             "SATCOMFEC_ENABLE_SME2=ON requires ACLE SME2 support, including "
-            "__ARM_FEATURE_SME2 and __arm_locally_streaming."
+            "__ARM_FEATURE_SME2, ZA state attributes, and VGx4 ZA FMLA/FMLS intrinsics."
         )
     endif()
     set(SATCOMFEC_SME2_SOURCE_FLAG "${SATCOMFEC_SME2_FLAG}")
@@ -152,6 +159,7 @@ add_library(
     src/acquisition/acquisition_plan.cpp
     src/acquisition/acquisition_reference.cpp
     src/acquisition/acquisition_runner.cpp
+    src/acquisition/acquisition_sme2.cpp
     src/demo/replay_pipeline.cpp
     src/dsp/front_end_dsp.cpp
     src/dsp/framing.cpp
@@ -209,9 +217,14 @@ endif()
 if(SATCOMFEC_SME2_SOURCE_FLAG)
     set_property(
         SOURCE
+            src/acquisition/acquisition_sme2.cpp
             src/fec/branch_metrics_sme2.cpp
             src/fec/convolutional_codec.cpp
         APPEND PROPERTY COMPILE_OPTIONS "${SATCOMFEC_SME2_SOURCE_FLAG}"
+    )
+    set_property(
+        SOURCE src/acquisition/acquisition_sme2.cpp
+        APPEND PROPERTY COMPILE_DEFINITIONS SATCOMFEC_ACQUISITION_SME2_COMPILED=1
     )
 endif()
 
@@ -236,6 +249,9 @@ target_link_libraries(acquisition_demo PRIVATE satcom_replay_core)
 add_executable(check_acquisition_kernels tools/check_acquisition_kernels.cpp)
 target_link_libraries(check_acquisition_kernels PRIVATE satcom_replay_core)
 
+add_executable(check_sme2_acquisition tools/check_sme2_acquisition.cpp)
+target_link_libraries(check_sme2_acquisition PRIVATE satcom_replay_core)
+
 if(BUILD_TESTING)
     add_test(
         NAME acquisition_reference_clean
@@ -248,6 +264,7 @@ if(BUILD_TESTING)
         PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     )
     add_test(NAME acquisition_kernel_equivalence COMMAND check_acquisition_kernels)
+    add_test(NAME acquisition_sme2_equivalence COMMAND check_sme2_acquisition)
     if(SATCOMFEC_ACQUISITION_NEON_AVAILABLE)
         add_test(
             NAME acquisition_neon_clean

@@ -8,6 +8,8 @@ const char* acquisition_implementation_label(AcquisitionImplementation implement
             return "reference";
         case AcquisitionImplementation::kNeon:
             return "neon";
+        case AcquisitionImplementation::kSme2:
+            return "sme2";
     }
     return "unknown";
 }
@@ -21,6 +23,8 @@ AcquisitionResult run_acquisition(
             return run_reference_acquisition(received_iq, plan);
         case AcquisitionImplementation::kNeon:
             return run_neon_acquisition(received_iq, plan);
+        case AcquisitionImplementation::kSme2:
+            return run_sme2_acquisition(received_iq, plan);
     }
 
     AcquisitionResult result;

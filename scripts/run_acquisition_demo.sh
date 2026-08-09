@@ -8,12 +8,12 @@ BIN_PATH="${BUILD_DIR}/acquisition_demo"
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   cat <<'EOF'
-Usage: scripts/run_acquisition_demo.sh [iq_path] [metadata_path] [reference|neon]
+Usage: scripts/run_acquisition_demo.sh [iq_path] [metadata_path] [reference|neon|sme2]
 
 Runs the selected acquisition search. When metadata_path is omitted,
 the tool reads a JSON sidecar with the same basename as the IQ fixture. The
 implementation defaults to reference. A requested NEON path must be compiled;
-there is no scalar fallback under the NEON label.
+requested NEON and SME2 paths never use a labeled scalar fallback.
 EOF
   exit 0
 fi
