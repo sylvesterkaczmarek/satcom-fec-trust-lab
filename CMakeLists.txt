@@ -6,6 +6,8 @@ include(CheckCXXCompilerFlag)
 include(CheckCXXSourceCompiles)
 include(CTest)
 
+find_package(Git QUIET)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -240,6 +242,107 @@ target_link_libraries(replay_demo PRIVATE satcom_replay_core)
 add_executable(benchmark_decoders tools/benchmark_decoders.cpp)
 target_link_libraries(benchmark_decoders PRIVATE satcom_replay_core)
 
+add_executable(
+    benchmark_acquisition
+    tools/acquisition_benchmark.cpp
+    tools/benchmark_acquisition.cpp
+)
+target_link_libraries(benchmark_acquisition PRIVATE satcom_replay_core)
+
+set(SATCOMFEC_BENCHMARK_GIT_SHA "unavailable")
+set(SATCOMFEC_BENCHMARK_GIT_DIRTY "unknown")
+if(Git_FOUND)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        RESULT_VARIABLE SATCOMFEC_GIT_SHA_RESULT
+        OUTPUT_VARIABLE SATCOMFEC_BENCHMARK_GIT_SHA
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(NOT SATCOMFEC_GIT_SHA_RESULT EQUAL 0)
+        set(SATCOMFEC_BENCHMARK_GIT_SHA "unavailable")
+    endif()
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" status --porcelain --untracked-files=normal
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        RESULT_VARIABLE SATCOMFEC_GIT_DIRTY_RESULT
+        OUTPUT_VARIABLE SATCOMFEC_GIT_STATUS
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(SATCOMFEC_GIT_DIRTY_RESULT EQUAL 0)
+        if(SATCOMFEC_GIT_STATUS)
+            set(SATCOMFEC_BENCHMARK_GIT_DIRTY "true")
+        else()
+            set(SATCOMFEC_BENCHMARK_GIT_DIRTY "false")
+        endif()
+    endif()
+endif()
+
+if(CMAKE_BUILD_TYPE)
+    string(TOUPPER "${CMAKE_BUILD_TYPE}" SATCOMFEC_BUILD_TYPE_UPPER)
+    set(SATCOMFEC_BENCHMARK_BUILD_TYPE "${CMAKE_BUILD_TYPE}")
+    set(SATCOMFEC_BENCHMARK_COMMON_FLAGS
+        "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${SATCOMFEC_BUILD_TYPE_UPPER}} -std=c++17"
+    )
+else()
+    set(SATCOMFEC_BENCHMARK_BUILD_TYPE "unspecified")
+    set(SATCOMFEC_BENCHMARK_COMMON_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+endif()
+string(STRIP "${SATCOMFEC_BENCHMARK_COMMON_FLAGS}" SATCOMFEC_BENCHMARK_COMMON_FLAGS)
+string(JOIN " " SATCOMFEC_BENCHMARK_REFERENCE_FLAGS ${SATCOMFEC_REFERENCE_COMPILE_OPTIONS})
+if(NOT SATCOMFEC_BENCHMARK_REFERENCE_FLAGS)
+    set(SATCOMFEC_BENCHMARK_REFERENCE_FLAGS "none")
+endif()
+if(SATCOMFEC_NEON_SOURCE_FLAG)
+    set(SATCOMFEC_BENCHMARK_NEON_FLAGS "${SATCOMFEC_NEON_SOURCE_FLAG}")
+elseif(SATCOMFEC_ACQUISITION_NEON_AVAILABLE)
+    set(SATCOMFEC_BENCHMARK_NEON_FLAGS "compiler target default with NEON ACLE enabled")
+else()
+    set(SATCOMFEC_BENCHMARK_NEON_FLAGS "not-compiled")
+endif()
+if(SATCOMFEC_SME2_SOURCE_FLAG)
+    set(SATCOMFEC_BENCHMARK_SME2_FLAGS "${SATCOMFEC_SME2_SOURCE_FLAG}")
+else()
+    set(SATCOMFEC_BENCHMARK_SME2_FLAGS "not-compiled")
+endif()
+
+function(satcomfec_add_string_definition target name value)
+    string(REPLACE "\\" "\\\\" escaped_value "${value}")
+    string(REPLACE "\"" "\\\"" escaped_value "${escaped_value}")
+    target_compile_definitions("${target}" PRIVATE "${name}=\"${escaped_value}\"")
+endfunction()
+
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_GIT_SHA
+    "${SATCOMFEC_BENCHMARK_GIT_SHA}"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_GIT_DIRTY
+    "${SATCOMFEC_BENCHMARK_GIT_DIRTY}"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_BUILD_TYPE
+    "${SATCOMFEC_BENCHMARK_BUILD_TYPE}"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_COMMON_FLAGS
+    "${SATCOMFEC_BENCHMARK_COMMON_FLAGS}"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_REFERENCE_FLAGS
+    "${SATCOMFEC_BENCHMARK_REFERENCE_FLAGS}"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_NEON_FLAGS
+    "${SATCOMFEC_BENCHMARK_NEON_FLAGS}"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_SME2_FLAGS
+    "${SATCOMFEC_BENCHMARK_SME2_FLAGS}"
+)
+
 add_executable(check_branch_metrics tools/check_branch_metrics.cpp)
 target_link_libraries(check_branch_metrics PRIVATE satcom_replay_core)
 
@@ -265,6 +368,14 @@ if(BUILD_TESTING)
     )
     add_test(NAME acquisition_kernel_equivalence COMMAND check_acquisition_kernels)
     add_test(NAME acquisition_sme2_equivalence COMMAND check_sme2_acquisition)
+    add_test(
+        NAME acquisition_benchmark_smoke
+        COMMAND benchmark_acquisition
+            --workload small
+            --warmup-rounds 0
+            --samples 3
+            --min-sample-ms 1
+    )
     if(SATCOMFEC_ACQUISITION_NEON_AVAILABLE)
         add_test(
             NAME acquisition_neon_clean

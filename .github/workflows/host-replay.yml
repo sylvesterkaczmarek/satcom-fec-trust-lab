@@ -48,6 +48,15 @@ jobs:
       - name: Check portable SME2 availability reporting
         run: bash scripts/check_sme2_acquisition.sh
 
+      - name: Validate portable acquisition benchmark report
+        run: >-
+          bash scripts/benchmark_acquisition.sh
+          --workload small
+          --warmup-rounds 0
+          --samples 3
+          --min-sample-ms 1
+          > build/acquisition-benchmark-smoke.json
+
       - name: Verify Arm build modes
         run: bash scripts/verify_arm_paths.sh
 
@@ -81,6 +90,15 @@ jobs:
 
       - name: Run CTest on Arm64
         run: ctest --test-dir build/ci-neon --output-on-failure
+
+      - name: Validate native NEON acquisition benchmark report
+        run: >-
+          build/ci-neon/benchmark_acquisition
+          --workload small
+          --warmup-rounds 0
+          --samples 3
+          --min-sample-ms 1
+          > build/acquisition-benchmark-neon-smoke.json
 
       - name: Require NEON execution and inspect instructions
         run: bash scripts/verify_acquisition_neon.sh

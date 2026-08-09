@@ -1,3 +1,4 @@
+import csv
 import json
 import subprocess
 import tempfile
@@ -9,6 +10,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = ROOT_DIR / "data/synthetic/acquisition"
 GOLDEN_PATH = ROOT_DIR / "tests/golden/acquisition_clean.json"
 ACQUISITION_BINARY = ROOT_DIR / "build/host_replay/acquisition_demo"
+BENCHMARK_BINARY = ROOT_DIR / "build/host_replay/benchmark_acquisition"
 FIXTURE_NAMES = ("clean", "noisy", "frequency_offset", "ambiguous", "weak_faded")
 SCORE_RELATIVE_TOLERANCE = 2.0e-4
 SCORE_ABSOLUTE_TOLERANCE = 1.0e-3
@@ -263,6 +265,178 @@ class AcquisitionReferenceTests(unittest.TestCase):
         else:
             self.assertEqual(report["implementation"], "unavailable")
             self.assertEqual(report["cases"], [])
+
+
+class AcquisitionBenchmarkTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        subprocess.run(
+            ("bash", "scripts/build_host_tools.sh", "benchmark_acquisition"),
+            cwd=ROOT_DIR,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_small_benchmark_report_is_correctness_gated_and_structured(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            json_path = Path(temporary_directory) / "report.json"
+            csv_path = Path(temporary_directory) / "report.csv"
+            completed = subprocess.run(
+                (
+                    str(BENCHMARK_BINARY),
+                    "--workload",
+                    "small",
+                    "--warmup-rounds",
+                    "0",
+                    "--samples",
+                    "3",
+                    "--min-sample-ms",
+                    "1",
+                    "--json",
+                    str(json_path),
+                    "--csv",
+                    str(csv_path),
+                ),
+                cwd=ROOT_DIR,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            report = json.loads(completed.stdout)
+            self.assertEqual(
+                report,
+                json.loads(json_path.read_text(encoding="utf-8")),
+            )
+            with csv_path.open(encoding="utf-8", newline="") as csv_file:
+                csv_rows = list(csv.DictReader(csv_file))
+
+            repeated = subprocess.run(
+                (
+                    str(BENCHMARK_BINARY),
+                    "--workload",
+                    "small",
+                    "--warmup-rounds",
+                    "0",
+                    "--samples",
+                    "3",
+                    "--min-sample-ms",
+                    "1",
+                ),
+                cwd=ROOT_DIR,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            repeated_report = json.loads(repeated.stdout)
+
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["schema_version"], 1)
+        self.assertEqual(report["benchmark"]["name"], "acquisition-workload-sweep")
+        self.assertEqual(report["benchmark"]["timed_sample_count"], 3)
+        self.assertEqual(report["benchmark"]["minimum_sample_duration_ms"], 1.0)
+        self.assertEqual(report["build"]["cxx_standard"], "C++17")
+        self.assertIn("reference", report["build"]["source_compile_flags"])
+        self.assertIn("neon", report["build"]["source_compile_flags"])
+        self.assertIn("sme2", report["build"]["source_compile_flags"])
+        self.assertEqual(len(report["workloads"]), 1)
+
+        workload = report["workloads"][0]
+        self.assertEqual(workload["name"], "small")
+        self.assertEqual(
+            workload["definition"],
+            {
+                "iq_sample_count": 2048,
+                "preamble_length": 64,
+                "timing_hypothesis_count": 1024,
+                "cfo_hypothesis_count": 5,
+                "candidate_correlation_count": 5120,
+                "complex_mac_count": 327680,
+                "sample_rate_hz": 48000.0,
+                "cfo_spacing_hz": 250.0,
+            },
+        )
+        self.assertTrue(workload["reference_result"]["valid"])
+        self.assertEqual(len(workload["execution_order_by_sample"]), 3)
+        self.assertEqual(len(workload["implementations"]), 3)
+        repeated_workload = repeated_report["workloads"][0]
+        self.assertEqual(workload["fixture"], repeated_workload["fixture"])
+        self.assertEqual(
+            workload["reference_result"],
+            repeated_workload["reference_result"],
+        )
+        self.assertEqual(
+            workload["execution_order_by_sample"],
+            repeated_workload["execution_order_by_sample"],
+        )
+
+        expected_tasks = set()
+        for implementation in workload["implementations"]:
+            self.assertEqual(len(implementation["modes"]), 2)
+            if implementation["available"]:
+                self.assertTrue(implementation["executed"])
+                self.assertTrue(implementation["correctness"]["passed"])
+                self.assertEqual(
+                    implementation["correctness"]["actual_implementation"],
+                    implementation["requested_implementation"],
+                )
+                for mode in implementation["modes"]:
+                    self.assertTrue(mode["valid"])
+                    self.assertIsInstance(mode["timing"], dict)
+                    self.assertEqual(mode["timing"]["sample_count"], 3)
+                    self.assertEqual(
+                        len(mode["timing"]["per_sample_latency_ms"]), 3
+                    )
+                    self.assertGreater(mode["timing"]["latency_ms"]["median"], 0.0)
+                    self.assertGreater(
+                        mode["timing"]["candidate_correlations_per_second"], 0.0
+                    )
+                    expected_tasks.add(
+                        f'{implementation["requested_implementation"]}/{mode["name"]}'
+                    )
+            else:
+                self.assertFalse(implementation["executed"])
+                self.assertNotEqual(implementation["unavailable_reason"], "")
+                for mode in implementation["modes"]:
+                    self.assertFalse(mode["valid"])
+                    self.assertIsNone(mode["timing"])
+                    self.assertNotEqual(mode["error"], "")
+
+        for execution_order in workload["execution_order_by_sample"]:
+            self.assertEqual(set(execution_order), expected_tasks)
+            self.assertEqual(len(execution_order), len(expected_tasks))
+
+        self.assertEqual(len(csv_rows), 6)
+        self.assertEqual(
+            {(row["implementation"], row["mode"]) for row in csv_rows},
+            {
+                ("reference", "steady-state"),
+                ("reference", "setup-inclusive"),
+                ("neon", "steady-state"),
+                ("neon", "setup-inclusive"),
+                ("sme2", "steady-state"),
+                ("sme2", "setup-inclusive"),
+            },
+        )
+
+
+class AcquisitionSme2Tests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        subprocess.run(
+            ("bash", "scripts/build_host_tools.sh", "acquisition_demo"),
+            cwd=ROOT_DIR,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        implementation_status = run_acquisition("clean")
+        cls.neon_available = implementation_status["neon_kernel_compiled"]
+        cls.sme2_compiled = implementation_status["sme2_kernel_compiled"]
+        cls.sme2_available = (
+            cls.sme2_compiled
+            and implementation_status["sme2_runtime_supported"]
+        )
 
     def test_sme2_fixture_results_align_with_reference_and_neon(self) -> None:
         if not self.sme2_available:

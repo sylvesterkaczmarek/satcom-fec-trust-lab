@@ -9,7 +9,11 @@ CXX_BIN="${CXX:-c++}"
 
 if [[ "${TARGET}" == "--help" || "${TARGET}" == "-h" ]]; then
   cat <<'EOF'
-Usage: scripts/build_host_tools.sh [replay_demo|benchmark_decoders|check_branch_metrics|acquisition_demo|check_acquisition_kernels|check_sme2_acquisition|all]
+Usage: scripts/build_host_tools.sh TARGET
+
+Targets:
+  replay_demo, benchmark_decoders, benchmark_acquisition, check_branch_metrics,
+  acquisition_demo, check_acquisition_kernels, check_sme2_acquisition, all
 
 Configures and builds the supported host-side executables into build/host_replay/.
 
@@ -226,10 +230,51 @@ build_with_compiler() {
 
   build_binary() {
     local output_name="$1"
-    local entry_source="$2"
+    shift
+    local entry_sources=("$@")
+    local entry_flags=()
+    if [[ "${output_name}" == "benchmark_acquisition" ]]; then
+      local git_sha="unavailable"
+      local git_dirty="unknown"
+      if command -v git >/dev/null 2>&1; then
+        git_sha="$(git -C "${ROOT_DIR}" rev-parse HEAD 2>/dev/null || printf 'unavailable')"
+        local git_status=""
+        if git_status="$(
+          git -C "${ROOT_DIR}" status --porcelain --untracked-files=normal \
+            2>/dev/null
+        )"; then
+          if [[ -n "${git_status}" ]]; then
+            git_dirty="true"
+          else
+            git_dirty="false"
+          fi
+        fi
+      fi
+      local reference_flags="${reference_no_loop_vectorize_flag} ${reference_no_slp_vectorize_flag}"
+      reference_flags="${reference_flags# }"
+      reference_flags="${reference_flags% }"
+      [[ -n "${reference_flags}" ]] || reference_flags="none"
+      local neon_flags="not-compiled"
+      if [[ -n "${acquisition_neon_flag}" ]]; then
+        neon_flags="${acquisition_neon_flag}"
+      elif [[ -n "${acquisition_neon_definition}" ]]; then
+        neon_flags="compiler target default with NEON ACLE enabled"
+      fi
+      local sme2_flags="${sme2_source_flag:-not-compiled}"
+      entry_flags+=(
+        "-DSATCOMFEC_BENCHMARK_GIT_SHA=\"${git_sha}\""
+        "-DSATCOMFEC_BENCHMARK_GIT_DIRTY=\"${git_dirty}\""
+        "-DSATCOMFEC_BENCHMARK_BUILD_TYPE=\"direct-release\""
+        "-DSATCOMFEC_BENCHMARK_COMMON_FLAGS=\"-std=c++17 -O2\""
+        "-DSATCOMFEC_BENCHMARK_REFERENCE_FLAGS=\"${reference_flags}\""
+        "-DSATCOMFEC_BENCHMARK_NEON_FLAGS=\"${neon_flags}\""
+        "-DSATCOMFEC_BENCHMARK_SME2_FLAGS=\"${sme2_flags}\""
+      )
+    fi
     "${CXX_BIN}" -std=c++17 -O2 \
+      ${entry_flags[@]+"${entry_flags[@]}"} \
       -I"${ROOT_DIR}/src" \
-      "${entry_source}" \
+      ${entry_sources[@]+"${entry_sources[@]}"} \
       "${common_objects[@]}" \
       -o "${BUILD_DIR}/${output_name}"
   }
@@ -240,6 +285,11 @@ build_with_compiler() {
       ;;
     benchmark_decoders)
       build_binary "benchmark_decoders" "${ROOT_DIR}/tools/benchmark_decoders.cpp"
+      ;;
+    benchmark_acquisition)
+      build_binary "benchmark_acquisition" \
+        "${ROOT_DIR}/tools/acquisition_benchmark.cpp" \
+        "${ROOT_DIR}/tools/benchmark_acquisition.cpp"
       ;;
     check_branch_metrics)
       build_binary "check_branch_metrics" "${ROOT_DIR}/tools/check_branch_metrics.cpp"
@@ -256,6 +306,9 @@ build_with_compiler() {
     all)
       build_binary "replay_demo" "${ROOT_DIR}/tools/replay_demo.cpp"
       build_binary "benchmark_decoders" "${ROOT_DIR}/tools/benchmark_decoders.cpp"
+      build_binary "benchmark_acquisition" \
+        "${ROOT_DIR}/tools/acquisition_benchmark.cpp" \
+        "${ROOT_DIR}/tools/benchmark_acquisition.cpp"
       build_binary "check_branch_metrics" "${ROOT_DIR}/tools/check_branch_metrics.cpp"
       build_binary "acquisition_demo" "${ROOT_DIR}/tools/acquisition_demo.cpp"
       build_binary "check_acquisition_kernels" "${ROOT_DIR}/tools/check_acquisition_kernels.cpp"
@@ -286,6 +339,9 @@ case "${TARGET}" in
   benchmark_decoders)
     cmake --build "${BUILD_DIR}" --target benchmark_decoders >/dev/null
     ;;
+  benchmark_acquisition)
+    cmake --build "${BUILD_DIR}" --target benchmark_acquisition >/dev/null
+    ;;
   check_branch_metrics)
     cmake --build "${BUILD_DIR}" --target check_branch_metrics >/dev/null
     ;;
@@ -299,7 +355,15 @@ case "${TARGET}" in
     cmake --build "${BUILD_DIR}" --target check_sme2_acquisition >/dev/null
     ;;
   all)
-    cmake --build "${BUILD_DIR}" --target replay_demo benchmark_decoders check_branch_metrics acquisition_demo check_acquisition_kernels check_sme2_acquisition >/dev/null
+    cmake --build "${BUILD_DIR}" --target \
+      replay_demo \
+      benchmark_decoders \
+      benchmark_acquisition \
+      check_branch_metrics \
+      acquisition_demo \
+      check_acquisition_kernels \
+      check_sme2_acquisition \
+      >/dev/null
     ;;
   *)
     echo "error: unsupported build target '${TARGET}'" >&2

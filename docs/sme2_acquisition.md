@@ -70,8 +70,9 @@ reference, NEON when compiled, and SME2.
 
 Workspace preparation, score calculation, confidence calculation, and top-two
 candidate selection remain scalar and are outside the SME2 correlation kernel.
-The current CLI is an end-to-end functional demo and therefore includes setup;
-the repository does not publish acquisition timing or speedup results.
+The fixture CLI is an end-to-end functional demo and therefore includes setup.
+The separate benchmark can measure setup-inclusive and prepared steady-state
+execution, but the repository does not publish a general speedup conclusion.
 
 The SME2 translation unit is enabled only with `SATCOMFEC_ENABLE_SME2=ON`, a
 compiler defining `__ARM_FEATURE_SME2`, and ACLE support for ZA VGx4

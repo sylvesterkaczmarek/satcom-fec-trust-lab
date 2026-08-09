@@ -1,66 +1,85 @@
-# Benchmarking Notes
+# Acquisition benchmarking
 
-This repository includes one narrow benchmark:
+`scripts/benchmark_acquisition.sh` runs the reference, NEON, and genuinely
+available SME2 acquisition implementations against fixed synthetic workload
+classes. JSON written to standard output is authoritative; `--json PATH` and
+`--csv PATH` optionally persist the JSON and a compact summary.
 
-- `scripts/benchmark_decoder_paths.sh`
+```bash
+# Full predetermined sweep with default statistical settings.
+bash scripts/benchmark_acquisition.sh \
+  --json build/acquisition-benchmark.json \
+  --csv build/acquisition-benchmark.csv
 
-It times the checked-in `viterbi-reference`, `viterbi-neon`, and `viterbi-sme2`
-entrypoints on the same prepared replay frame inside one host-side process.
+# Include SME2 only on a compiler and host that support it.
+SATCOMFEC_ENABLE_SME2=ON bash scripts/benchmark_acquisition.sh \
+  --json build/acquisition-benchmark-sme2.json
+```
 
-What the benchmark does:
+An unavailable accelerated implementation is recorded as unavailable and is
+not timed. No scalar fallback is reported as NEON or SME2.
 
-- prepares the replay frame once from the same checked-in IQ input
-- runs all decoder entrypoints with the same samples-per-symbol setting
-- uses the same framed coded-bit window for all paths
-- uses the same shared scalar traceback and state-machine core for all paths
-- reports branch-metric preparation timing separately from full decode timing
-- reports selected branch-metric implementation, implementation class,
-  decoded-bit count, and decoded-bit checksum for each path
+## Fixed workloads
 
-What the benchmark does not prove:
+These definitions are checked into `tools/acquisition_benchmark.cpp`; they are
+not selected after observing results.
 
-- end-to-end SME2 Viterbi acceleration
-- a general SME2 speedup result
-- device-level performance
-- thermal behavior
-- cross-platform ranking
-- LDPC performance
+| Class | IQ samples | Preamble | Timing hypotheses | CFO hypotheses | Candidate correlations | Complex MACs |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| small | 2,048 | 64 | 1,024 | 5 | 5,120 | 327,680 |
+| medium | 8,192 | 128 | 4,096 | 9 | 36,864 | 4,718,592 |
+| large | 32,768 | 256 | 16,384 | 17 | 278,528 | 71,303,168 |
+| very-large | 65,536 | 512 | 32,768 | 25 | 819,200 | 419,430,400 |
 
-Implementation maturity in this benchmark:
+Every workload uses a deterministic QPSK preamble, deterministic complex
+noise, a 48 ksample/s rate, 250 Hz CFO spacing, and an injected candidate on
+the search grid. The workload classes are engineering sweeps, not
+mission-derived waveform profiles.
 
-- `viterbi-neon`: partial Neon path with checked-in Neon branch-metric
-  preparation on Arm NEON targets, followed by the shared scalar decode core
-- `viterbi-sme2`: partial decoder path with SME2/SME streaming-mode
-  branch-metric preparation when compiled with `__ARM_FEATURE_SME2`, followed by
-  the shared scalar decode core; non-SME2 builds report scalar fallback for this
-  path
-- `viterbi-reference`: scalar reference Viterbi decode
+## Method
 
-Small replay frames can make the SME2 branch-metric path slower than reference
-or Neon because setup and streaming-mode overhead may dominate. Treat the output
-as local timing for this canned frame only.
+- The scalar result must recover ground truth before timing starts.
+- Each available accelerated result must match the scalar best candidate,
+  second-best candidate, candidate count, and score tolerances. A failing path
+  is not assigned valid timing results.
+- Default timing uses two warm-up rounds, 15 independent samples, and at least
+  50 ms per timed sample. Each sample repeats a complete acquisition operation
+  until the minimum duration is reached.
+- Implementation/mode order is deterministically shuffled before every
+  warm-up round and timed sample. Each workload's data and order seeds, plus
+  every actual timed order, are reported. A named workload has the same data
+  whether it is run alone or as part of the full sweep.
+- The scalar translation unit has loop and SLP auto-vectorization disabled
+  where the compiler supports those controls. NEON and SME2 target flags are
+  confined to their respective translation units.
+- `steady-state` includes correlation, magnitude-squared scoring, and top-two
+  reduction using validated inputs and precomputed tables. SME2 packing and
+  output buffers are preallocated.
+- `setup-inclusive` additionally includes acquisition-plan allocation and CFO
+  table generation. For SME2 it also includes workspace allocation, input
+  packing, and release.
 
-The benchmark JSON is intended to be auditable rather than promotional. It
-includes:
+The report provides median, mean, sample standard deviation, minimum, maximum,
+nearest-rank p50/p95, raw per-sample latencies, block durations, operation
+counts, candidate correlations/s, complex MACs/s, and median-latency speedups
+relative to reference and NEON. It also records the commit, dirty-tree state,
+timestamp, OS, architecture, CPU model, compiler, source-specific flags,
+runtime feature detection, vector width where available, workload definition,
+correctness evidence, and implementation actually executed.
 
-- input IQ path
-- decoder settings
-- prepared-frame metadata
-- warmup and timed iteration counts
-- compile target
-- implementation class and summary for each path
-- selected branch-metric implementation for each path
-- branch-metric preparation time for each path
-- full decode time for each path
-- decoded-bit counts and checksums for alignment
+## Interpretation limits
 
-Use `scripts/validate_decoder_alignment.sh` when you want a pass/fail check that
-all benchmarked decoder paths operated on the same prepared input and produced
-aligned output.
+This is local process timing. It does not control CPU affinity, frequency,
+thermal state, or competing system activity, and it does not measure energy.
+Results from one device are not a general architecture claim. Setup-inclusive
+and steady-state rankings may differ. The benchmark contains no SVE acquisition
+path, so it does not label streaming SVE as SME2 or provide an SVE comparison.
 
-Use `scripts/check_branch_metrics.sh` when you want a deterministic branch-metric
-equivalence check over short, tail, and full-frame-sized inputs.
+## Legacy decoder experiment
 
-Use `scripts/verify_arm_paths.sh` to print compiler and architecture details,
-build the default portable path, run tests, and try an SME2 build only when the
-compiler supports the SME2 target flag and ACLE streaming attribute.
+`scripts/benchmark_decoder_paths.sh` remains available as a narrow Viterbi
+experiment over one 244-bit replay frame. It reports branch-metric preparation
+separately from full decode and verifies decoded-bit alignment. The NEON and
+SME2 decoder paths accelerate branch-metric preparation only; add-compare-select
+and traceback remain scalar. This decoder experiment is not evidence for
+acquisition performance or end-to-end SME2 Viterbi acceleration.

@@ -29,6 +29,11 @@ AcquisitionResult run_sme2_acquisition_prepared(
     const AcquisitionPlan& plan,
     Sme2AcquisitionWorkspace& workspace);
 
+// Requires successful workspace preparation and one checked SME2 execution.
+AcquisitionResult run_sme2_acquisition_steady_state(
+    const AcquisitionPlan& plan,
+    Sme2AcquisitionWorkspace& workspace);
+
 AcquisitionResult run_sme2_acquisition(
     const std::vector<ComplexF>& received_iq,
     const AcquisitionPlan& plan);

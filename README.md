@@ -18,7 +18,7 @@ supported Android app or full SME2-optimized Viterbi decoder.
 - Included validation: host-side automated tests and host CI
 - Not included: Android app packaging, JNI/mobile replay wiring,
   SME2-accelerated Viterbi trellis recurrence or traceback, live RF capture,
-  benchmark claims, or thermal claims
+  published performance conclusions, or thermal claims
 
 ## Supported scope
 
@@ -28,7 +28,9 @@ supported Android app or full SME2-optimized Viterbi decoder.
   4,096-sample IQ windows, 3,841 timing hypotheses, 9 CFO hypotheses, and a
   256-sample complex preamble; unavailable accelerated paths do not use a
   labeled scalar fallback
-- One local decoder-path timing comparison across `viterbi-reference`,
+- One correctness-gated acquisition workload sweep with fixed sizes,
+  steady-state and setup-inclusive modes, and structured local timing output
+- One legacy decoder-path timing comparison across `viterbi-reference`,
   `viterbi-neon`, and `viterbi-sme2`
 - One healthy versus impaired versus failed trust comparison using checked-in
   synthetic fixtures
@@ -59,7 +61,8 @@ supported Android app or full SME2-optimized Viterbi decoder.
 - A trust comparison script at `scripts/compare_trust_cases.sh`
 - A decoder alignment check at `scripts/validate_decoder_alignment.sh`
 - A branch-metric equivalence check at `scripts/check_branch_metrics.sh`
-- A local benchmark harness at `scripts/benchmark_decoder_paths.sh`
+- An acquisition benchmark harness at `scripts/benchmark_acquisition.sh`
+- A legacy decoder microbenchmark at `scripts/benchmark_decoder_paths.sh`
 - Automated tests at `tests/test_host_replay.py`
 - Reference/NEON/SME2 acquisition tests at `tests/test_acquisition.py`
 - Golden structured-output subsets under `tests/golden/`
@@ -139,6 +142,15 @@ make benchmark
 make test
 ```
 
+`make benchmark` runs the predetermined acquisition workload sweep. Persist
+the authoritative JSON and optional CSV summaries with:
+
+```bash
+bash scripts/benchmark_acquisition.sh \
+  --json build/acquisition-benchmark.json \
+  --csv build/acquisition-benchmark.csv
+```
+
 On a host and compiler with SME2 support, build and verify the ZA-based
 acquisition path explicitly:
 
@@ -146,6 +158,8 @@ acquisition path explicitly:
 SATCOMFEC_ENABLE_SME2=ON bash scripts/run_acquisition_demo.sh \
   data/synthetic/acquisition/clean.iq \
   data/synthetic/acquisition/clean.json sme2
+SATCOMFEC_ENABLE_SME2=ON bash scripts/benchmark_acquisition.sh \
+  --json build/acquisition-benchmark-sme2.json
 bash scripts/check_sme2_acquisition.sh --require-sme2
 bash scripts/verify_sme2_acquisition_assembly.sh
 ```
@@ -163,7 +177,7 @@ bash scripts/run_replay_demo.sh data/synthetic/canned_replay/demo_conv_bpsk.iq v
 bash scripts/run_replay_demo.sh data/synthetic/canned_replay/demo_conv_bpsk.iq viterbi-reference
 ```
 
-The benchmark is intentionally narrow. It compares the checked-in
+The legacy decoder benchmark is intentionally narrow. It compares the checked-in
 `viterbi-reference`, `viterbi-neon`, and `viterbi-sme2` entrypoints on the same
 prepared replay frame inside one process and reports local timing plus
 decoded-bit alignment data. `viterbi-sme2` uses SME2/SME streaming mode only for
@@ -174,6 +188,9 @@ Benchmark results are local timing only. Small replay frames can make the SME2
 branch-metric path slower than reference or Neon because setup and streaming-mode
 overhead may dominate. Do not present these numbers as a general SME2 speedup
 result.
+
+Run that legacy experiment explicitly with `make benchmark-decoder-legacy`.
+It is not used as evidence for acquisition performance.
 
 The supported quick start does not use Gradle. No Gradle wrapper or Android
 build entrypoint is included in this publication-scoped revision.
@@ -340,10 +357,10 @@ for the clean-checkout rerun procedure.
 - It does not ship a mobile JNI bridge or on-device replay workflow.
 - It does not claim end-to-end SME2 Viterbi acceleration.
 - It does not ship a mission-derived or Φsat-2 replay asset.
-- It does not claim SME2 acquisition performance results or a general SME2
-  speedup.
-- It does not claim benchmark reproducibility, thermal behavior, or cross-device
-  performance conclusions.
+- It does not present local SME2 acquisition measurements as a general
+  performance result or speedup.
+- It does not claim cross-device performance reproducibility, thermal behavior,
+  or a general NEON/SME2 speedup.
 
 The repository includes a local timing harness so developers can measure their
 own machine, but the README does not turn those local measurements into general
@@ -360,6 +377,8 @@ What works today:
 - compile and execute the SME2 acquisition path on supported SME2 hardware,
   verify every candidate correlation against the reference, and inspect the
   object for ZA VGx4 instructions
+- run fixed acquisition workload classes with correctness-gated local timing,
+  separate steady-state/setup-inclusive modes, and JSON/CSV reporting
 - regenerate the synthetic IQ asset and its metadata
 - compare healthy, impaired, and failed trust-monitoring cases on checked-in
   inputs
@@ -416,7 +435,8 @@ What is not included:
 - a checked-in Gradle wrapper or Android build workflow
 - a supported Android app
 - SME2-accelerated Viterbi add-compare-select or traceback
-- acquisition benchmark or acquisition speedup claim
+- checked-in acquisition performance results or a general acquisition speedup
+  claim
 
 ## Expected output
 
@@ -494,8 +514,15 @@ failed summary. In the checked-in deterministic asset set, the healthy replay de
 because its soft decisions are weaker, and the failed replay is capped at
 `low-confidence` because CRC rejection is treated as a hard trust limiter.
 
-The benchmark harness prints its assumptions inline. In the current repository
-those assumptions are:
+The acquisition benchmark reports fixed workload dimensions, the deterministic
+seed and execution order, host/compiler/source-flag metadata, runtime Arm
+feature detection, candidate and score equivalence, timing distributions,
+throughput, and relative median latency. An implementation is timed only after
+it matches the scalar result. See [docs/benchmarking.md](docs/benchmarking.md)
+for the exact four workload classes and statistical method.
+
+The legacy decoder harness prints its assumptions inline. Those assumptions
+are:
 
 - same canned IQ file for all paths
 - same samples-per-symbol setting
@@ -507,7 +534,7 @@ those assumptions are:
 - same timed iteration count inside one process
 - small replay frames may be dominated by SME2 setup and streaming-mode overhead
 
-The benchmark report also includes:
+The legacy decoder report also includes:
 
 - compile target
 - implementation class and summary for each path
@@ -561,6 +588,7 @@ Supported host-side scripts:
 - `scripts/validate_decoder_alignment.sh`
 - `scripts/check_branch_metrics.sh`
 - `scripts/verify_arm_paths.sh`
+- `scripts/benchmark_acquisition.sh`
 - `scripts/benchmark_decoder_paths.sh`
 - `scripts/generate_synthetic_iq.py`
 - `scripts/generate_acquisition_fixtures.py`

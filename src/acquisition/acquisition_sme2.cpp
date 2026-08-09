@@ -384,6 +384,20 @@ AcquisitionResult run_sme2_acquisition_prepared(
         return result;
     }
 
+    return run_sme2_acquisition_steady_state(plan, workspace);
+#else
+    static_cast<void>(plan);
+    static_cast<void>(workspace);
+    result.implementation = "unavailable";
+    result.error_message = "SME2 acquisition kernel is not compiled for this target";
+    return result;
+#endif
+}
+
+AcquisitionResult run_sme2_acquisition_steady_state(
+    const AcquisitionPlan& plan,
+    Sme2AcquisitionWorkspace& workspace) {
+#if SATCOMFEC_ACQUISITION_HAS_SME2
     correlate_sme2_kernel(
         workspace.received_real_by_sample_and_timing.data(),
         workspace.received_imag_by_sample_and_timing.data(),
@@ -396,6 +410,7 @@ AcquisitionResult run_sme2_acquisition_prepared(
         workspace.correlation_imag_by_frequency_and_timing.data());
     return result_from_workspace(plan, workspace);
 #else
+    AcquisitionResult result;
     static_cast<void>(plan);
     static_cast<void>(workspace);
     result.implementation = "unavailable";

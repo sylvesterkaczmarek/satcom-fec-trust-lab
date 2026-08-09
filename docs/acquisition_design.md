@@ -91,10 +91,14 @@ behavior, and path-specific tail handling.
 
 ## Workload size
 
-The default search evaluates 3,841 timing hypotheses and 9 CFO hypotheses over
-a 256-sample complex preamble: 34,569 candidate correlations and 8,849,664
-complex multiply-accumulate terms per capture. Unlike the existing short
-Viterbi branch-metric experiment, this workload operates on a longer IQ window
-and exposes independent work across timing/CFO candidates and preamble samples.
-This observation defines the workload shape only; it is not a performance or
-acceleration claim.
+The checked-in fixture search evaluates 3,841 timing hypotheses and 9 CFO
+hypotheses over a 256-sample complex preamble: 34,569 candidate correlations
+and 8,849,664 complex multiply-accumulate terms per capture. The dedicated
+benchmark uses four predetermined workload classes from 327,680 through
+419,430,400 complex multiply-accumulate terms per acquisition. Their exact
+definitions and timing method are in `docs/benchmarking.md`.
+
+Unlike the short Viterbi branch-metric experiment, acquisition operates on
+longer IQ windows and exposes independent work across timing/CFO candidates
+and preamble samples. This defines the workload shape only; it is not a
+performance claim.

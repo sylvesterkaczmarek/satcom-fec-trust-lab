@@ -28,40 +28,11 @@ void consider_candidate(
 
 }  // namespace
 
-AcquisitionResult run_reference_acquisition(
+AcquisitionResult run_reference_acquisition_steady_state(
     const std::vector<ComplexF>& received_iq,
     const AcquisitionPlan& plan) {
     AcquisitionResult result;
     result.implementation = "reference";
-
-    if (!std::isfinite(plan.sample_rate_hz) || plan.sample_rate_hz <= 0.0 ||
-        plan.preamble_length == 0 || plan.timing_offsets.empty() ||
-        plan.frequency_hypotheses.empty()) {
-        result.error_message = "acquisition plan is incomplete";
-        return result;
-    }
-    if (received_iq.size() < plan.preamble_length) {
-        result.error_message = "received IQ is shorter than the preamble";
-        return result;
-    }
-    for (const ComplexF& sample : received_iq) {
-        if (!finite_iq(sample)) {
-            result.error_message = "received IQ contains a non-finite sample";
-            return result;
-        }
-    }
-    for (const PreparedFrequencyHypothesis& frequency : plan.frequency_hypotheses) {
-        if (frequency.matched_filter_weights.size() != plan.preamble_length) {
-            result.error_message = "acquisition plan has an invalid matched-filter table";
-            return result;
-        }
-    }
-    for (std::size_t timing_offset : plan.timing_offsets) {
-        if (timing_offset > received_iq.size() - plan.preamble_length) {
-            result.error_message = "a timing hypothesis extends beyond the received IQ window";
-            return result;
-        }
-    }
 
     for (const PreparedFrequencyHypothesis& frequency : plan.frequency_hypotheses) {
         for (std::size_t timing_offset : plan.timing_offsets) {
@@ -104,6 +75,44 @@ AcquisitionResult run_reference_acquisition(
     }
 
     return result;
+}
+
+AcquisitionResult run_reference_acquisition(
+    const std::vector<ComplexF>& received_iq,
+    const AcquisitionPlan& plan) {
+    AcquisitionResult result;
+    result.implementation = "reference";
+
+    if (!std::isfinite(plan.sample_rate_hz) || plan.sample_rate_hz <= 0.0 ||
+        plan.preamble_length == 0 || plan.timing_offsets.empty() ||
+        plan.frequency_hypotheses.empty()) {
+        result.error_message = "acquisition plan is incomplete";
+        return result;
+    }
+    if (received_iq.size() < plan.preamble_length) {
+        result.error_message = "received IQ is shorter than the preamble";
+        return result;
+    }
+    for (const ComplexF& sample : received_iq) {
+        if (!finite_iq(sample)) {
+            result.error_message = "received IQ contains a non-finite sample";
+            return result;
+        }
+    }
+    for (const PreparedFrequencyHypothesis& frequency : plan.frequency_hypotheses) {
+        if (frequency.matched_filter_weights.size() != plan.preamble_length) {
+            result.error_message = "acquisition plan has an invalid matched-filter table";
+            return result;
+        }
+    }
+    for (std::size_t timing_offset : plan.timing_offsets) {
+        if (timing_offset > received_iq.size() - plan.preamble_length) {
+            result.error_message = "a timing hypothesis extends beyond the received IQ window";
+            return result;
+        }
+    }
+
+    return run_reference_acquisition_steady_state(received_iq, plan);
 }
 
 }  // namespace satcomfec::acquisition

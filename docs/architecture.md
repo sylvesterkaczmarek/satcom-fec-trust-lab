@@ -35,6 +35,12 @@ run by `scripts/run_replay_demo.sh`. Decoder alignment and local timing are
 handled by `scripts/validate_decoder_alignment.sh` and
 `scripts/benchmark_decoder_paths.sh`.
 
+Acquisition timing is a separate workload sweep implemented by
+`tools/benchmark_acquisition.cpp` and `tools/acquisition_benchmark.cpp`, exposed
+through `scripts/benchmark_acquisition.sh`. It correctness-gates each available
+implementation before reporting steady-state or setup-inclusive timing. The
+decoder benchmark is not used as evidence for acquisition behavior.
+
 The replay result is intentionally structured. It reports front-end statistics,
 demodulation and framing details, decoder identity, trust features, and the
 trust-score component weights that produced the final scalar score.

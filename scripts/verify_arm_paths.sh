@@ -63,7 +63,14 @@ build_with_cmake_or_script() {
     cmake -S "${ROOT_DIR}" -B "${build_dir}" \
       -DCMAKE_BUILD_TYPE=Release \
       "${cmake_options[@]}"
-    cmake --build "${build_dir}" --target replay_demo benchmark_decoders check_branch_metrics acquisition_demo check_acquisition_kernels check_sme2_acquisition
+    cmake --build "${build_dir}" --target \
+      replay_demo \
+      benchmark_decoders \
+      benchmark_acquisition \
+      check_branch_metrics \
+      acquisition_demo \
+      check_acquisition_kernels \
+      check_sme2_acquisition
     return
   fi
 
@@ -83,6 +90,22 @@ build_with_cmake_or_script "${BUILD_ROOT}/portable" \
   -DSATCOMFEC_ENABLE_NEON=OFF \
   -DSATCOMFEC_ENABLE_SME2=OFF
 
+if command -v cmake >/dev/null 2>&1; then
+  portable_benchmark="${BUILD_ROOT}/portable/benchmark_acquisition"
+else
+  portable_benchmark="${ROOT_DIR}/build/host_replay/benchmark_acquisition"
+fi
+
+echo
+echo "Checking portable acquisition benchmark report:"
+"${portable_benchmark}" \
+  --workload small \
+  --warmup-rounds 0 \
+  --samples 3 \
+  --min-sample-ms 1 \
+  >/dev/null
+echo "Portable acquisition benchmark report passed."
+
 echo
 echo "Running unit tests on default build:"
 python3 -m unittest discover -s "${ROOT_DIR}/tests" -v
@@ -99,14 +122,26 @@ if sme2_flag="$(select_sme2_flag)"; then
     build_with_cmake_or_script "${BUILD_ROOT}/sme2" \
       -DSATCOMFEC_ENABLE_SME2=ON
     sme2_acquisition_checker="${BUILD_ROOT}/sme2/check_sme2_acquisition"
+    sme2_benchmark="${BUILD_ROOT}/sme2/benchmark_acquisition"
   else
     SATCOMFEC_ENABLE_SME2=ON bash "${ROOT_DIR}/scripts/build_host_tools.sh" all
     sme2_acquisition_checker="${ROOT_DIR}/build/host_replay/check_sme2_acquisition"
+    sme2_benchmark="${ROOT_DIR}/build/host_replay/benchmark_acquisition"
   fi
 
   echo
   echo "Checking SME2 acquisition correctness and runtime availability:"
   "${sme2_acquisition_checker}"
+
+  echo
+  echo "Checking SME2-build acquisition benchmark report:"
+  "${sme2_benchmark}" \
+    --workload small \
+    --warmup-rounds 0 \
+    --samples 3 \
+    --min-sample-ms 1 \
+    >/dev/null
+  echo "SME2-build acquisition benchmark report passed."
 
   sme2_obj="${BUILD_ROOT}/branch_metrics_sme2.o"
   mkdir -p "${BUILD_ROOT}"

@@ -90,42 +90,13 @@ void consider_candidate(
 }  // namespace
 #endif
 
-AcquisitionResult run_neon_acquisition(
+AcquisitionResult run_neon_acquisition_steady_state(
     const std::vector<ComplexF>& received_iq,
     const AcquisitionPlan& plan) {
     AcquisitionResult result;
 
 #if SATCOMFEC_ACQUISITION_HAS_NEON
     result.implementation = "neon";
-
-    if (!std::isfinite(plan.sample_rate_hz) || plan.sample_rate_hz <= 0.0 ||
-        plan.preamble_length == 0 || plan.timing_offsets.empty() ||
-        plan.frequency_hypotheses.empty()) {
-        result.error_message = "acquisition plan is incomplete";
-        return result;
-    }
-    if (received_iq.size() < plan.preamble_length) {
-        result.error_message = "received IQ is shorter than the preamble";
-        return result;
-    }
-    for (const ComplexF& sample : received_iq) {
-        if (!finite_iq(sample)) {
-            result.error_message = "received IQ contains a non-finite sample";
-            return result;
-        }
-    }
-    for (const PreparedFrequencyHypothesis& frequency : plan.frequency_hypotheses) {
-        if (frequency.matched_filter_weights_f32.size() != plan.preamble_length) {
-            result.error_message = "acquisition plan has an invalid NEON weight table";
-            return result;
-        }
-    }
-    for (std::size_t timing_offset : plan.timing_offsets) {
-        if (timing_offset > received_iq.size() - plan.preamble_length) {
-            result.error_message = "a timing hypothesis extends beyond the received IQ window";
-            return result;
-        }
-    }
 
     for (const PreparedFrequencyHypothesis& frequency : plan.frequency_hypotheses) {
         for (std::size_t timing_offset : plan.timing_offsets) {
@@ -169,6 +140,53 @@ AcquisitionResult run_neon_acquisition(
 #endif
 
     return result;
+}
+
+AcquisitionResult run_neon_acquisition(
+    const std::vector<ComplexF>& received_iq,
+    const AcquisitionPlan& plan) {
+    AcquisitionResult result;
+
+#if SATCOMFEC_ACQUISITION_HAS_NEON
+    result.implementation = "neon";
+
+    if (!std::isfinite(plan.sample_rate_hz) || plan.sample_rate_hz <= 0.0 ||
+        plan.preamble_length == 0 || plan.timing_offsets.empty() ||
+        plan.frequency_hypotheses.empty()) {
+        result.error_message = "acquisition plan is incomplete";
+        return result;
+    }
+    if (received_iq.size() < plan.preamble_length) {
+        result.error_message = "received IQ is shorter than the preamble";
+        return result;
+    }
+    for (const ComplexF& sample : received_iq) {
+        if (!finite_iq(sample)) {
+            result.error_message = "received IQ contains a non-finite sample";
+            return result;
+        }
+    }
+    for (const PreparedFrequencyHypothesis& frequency : plan.frequency_hypotheses) {
+        if (frequency.matched_filter_weights_f32.size() != plan.preamble_length) {
+            result.error_message = "acquisition plan has an invalid NEON weight table";
+            return result;
+        }
+    }
+    for (std::size_t timing_offset : plan.timing_offsets) {
+        if (timing_offset > received_iq.size() - plan.preamble_length) {
+            result.error_message = "a timing hypothesis extends beyond the received IQ window";
+            return result;
+        }
+    }
+
+    return run_neon_acquisition_steady_state(received_iq, plan);
+#else
+    static_cast<void>(received_iq);
+    static_cast<void>(plan);
+    result.implementation = "unavailable";
+    result.error_message = "NEON acquisition kernel is not compiled for this target";
+    return result;
+#endif
 }
 
 bool acquisition_neon_kernel_compiled() {
