@@ -9,7 +9,7 @@ CXX_BIN="${CXX:-c++}"
 
 if [[ "${TARGET}" == "--help" || "${TARGET}" == "-h" ]]; then
   cat <<'EOF'
-Usage: scripts/build_host_tools.sh [replay_demo|benchmark_decoders|check_branch_metrics|acquisition_demo|all]
+Usage: scripts/build_host_tools.sh [replay_demo|benchmark_decoders|check_branch_metrics|acquisition_demo|check_acquisition_kernels|all]
 
 Configures and builds the supported host-side executables into build/host_replay/.
 
@@ -50,13 +50,23 @@ sme2_acle_supported() {
 
 neon_acle_supported() {
   local flag="$1"
+  if [[ -n "${flag}" ]]; then
+    printf '%s\n' \
+      '#if !defined(__ARM_NEON) && !defined(__ARM_NEON__)' \
+      '#error NEON macro not defined' \
+      '#endif' \
+      '#include <arm_neon.h>' \
+      'int main() { int8x16_t v = vdupq_n_s8(1); return vgetq_lane_s8(v, 0) == 1 ? 0 : 1; }' |
+      "${CXX_BIN}" -std=c++17 "${flag}" -x c++ -fsyntax-only - >/dev/null 2>&1
+    return
+  fi
   printf '%s\n' \
     '#if !defined(__ARM_NEON) && !defined(__ARM_NEON__)' \
     '#error NEON macro not defined' \
     '#endif' \
     '#include <arm_neon.h>' \
     'int main() { int8x16_t v = vdupq_n_s8(1); return vgetq_lane_s8(v, 0) == 1 ? 0 : 1; }' |
-    "${CXX_BIN}" -std=c++17 "${flag}" -x c++ -fsyntax-only - >/dev/null 2>&1
+    "${CXX_BIN}" -std=c++17 -x c++ -fsyntax-only - >/dev/null 2>&1
 }
 
 select_sme2_flag() {
@@ -92,7 +102,22 @@ build_with_compiler() {
     exit 1
   fi
 
-  local arch_flags=()
+  local neon_source_flag=""
+  local sme2_source_flag=""
+  local acquisition_neon_flag=""
+  local acquisition_neon_definition=""
+  local reference_no_loop_vectorize_flag=""
+  local reference_no_slp_vectorize_flag=""
+  if flag_supported "-fno-vectorize"; then
+    reference_no_loop_vectorize_flag="-fno-vectorize"
+  elif flag_supported "-fno-tree-vectorize"; then
+    reference_no_loop_vectorize_flag="-fno-tree-vectorize"
+  fi
+  if flag_supported "-fno-slp-vectorize"; then
+    reference_no_slp_vectorize_flag="-fno-slp-vectorize"
+  elif flag_supported "-fno-tree-slp-vectorize"; then
+    reference_no_slp_vectorize_flag="-fno-tree-slp-vectorize"
+  fi
   if [[ "${SATCOMFEC_ENABLE_SME2:-OFF}" == "ON" ]]; then
     local sme2_flag
     if ! sme2_flag="$(select_sme2_flag)"; then
@@ -100,7 +125,7 @@ build_with_compiler() {
       echo "       tried Darwin arm64 native+sme2 when applicable, then -march=armv9.4-a+sme2 and -march=armv9.2-a+sme2" >&2
       exit 1
     fi
-    arch_flags+=("${sme2_flag}")
+    sme2_source_flag="${sme2_flag}"
     echo "info: SME2 build enabled with ${sme2_flag}" >&2
   elif [[ "${SATCOMFEC_ENABLE_NEON:-OFF}" == "ON" ]]; then
     local neon_flag
@@ -108,12 +133,21 @@ build_with_compiler() {
       echo "error: SATCOMFEC_ENABLE_NEON=ON requires -march=armv8-a+simd or -march=armv8-a plus NEON ACLE support" >&2
       exit 1
     fi
-    arch_flags+=("${neon_flag}")
+    neon_source_flag="${neon_flag}"
+    acquisition_neon_flag="${neon_flag}"
+    acquisition_neon_definition="-DSATCOMFEC_ACQUISITION_NEON_COMPILED=1"
     echo "info: NEON build enabled with ${neon_flag}" >&2
+  fi
+  if [[ -z "${acquisition_neon_definition}" ]] && neon_acle_supported ""; then
+    acquisition_neon_definition="-DSATCOMFEC_ACQUISITION_NEON_COMPILED=1"
+    echo "info: native AArch64 NEON acquisition kernel enabled" >&2
   fi
 
   local common_sources=(
+    "${ROOT_DIR}/src/acquisition/acquisition_neon.cpp"
+    "${ROOT_DIR}/src/acquisition/acquisition_plan.cpp"
     "${ROOT_DIR}/src/acquisition/acquisition_reference.cpp"
+    "${ROOT_DIR}/src/acquisition/acquisition_runner.cpp"
     "${ROOT_DIR}/src/demo/replay_pipeline.cpp"
     "${ROOT_DIR}/src/dsp/front_end_dsp.cpp"
     "${ROOT_DIR}/src/dsp/framing.cpp"
@@ -130,14 +164,56 @@ build_with_compiler() {
     "${ROOT_DIR}/src/util/logging.cpp"
   )
 
+  local object_dir="${BUILD_DIR}/direct_objects"
+  mkdir -p "${object_dir}"
+  local common_objects=()
+  local source
+  for source in "${common_sources[@]}"; do
+    local object_name
+    object_name="$(basename "${source}" .cpp).o"
+    local source_flags=()
+    if [[ "${source}" == "${ROOT_DIR}/src/acquisition/acquisition_neon.cpp" ]]; then
+      if [[ -n "${acquisition_neon_flag}" ]]; then
+        source_flags+=("${acquisition_neon_flag}")
+      fi
+      if [[ -n "${acquisition_neon_definition}" ]]; then
+        source_flags+=("${acquisition_neon_definition}")
+      fi
+    elif [[ "${source}" == "${ROOT_DIR}/src/acquisition/acquisition_reference.cpp" ]]; then
+      if [[ -n "${reference_no_loop_vectorize_flag}" ]]; then
+        source_flags+=("${reference_no_loop_vectorize_flag}")
+      fi
+      if [[ -n "${reference_no_slp_vectorize_flag}" ]]; then
+        source_flags+=("${reference_no_slp_vectorize_flag}")
+      fi
+    elif [[ "${source}" == "${ROOT_DIR}/src/fec/branch_metrics_sme2.cpp" ]]; then
+      if [[ -n "${sme2_source_flag}" ]]; then
+        source_flags+=("${sme2_source_flag}")
+      fi
+    elif [[ "${source}" == "${ROOT_DIR}/src/fec/convolutional_codec.cpp" ]]; then
+      if [[ -n "${neon_source_flag}" ]]; then
+        source_flags+=("${neon_source_flag}")
+      fi
+      if [[ -n "${sme2_source_flag}" ]]; then
+        source_flags+=("${sme2_source_flag}")
+      fi
+    fi
+
+    "${CXX_BIN}" -std=c++17 -O2 \
+      ${source_flags[@]+"${source_flags[@]}"} \
+      -I"${ROOT_DIR}/src" \
+      -c "${source}" \
+      -o "${object_dir}/${object_name}"
+    common_objects+=("${object_dir}/${object_name}")
+  done
+
   build_binary() {
     local output_name="$1"
     local entry_source="$2"
     "${CXX_BIN}" -std=c++17 -O2 \
-      ${arch_flags[@]+"${arch_flags[@]}"} \
       -I"${ROOT_DIR}/src" \
       "${entry_source}" \
-      "${common_sources[@]}" \
+      "${common_objects[@]}" \
       -o "${BUILD_DIR}/${output_name}"
   }
 
@@ -154,11 +230,15 @@ build_with_compiler() {
     acquisition_demo)
       build_binary "acquisition_demo" "${ROOT_DIR}/tools/acquisition_demo.cpp"
       ;;
+    check_acquisition_kernels)
+      build_binary "check_acquisition_kernels" "${ROOT_DIR}/tools/check_acquisition_kernels.cpp"
+      ;;
     all)
       build_binary "replay_demo" "${ROOT_DIR}/tools/replay_demo.cpp"
       build_binary "benchmark_decoders" "${ROOT_DIR}/tools/benchmark_decoders.cpp"
       build_binary "check_branch_metrics" "${ROOT_DIR}/tools/check_branch_metrics.cpp"
       build_binary "acquisition_demo" "${ROOT_DIR}/tools/acquisition_demo.cpp"
+      build_binary "check_acquisition_kernels" "${ROOT_DIR}/tools/check_acquisition_kernels.cpp"
       ;;
     *)
       echo "error: unsupported build target '${TARGET}'" >&2
@@ -191,8 +271,11 @@ case "${TARGET}" in
   acquisition_demo)
     cmake --build "${BUILD_DIR}" --target acquisition_demo >/dev/null
     ;;
+  check_acquisition_kernels)
+    cmake --build "${BUILD_DIR}" --target check_acquisition_kernels >/dev/null
+    ;;
   all)
-    cmake --build "${BUILD_DIR}" --target replay_demo benchmark_decoders check_branch_metrics acquisition_demo >/dev/null
+    cmake --build "${BUILD_DIR}" --target replay_demo benchmark_decoders check_branch_metrics acquisition_demo check_acquisition_kernels >/dev/null
     ;;
   *)
     echo "error: unsupported build target '${TARGET}'" >&2

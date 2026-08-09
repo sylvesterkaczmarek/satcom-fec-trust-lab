@@ -3,17 +3,17 @@
 ![Satcom FEC Trust Lab](assets/social/github-social-card-satcom-fec-trust-lab.png)
 
 This repository is a host-side satcom signal-processing project built around
-deterministic synthetic IQ fixtures. It contains two portable public workflows:
-a scalar timing/CFO acquisition search over a complex preamble, and a compact
-BPSK replay path from IQ through framing, Viterbi decode, CRC, and structured
-trust diagnostics.
+deterministic synthetic IQ fixtures. It contains two public workflows: a
+timing/CFO acquisition search with scalar reference and optional Arm NEON
+implementations, and a compact BPSK replay path from IQ through framing,
+Viterbi decode, CRC, and structured trust diagnostics.
 
 The public repo provides scoped host-side acquisition and replay demos, not a
 supported Android app or full SME2-optimized Viterbi decoder.
 
 ## Repo status
 
-- Publication-safe today: the scalar IQ acquisition search and host-side canned
+- Publication-safe today: the IQ acquisition search and host-side canned
   replay flow
 - Included validation: host-side automated tests and host CI
 - Not included: Android app packaging, JNI/mobile replay wiring,
@@ -24,8 +24,9 @@ supported Android app or full SME2-optimized Viterbi decoder.
 
 - One host-side replay path from checked-in IQ to decoded payload plus trust
   output
-- One scalar reference acquisition path over 4,096-sample IQ windows, 3,841
-  timing hypotheses, 9 CFO hypotheses, and a 256-sample complex preamble
+- Scalar reference and explicit Arm NEON acquisition paths over 4,096-sample IQ
+  windows, 3,841 timing hypotheses, 9 CFO hypotheses, and a 256-sample complex
+  preamble; unavailable NEON builds do not use a labeled scalar fallback
 - One local decoder-path timing comparison across `viterbi-reference`,
   `viterbi-neon`, and `viterbi-sme2`
 - One healthy versus impaired versus failed trust comparison using checked-in
@@ -50,7 +51,7 @@ supported Android app or full SME2-optimized Viterbi decoder.
 - Purpose-built host-side sources under `src/`
 - A top-level `CMakeLists.txt` for host builds
 - A host-side runner at `scripts/run_replay_demo.sh`
-- A scalar acquisition runner at `scripts/run_acquisition_demo.sh`
+- An acquisition runner at `scripts/run_acquisition_demo.sh`
 - A host-side build helper at `scripts/build_host_tools.sh`
 - A verification script at `scripts/check_replay_demo.sh`
 - An acquisition fixture check at `scripts/check_acquisition_demo.sh`
@@ -59,11 +60,11 @@ supported Android app or full SME2-optimized Viterbi decoder.
 - A branch-metric equivalence check at `scripts/check_branch_metrics.sh`
 - A local benchmark harness at `scripts/benchmark_decoder_paths.sh`
 - Automated tests at `tests/test_host_replay.py`
-- Scalar acquisition tests at `tests/test_acquisition.py`
+- Reference/NEON acquisition tests at `tests/test_acquisition.py`
 - Golden structured-output subsets under `tests/golden/`
 - Host CI at `.github/workflows/host-replay.yml`
 - Native C++ modules for front-end processing, framing, Viterbi decode, a small
-  LDPC-style bit-flip decoder, scalar acquisition, and trust scoring
+  LDPC-style bit-flip decoder, reference/NEON acquisition, and trust scoring
 
 ## What the replay demo does
 
@@ -106,6 +107,8 @@ Recommended first run:
 make build
 make acquisition
 make check-acquisition
+make check-acquisition-neon
+make verify-acquisition-neon
 make replay
 make check
 ```
@@ -116,6 +119,8 @@ Equivalent direct commands:
 bash scripts/build_host_tools.sh all
 bash scripts/run_acquisition_demo.sh
 bash scripts/check_acquisition_demo.sh
+bash scripts/check_acquisition_neon.sh
+bash scripts/verify_acquisition_neon.sh
 bash scripts/run_replay_demo.sh
 bash scripts/check_replay_demo.sh
 ```
@@ -299,7 +304,7 @@ for the clean-checkout rerun procedure.
 - It does not ship a mobile JNI bridge or on-device replay workflow.
 - It does not claim end-to-end SME2 Viterbi acceleration.
 - It does not ship a mission-derived or Φsat-2 replay asset.
-- It does not include an accelerated acquisition kernel or claim acquisition
+- It does not include SVE or SME2 acquisition kernels or claim acquisition
   performance results.
 - It does not claim benchmark reproducibility, thermal behavior, or cross-device
   performance conclusions.
@@ -313,7 +318,9 @@ performance claims.
 What works today:
 
 - build and run the host-side canned replay flow
-- run the scalar timing/CFO acquisition search on five checked-in fixtures
+- run the reference timing/CFO acquisition search on five checked-in fixtures
+- run the NEON acquisition path on native Arm64 builds and verify its numerical
+  equivalence to the reference path
 - regenerate the synthetic IQ asset and its metadata
 - compare healthy, impaired, and failed trust-monitoring cases on checked-in
   inputs
@@ -328,8 +335,8 @@ Required hardware:
 
 Optional hardware:
 
-- an Arm64 machine with NEON support if you want the checked-in branch-metric
-  preparation to execute NEON intrinsics rather than the portable fallback
+- an Arm64 machine with NEON support if you want to execute the acquisition
+  NEON kernel or the checked-in NEON branch-metric preparation path
 - an Arm machine and compiler targeting SME2 if you want `viterbi-sme2` to
   compile and run the SME2/SME streaming-mode branch-metric kernel
 
@@ -502,6 +509,8 @@ Supported host-side scripts:
 - `make help`
 - `scripts/build_host_tools.sh`
 - `scripts/run_acquisition_demo.sh`
+- `scripts/check_acquisition_neon.sh`
+- `scripts/verify_acquisition_neon.sh`
 - `scripts/run_replay_demo.sh`
 - `scripts/check_acquisition_demo.sh`
 - `scripts/check_replay_demo.sh`

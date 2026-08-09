@@ -2,8 +2,10 @@
 
 The repository has two independent host-side IQ workflows. The acquisition
 workflow loads a generated complex preamble and receive window, prepares a grid
-of timing/CFO hypotheses, and runs the scalar matched-filter search described in
-`docs/acquisition_design.md`. Its entrypoint is `tools/acquisition_demo.cpp`.
+of timing/CFO hypotheses, and runs the selected reference or Arm NEON
+matched-filter search described in `docs/acquisition_design.md`. Its entrypoint
+is `tools/acquisition_demo.cpp`. Unsupported NEON builds report unavailable;
+there is no scalar fallback under the NEON label.
 
 The replay workflow is:
 

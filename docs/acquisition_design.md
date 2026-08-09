@@ -1,4 +1,4 @@
-# Scalar acquisition design
+# IQ acquisition design
 
 ## Problem definition
 
@@ -19,7 +19,7 @@ C(tau, f) = sum(n=0..L-1) r[tau + n] * conj(p[n]) * exp(-j 2 pi f n / Fs)
 S(tau, f) = |C(tau, f)|^2
 ```
 
-`S` is the candidate score. `prepare_reference_acquisition` validates the
+`S` is the candidate score. `prepare_acquisition_plan` validates the
 configuration and precomputes `conj(p[n]) * exp(-j 2 pi f n / Fs)` once for
 each CFO hypothesis. `run_reference_acquisition` performs the scalar dot
 products and retains the two largest scores. Peak ratio is `Sbest / Ssecond`;
@@ -54,8 +54,32 @@ values. Tests also require a valid lower-scoring runner-up, require the
 ambiguous fixture's runner-up to match its injected distractor, and regenerate
 all fixture bytes twice to verify deterministic output.
 
-The scalar kernel is the correctness oracle for later implementation work. No
-NEON, SVE, streaming-mode, or SME2 acquisition kernel is included.
+The scalar kernel is the correctness oracle. A separate Arm NEON translation
+unit evaluates the same candidate grid using four-lane float32 complex
+multiply-accumulate operations and a scalar tail for lengths not divisible by
+four. The NEON path uses float32 prepared weights and accumulation, while the
+reference path retains double-precision weights and accumulation. Supporting
+GCC/Clang builds disable loop and SLP auto-vectorization specifically for the
+reference translation unit; Arm target flags are applied only to intrinsic
+sources. No SVE, streaming-mode, or SME2 acquisition kernel is included.
+
+The CLI accepts `--implementation reference|neon`. A NEON request on a build
+without the intrinsic kernel returns `implementation = "unavailable"`; it does
+not execute or label a scalar fallback.
+
+Fixture equivalence requires identical best and second-best timing/CFO
+candidates. Best and second-best scores use an absolute tolerance of `1e-3`
+plus a relative tolerance of `2e-4`. Direct deterministic kernel cases use a
+forward-error bound per real/imaginary correlation component:
+
+```text
+32 * float_epsilon * preamble_length *
+    sum(abs(received[n]) * abs(weight[n]))
+```
+
+The score bound is propagated from that complex-correlation bound. The safety
+factor covers float32 weight rounding, vector reduction order, fused
+multiply-add behavior, and scalar-tail accumulation.
 
 ## Workload size
 

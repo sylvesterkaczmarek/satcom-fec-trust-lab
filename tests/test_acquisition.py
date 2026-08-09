@@ -10,9 +10,16 @@ FIXTURE_DIR = ROOT_DIR / "data/synthetic/acquisition"
 GOLDEN_PATH = ROOT_DIR / "tests/golden/acquisition_clean.json"
 ACQUISITION_BINARY = ROOT_DIR / "build/host_replay/acquisition_demo"
 FIXTURE_NAMES = ("clean", "noisy", "frequency_offset", "ambiguous", "weak_faded")
+SCORE_RELATIVE_TOLERANCE = 2.0e-4
+SCORE_ABSOLUTE_TOLERANCE = 1.0e-3
 
 
-def run_acquisition(fixture_name: str) -> dict:
+def run_acquisition(
+    fixture_name: str,
+    implementation: str = "reference",
+    *,
+    check: bool = True,
+) -> dict:
     completed = subprocess.run(
         (
             str(ACQUISITION_BINARY),
@@ -20,9 +27,11 @@ def run_acquisition(fixture_name: str) -> dict:
             str(FIXTURE_DIR / f"{fixture_name}.iq"),
             "--metadata",
             str(FIXTURE_DIR / f"{fixture_name}.json"),
+            "--implementation",
+            implementation,
         ),
         cwd=ROOT_DIR,
-        check=True,
+        check=check,
         capture_output=True,
         text=True,
     )
@@ -45,6 +54,7 @@ class AcquisitionReferenceTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
+        cls.neon_available = run_acquisition("clean")["neon_kernel_compiled"]
 
     def test_clean_fixture_matches_golden_output(self) -> None:
         result = run_acquisition("clean")
@@ -70,6 +80,7 @@ class AcquisitionReferenceTests(unittest.TestCase):
                 )
                 self.assertEqual(result["detected_cfo_hz"], metadata["true_cfo_hz"])
                 self.assertEqual(result["implementation"], "reference")
+                self.assertEqual(result["requested_implementation"], "reference")
                 self.assertEqual(
                     result["evaluated_candidate_count"],
                     result["timing_hypothesis_count"]
@@ -158,6 +169,94 @@ class AcquisitionReferenceTests(unittest.TestCase):
             result["error"],
             "frequency-offset hypotheses must not contain duplicates",
         )
+
+    def test_neon_fixture_results_align_with_reference(self) -> None:
+        if not self.neon_available:
+            self.skipTest("NEON acquisition execution requires a native Arm64 build")
+
+        for fixture_name in FIXTURE_NAMES:
+            with self.subTest(fixture=fixture_name):
+                reference = run_acquisition(fixture_name, "reference")
+                neon = run_acquisition(fixture_name, "neon")
+
+                self.assertTrue(neon["ok"])
+                self.assertTrue(neon["acquisition_success"])
+                self.assertTrue(neon["neon_kernel_compiled"])
+                self.assertEqual(neon["requested_implementation"], "neon")
+                self.assertEqual(neon["implementation"], "neon")
+                self.assertEqual(
+                    neon["detected_timing_offset"],
+                    reference["detected_timing_offset"],
+                )
+                self.assertEqual(neon["detected_cfo_hz"], reference["detected_cfo_hz"])
+                self.assertEqual(
+                    neon["second_best_timing_offset"],
+                    reference["second_best_timing_offset"],
+                )
+                self.assertEqual(
+                    neon["second_best_cfo_hz"],
+                    reference["second_best_cfo_hz"],
+                )
+                for score_name in ("best_score", "second_best_score"):
+                    tolerance = (
+                        SCORE_ABSOLUTE_TOLERANCE
+                        + SCORE_RELATIVE_TOLERANCE * abs(reference[score_name])
+                    )
+                    self.assertAlmostEqual(
+                        neon[score_name],
+                        reference[score_name],
+                        delta=tolerance,
+                    )
+
+    def test_neon_request_never_silently_falls_back(self) -> None:
+        result = run_acquisition("clean", "neon", check=self.neon_available)
+        if self.neon_available:
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["implementation"], "neon")
+        else:
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["requested_implementation"], "neon")
+            self.assertEqual(result["implementation"], "unavailable")
+            self.assertFalse(result["neon_kernel_compiled"])
+            self.assertEqual(
+                result["error"],
+                "NEON acquisition kernel is not compiled for this target",
+            )
+
+    def test_direct_kernel_equivalence_report(self) -> None:
+        completed = subprocess.run(
+            ("bash", "scripts/check_acquisition_neon.sh"),
+            cwd=ROOT_DIR,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        report = json.loads(completed.stdout)
+
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["neon_kernel_compiled"], self.neon_available)
+        self.assertEqual(report["neon_executed"], self.neon_available)
+        if self.neon_available:
+            self.assertEqual(report["implementation"], "neon")
+            self.assertGreaterEqual(len(report["cases"]), 10)
+            for case in report["cases"]:
+                self.assertTrue(case["candidate_identity_match"])
+                self.assertTrue(case["within_tolerance"])
+                self.assertLessEqual(
+                    case["correlation_real_difference"],
+                    case["correlation_component_tolerance"],
+                )
+                self.assertLessEqual(
+                    case["correlation_imag_difference"],
+                    case["correlation_component_tolerance"],
+                )
+                self.assertLessEqual(
+                    case["score_difference"],
+                    case["score_tolerance"],
+                )
+        else:
+            self.assertEqual(report["implementation"], "unavailable")
+            self.assertEqual(report["cases"], [])
 
 
 if __name__ == "__main__":

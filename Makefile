@@ -1,4 +1,4 @@
-.PHONY: help build replay replay-impaired replay-failed acquisition check check-acquisition compare-trust align check-metrics verify-arm benchmark test regenerate
+.PHONY: help build replay replay-impaired replay-failed acquisition check check-acquisition check-acquisition-neon verify-acquisition-neon compare-trust align check-metrics verify-arm benchmark test regenerate
 
 help:
 	@printf '%s\n' \
@@ -10,6 +10,8 @@ help:
 	  '  make acquisition     Run the clean scalar acquisition fixture' \
 	  '  make check           Verify the baseline replay output' \
 	  '  make check-acquisition Verify all scalar acquisition fixtures' \
+	  '  make check-acquisition-neon Check direct NEON kernel equivalence' \
+	  '  make verify-acquisition-neon Verify NEON execution and instructions' \
 	  '  make compare-trust   Compare healthy, impaired, and failed trust results' \
 	  '  make align           Validate decoder-path alignment' \
 	  '  make check-metrics   Validate branch-metric path equivalence' \
@@ -38,6 +40,12 @@ check:
 
 check-acquisition:
 	bash scripts/check_acquisition_demo.sh
+
+check-acquisition-neon:
+	bash scripts/check_acquisition_neon.sh
+
+verify-acquisition-neon:
+	bash scripts/verify_acquisition_neon.sh
 
 compare-trust:
 	bash scripts/compare_trust_cases.sh

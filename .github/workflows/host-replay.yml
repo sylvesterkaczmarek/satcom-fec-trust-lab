@@ -42,8 +42,47 @@ jobs:
       - name: Check scalar acquisition fixtures
         run: bash scripts/check_acquisition_demo.sh
 
+      - name: Check portable NEON availability reporting
+        run: bash scripts/check_acquisition_neon.sh
+
       - name: Verify Arm build modes
         run: bash scripts/verify_arm_paths.sh
 
       - name: Run automated host replay tests
+        run: python3 -m unittest discover -s tests -v
+
+  arm64-neon:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build and inspection tools
+        run: sudo apt-get update && sudo apt-get install -y cmake jq binutils
+
+      - name: Regenerate deterministic acquisition assets
+        run: python3 scripts/generate_acquisition_fixtures.py
+
+      - name: Build explicit AArch64 NEON configuration
+        run: |
+          cmake -S . -B build/ci-neon \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSATCOMFEC_ENABLE_NEON=ON
+          cmake --build build/ci-neon --parallel
+
+      - name: Run CTest on Arm64
+        run: ctest --test-dir build/ci-neon --output-on-failure
+
+      - name: Require NEON execution and inspect instructions
+        run: bash scripts/verify_acquisition_neon.sh
+
+      - name: Run all host tests on Arm64
+        env:
+          SATCOMFEC_ENABLE_NEON: "ON"
         run: python3 -m unittest discover -s tests -v

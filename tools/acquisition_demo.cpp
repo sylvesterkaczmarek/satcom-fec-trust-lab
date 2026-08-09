@@ -1,4 +1,4 @@
-#include "acquisition/acquisition_reference.h"
+#include "acquisition/acquisition_runner.h"
 #include "json_output.h"
 #include "util/iq_reader.h"
 
@@ -28,6 +28,20 @@ struct FixtureMetadata {
     std::size_t true_timing_offset = 0;
     double true_cfo_hz = 0.0;
 };
+
+bool parse_implementation(
+    const std::string& name,
+    satcomfec::acquisition::AcquisitionImplementation& implementation) {
+    if (name == "reference") {
+        implementation = satcomfec::acquisition::AcquisitionImplementation::kReference;
+        return true;
+    }
+    if (name == "neon") {
+        implementation = satcomfec::acquisition::AcquisitionImplementation::kNeon;
+        return true;
+    }
+    return false;
+}
 
 bool read_text_file(const std::filesystem::path& path, std::string& text) {
     std::ifstream input(path);
@@ -191,6 +205,7 @@ bool build_timing_hypotheses(
 void print_error_json(
     const std::string& iq_path,
     const std::string& metadata_path,
+    const std::string& requested_implementation,
     const std::string& error_message) {
     std::cout << "{\n"
               << "  \"ok\": false,\n"
@@ -198,7 +213,14 @@ void print_error_json(
               << satcomfec::tools::escape_json(iq_path) << "\",\n"
               << "  \"metadata_path\": \""
               << satcomfec::tools::escape_json(metadata_path) << "\",\n"
-              << "  \"implementation\": \"reference\",\n"
+              << "  \"requested_implementation\": \""
+              << satcomfec::tools::escape_json(requested_implementation) << "\",\n"
+              << "  \"implementation\": \"not-run\",\n"
+              << "  \"neon_kernel_compiled\": "
+              << (satcomfec::acquisition::acquisition_neon_kernel_compiled()
+                      ? "true"
+                      : "false")
+              << ",\n"
               << "  \"error\": \""
               << satcomfec::tools::escape_json(error_message) << "\"\n"
               << "}\n";
@@ -209,6 +231,7 @@ void print_error_json(
 int main(int argc, char** argv) {
     std::string iq_path = "data/synthetic/acquisition/clean.iq";
     std::string metadata_path;
+    std::string implementation_name = "reference";
 
     for (int argument_index = 1; argument_index < argc; ++argument_index) {
         const std::string argument = argv[argument_index];
@@ -220,12 +243,24 @@ int main(int argc, char** argv) {
             metadata_path = argv[++argument_index];
             continue;
         }
+        if (argument == "--implementation" && argument_index + 1 < argc) {
+            implementation_name = argv[++argument_index];
+            continue;
+        }
         if (argument == "--help") {
             std::cout << "Usage: acquisition_demo [--iq fixture.iq] "
-                         "[--metadata fixture.json]\n";
+                         "[--metadata fixture.json] "
+                         "[--implementation reference|neon]\n";
             return EXIT_SUCCESS;
         }
         std::cerr << "Unknown or incomplete argument: " << argument << "\n";
+        return EXIT_FAILURE;
+    }
+
+    satcomfec::acquisition::AcquisitionImplementation implementation;
+    if (!parse_implementation(implementation_name, implementation)) {
+        std::cerr << "Unsupported acquisition implementation: "
+                  << implementation_name << "\n";
         return EXIT_FAILURE;
     }
 
@@ -239,17 +274,25 @@ int main(int argc, char** argv) {
     std::string error_message;
     const std::filesystem::path metadata_file(metadata_path);
     if (!load_fixture_metadata(metadata_file, metadata, error_message)) {
-        print_error_json(iq_path, metadata_path, error_message);
+        print_error_json(iq_path, metadata_path, implementation_name, error_message);
         return EXIT_FAILURE;
     }
 
     std::vector<satcomfec::ComplexF> received_iq;
     if (!satcomfec::load_iq_from_file(iq_path, received_iq)) {
-        print_error_json(iq_path, metadata_path, "failed to load fixture IQ samples");
+        print_error_json(
+            iq_path,
+            metadata_path,
+            implementation_name,
+            "failed to load fixture IQ samples");
         return EXIT_FAILURE;
     }
     if (received_iq.size() != metadata.sample_count) {
-        print_error_json(iq_path, metadata_path, "IQ sample count does not match metadata");
+        print_error_json(
+            iq_path,
+            metadata_path,
+            implementation_name,
+            "IQ sample count does not match metadata");
         return EXIT_FAILURE;
     }
 
@@ -257,11 +300,19 @@ int main(int argc, char** argv) {
         (metadata_file.parent_path() / metadata.preamble_file).lexically_normal();
     std::vector<satcomfec::ComplexF> preamble;
     if (!satcomfec::load_iq_from_file(preamble_path.string(), preamble)) {
-        print_error_json(iq_path, metadata_path, "failed to load preamble IQ samples");
+        print_error_json(
+            iq_path,
+            metadata_path,
+            implementation_name,
+            "failed to load preamble IQ samples");
         return EXIT_FAILURE;
     }
     if (preamble.size() != metadata.preamble_length) {
-        print_error_json(iq_path, metadata_path, "preamble length does not match metadata");
+        print_error_json(
+            iq_path,
+            metadata_path,
+            implementation_name,
+            "preamble length does not match metadata");
         return EXIT_FAILURE;
     }
 
@@ -269,18 +320,18 @@ int main(int argc, char** argv) {
     config.sample_rate_hz = metadata.sample_rate_hz;
     config.frequency_offsets_hz = metadata.cfo_hypotheses_hz;
     if (!build_timing_hypotheses(metadata, config.timing_offsets, error_message)) {
-        print_error_json(iq_path, metadata_path, error_message);
+        print_error_json(iq_path, metadata_path, implementation_name, error_message);
         return EXIT_FAILURE;
     }
 
     satcomfec::acquisition::AcquisitionPlan plan;
-    if (!satcomfec::acquisition::prepare_reference_acquisition(
+    if (!satcomfec::acquisition::prepare_acquisition_plan(
             config, preamble, plan, error_message)) {
-        print_error_json(iq_path, metadata_path, error_message);
+        print_error_json(iq_path, metadata_path, implementation_name, error_message);
         return EXIT_FAILURE;
     }
     const satcomfec::acquisition::AcquisitionResult result =
-        satcomfec::acquisition::run_reference_acquisition(received_iq, plan);
+        satcomfec::acquisition::run_acquisition(received_iq, plan, implementation);
 
     const bool acquisition_success =
         result.ok && result.best.hypothesis.timing_offset == metadata.true_timing_offset &&
@@ -313,6 +364,12 @@ int main(int argc, char** argv) {
               << ",\n";
     std::cout << "  \"best_score\": "
               << satcomfec::tools::format_float(result.best.score, 6) << ",\n";
+    std::cout << "  \"best_correlation_real\": "
+              << satcomfec::tools::format_float(result.best.correlation.real(), 9)
+              << ",\n";
+    std::cout << "  \"best_correlation_imag\": "
+              << satcomfec::tools::format_float(result.best.correlation.imag(), 9)
+              << ",\n";
     std::cout << "  \"second_best_timing_offset\": "
               << result.second_best.hypothesis.timing_offset << ",\n";
     std::cout << "  \"second_best_cfo_hz\": "
@@ -328,7 +385,15 @@ int main(int argc, char** argv) {
               << ",\n";
     std::cout << "  \"acquisition_success\": "
               << (acquisition_success ? "true" : "false") << ",\n";
-    std::cout << "  \"implementation\": \"reference\",\n";
+    std::cout << "  \"requested_implementation\": \""
+              << satcomfec::tools::escape_json(implementation_name) << "\",\n";
+    std::cout << "  \"implementation\": \""
+              << satcomfec::tools::escape_json(result.implementation) << "\",\n";
+    std::cout << "  \"neon_kernel_compiled\": "
+              << (satcomfec::acquisition::acquisition_neon_kernel_compiled()
+                      ? "true"
+                      : "false")
+              << ",\n";
     std::cout << "  \"error\": \""
               << satcomfec::tools::escape_json(result.error_message) << "\"\n";
     std::cout << "}\n";

@@ -28,6 +28,11 @@ struct AcquisitionConfig {
     std::vector<double> frequency_offsets_hz;
 };
 
+enum class AcquisitionImplementation {
+    kReference,
+    kNeon,
+};
+
 struct AcquisitionResult {
     bool ok = false;
     std::size_t evaluated_candidate_count = 0;

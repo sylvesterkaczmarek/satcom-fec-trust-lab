@@ -65,7 +65,19 @@ function(satcomfec_check_sme2_flag flag out_var)
     set("${out_var}" "${${out_var}}" PARENT_SCOPE)
 endfunction()
 
-set(SATCOMFEC_ARCH_FLAGS "")
+set(SATCOMFEC_NEON_SOURCE_FLAG "")
+set(SATCOMFEC_SME2_SOURCE_FLAG "")
+set(SATCOMFEC_ACQUISITION_NEON_AVAILABLE OFF)
+satcomfec_find_supported_flag(
+    SATCOMFEC_NO_LOOP_VECTORIZE_FLAG
+    "-fno-vectorize"
+    "-fno-tree-vectorize"
+)
+satcomfec_find_supported_flag(
+    SATCOMFEC_NO_SLP_VECTORIZE_FLAG
+    "-fno-slp-vectorize"
+    "-fno-tree-slp-vectorize"
+)
 set(SATCOMFEC_SME2_CANDIDATE_FLAGS "-march=armv9.4-a+sme2" "-march=armv9.2-a+sme2")
 
 if(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$")
@@ -96,7 +108,7 @@ if(SATCOMFEC_ENABLE_SME2)
             "__ARM_FEATURE_SME2 and __arm_locally_streaming."
         )
     endif()
-    list(APPEND SATCOMFEC_ARCH_FLAGS "${SATCOMFEC_SME2_FLAG}")
+    set(SATCOMFEC_SME2_SOURCE_FLAG "${SATCOMFEC_SME2_FLAG}")
     message(STATUS "satcom-fec-trust-lab: SME2 build enabled with ${SATCOMFEC_SME2_FLAG}")
 elseif(SATCOMFEC_ENABLE_NEON)
     satcomfec_find_supported_flag(
@@ -116,16 +128,30 @@ elseif(SATCOMFEC_ENABLE_NEON)
             "SATCOMFEC_ENABLE_NEON=ON requires NEON ACLE support and arm_neon.h."
         )
     endif()
-    list(APPEND SATCOMFEC_ARCH_FLAGS "${SATCOMFEC_NEON_FLAG}")
+    set(SATCOMFEC_NEON_SOURCE_FLAG "${SATCOMFEC_NEON_FLAG}")
+    set(SATCOMFEC_ACQUISITION_NEON_AVAILABLE ON)
     message(STATUS "satcom-fec-trust-lab: NEON build enabled with ${SATCOMFEC_NEON_FLAG}")
 else()
     message(STATUS "satcom-fec-trust-lab: default portable build; no explicit Arm architecture flag requested")
 endif()
 
+if(NOT SATCOMFEC_ACQUISITION_NEON_AVAILABLE)
+    satcomfec_check_neon_flag("" SATCOMFEC_NATIVE_NEON_ACLE_OK)
+    if(SATCOMFEC_NATIVE_NEON_ACLE_OK)
+        set(SATCOMFEC_ACQUISITION_NEON_AVAILABLE ON)
+        message(STATUS "satcom-fec-trust-lab: native AArch64 NEON acquisition kernel enabled")
+    else()
+        message(STATUS "satcom-fec-trust-lab: NEON acquisition kernel unavailable for this target")
+    endif()
+endif()
+
 add_library(
     satcom_replay_core
     STATIC
+    src/acquisition/acquisition_neon.cpp
+    src/acquisition/acquisition_plan.cpp
     src/acquisition/acquisition_reference.cpp
+    src/acquisition/acquisition_runner.cpp
     src/demo/replay_pipeline.cpp
     src/dsp/front_end_dsp.cpp
     src/dsp/framing.cpp
@@ -141,6 +167,53 @@ add_library(
     src/util/iq_reader.cpp
     src/util/logging.cpp
 )
+
+set(SATCOMFEC_REFERENCE_COMPILE_OPTIONS "")
+if(SATCOMFEC_NO_LOOP_VECTORIZE_FLAG)
+    list(APPEND SATCOMFEC_REFERENCE_COMPILE_OPTIONS "${SATCOMFEC_NO_LOOP_VECTORIZE_FLAG}")
+endif()
+if(SATCOMFEC_NO_SLP_VECTORIZE_FLAG)
+    list(APPEND SATCOMFEC_REFERENCE_COMPILE_OPTIONS "${SATCOMFEC_NO_SLP_VECTORIZE_FLAG}")
+endif()
+if(SATCOMFEC_REFERENCE_COMPILE_OPTIONS)
+    set_property(
+        SOURCE src/acquisition/acquisition_reference.cpp
+        APPEND PROPERTY COMPILE_OPTIONS ${SATCOMFEC_REFERENCE_COMPILE_OPTIONS}
+    )
+    message(STATUS
+        "satcom-fec-trust-lab: scalar acquisition reference vectorization disabled with "
+        "${SATCOMFEC_REFERENCE_COMPILE_OPTIONS}"
+    )
+endif()
+
+if(SATCOMFEC_ACQUISITION_NEON_AVAILABLE)
+    set_property(
+        SOURCE src/acquisition/acquisition_neon.cpp
+        APPEND PROPERTY COMPILE_DEFINITIONS SATCOMFEC_ACQUISITION_NEON_COMPILED=1
+    )
+    if(SATCOMFEC_NEON_SOURCE_FLAG)
+        set_property(
+            SOURCE src/acquisition/acquisition_neon.cpp
+            APPEND PROPERTY COMPILE_OPTIONS "${SATCOMFEC_NEON_SOURCE_FLAG}"
+        )
+    endif()
+endif()
+
+if(SATCOMFEC_NEON_SOURCE_FLAG)
+    set_property(
+        SOURCE src/fec/convolutional_codec.cpp
+        APPEND PROPERTY COMPILE_OPTIONS "${SATCOMFEC_NEON_SOURCE_FLAG}"
+    )
+endif()
+
+if(SATCOMFEC_SME2_SOURCE_FLAG)
+    set_property(
+        SOURCE
+            src/fec/branch_metrics_sme2.cpp
+            src/fec/convolutional_codec.cpp
+        APPEND PROPERTY COMPILE_OPTIONS "${SATCOMFEC_SME2_SOURCE_FLAG}"
+    )
+endif()
 
 target_include_directories(
     satcom_replay_core
@@ -160,6 +233,9 @@ target_link_libraries(check_branch_metrics PRIVATE satcom_replay_core)
 add_executable(acquisition_demo tools/acquisition_demo.cpp)
 target_link_libraries(acquisition_demo PRIVATE satcom_replay_core)
 
+add_executable(check_acquisition_kernels tools/check_acquisition_kernels.cpp)
+target_link_libraries(check_acquisition_kernels PRIVATE satcom_replay_core)
+
 if(BUILD_TESTING)
     add_test(
         NAME acquisition_reference_clean
@@ -171,13 +247,18 @@ if(BUILD_TESTING)
         acquisition_reference_clean
         PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     )
+    add_test(NAME acquisition_kernel_equivalence COMMAND check_acquisition_kernels)
+    if(SATCOMFEC_ACQUISITION_NEON_AVAILABLE)
+        add_test(
+            NAME acquisition_neon_clean
+            COMMAND acquisition_demo
+                --iq data/synthetic/acquisition/clean.iq
+                --metadata data/synthetic/acquisition/clean.json
+                --implementation neon
+        )
+        set_tests_properties(
+            acquisition_neon_clean
+            PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        )
+    endif()
 endif()
-
-foreach(target_name
-        satcom_replay_core
-        replay_demo
-        benchmark_decoders
-        check_branch_metrics
-        acquisition_demo)
-    target_compile_options("${target_name}" PRIVATE ${SATCOMFEC_ARCH_FLAGS})
-endforeach()
