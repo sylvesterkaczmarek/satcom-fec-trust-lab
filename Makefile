@@ -1,4 +1,4 @@
-.PHONY: help build replay replay-impaired replay-failed check compare-trust align check-metrics verify-arm benchmark test regenerate
+.PHONY: help build replay replay-impaired replay-failed acquisition check check-acquisition compare-trust align check-metrics verify-arm benchmark test regenerate
 
 help:
 	@printf '%s\n' \
@@ -7,7 +7,9 @@ help:
 	  '  make replay          Run the baseline replay fixture' \
 	  '  make replay-impaired Run the impaired replay fixture' \
 	  '  make replay-failed   Run the CRC-failing replay fixture' \
+	  '  make acquisition     Run the clean scalar acquisition fixture' \
 	  '  make check           Verify the baseline replay output' \
+	  '  make check-acquisition Verify all scalar acquisition fixtures' \
 	  '  make compare-trust   Compare healthy, impaired, and failed trust results' \
 	  '  make align           Validate decoder-path alignment' \
 	  '  make check-metrics   Validate branch-metric path equivalence' \
@@ -28,8 +30,14 @@ replay-impaired:
 replay-failed:
 	bash scripts/run_replay_demo.sh --allow-failure data/synthetic/canned_replay/demo_conv_bpsk_failed.iq
 
+acquisition:
+	bash scripts/run_acquisition_demo.sh
+
 check:
 	bash scripts/check_replay_demo.sh
+
+check-acquisition:
+	bash scripts/check_acquisition_demo.sh
 
 compare-trust:
 	bash scripts/compare_trust_cases.sh
@@ -51,3 +59,4 @@ test:
 
 regenerate:
 	python3 scripts/generate_synthetic_iq.py
+	python3 scripts/generate_acquisition_fixtures.py

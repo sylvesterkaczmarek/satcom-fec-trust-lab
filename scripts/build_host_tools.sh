@@ -9,7 +9,7 @@ CXX_BIN="${CXX:-c++}"
 
 if [[ "${TARGET}" == "--help" || "${TARGET}" == "-h" ]]; then
   cat <<'EOF'
-Usage: scripts/build_host_tools.sh [replay_demo|benchmark_decoders|check_branch_metrics|all]
+Usage: scripts/build_host_tools.sh [replay_demo|benchmark_decoders|check_branch_metrics|acquisition_demo|all]
 
 Configures and builds the supported host-side executables into build/host_replay/.
 
@@ -113,6 +113,7 @@ build_with_compiler() {
   fi
 
   local common_sources=(
+    "${ROOT_DIR}/src/acquisition/acquisition_reference.cpp"
     "${ROOT_DIR}/src/demo/replay_pipeline.cpp"
     "${ROOT_DIR}/src/dsp/front_end_dsp.cpp"
     "${ROOT_DIR}/src/dsp/framing.cpp"
@@ -150,10 +151,14 @@ build_with_compiler() {
     check_branch_metrics)
       build_binary "check_branch_metrics" "${ROOT_DIR}/tools/check_branch_metrics.cpp"
       ;;
+    acquisition_demo)
+      build_binary "acquisition_demo" "${ROOT_DIR}/tools/acquisition_demo.cpp"
+      ;;
     all)
       build_binary "replay_demo" "${ROOT_DIR}/tools/replay_demo.cpp"
       build_binary "benchmark_decoders" "${ROOT_DIR}/tools/benchmark_decoders.cpp"
       build_binary "check_branch_metrics" "${ROOT_DIR}/tools/check_branch_metrics.cpp"
+      build_binary "acquisition_demo" "${ROOT_DIR}/tools/acquisition_demo.cpp"
       ;;
     *)
       echo "error: unsupported build target '${TARGET}'" >&2
@@ -183,8 +188,11 @@ case "${TARGET}" in
   check_branch_metrics)
     cmake --build "${BUILD_DIR}" --target check_branch_metrics >/dev/null
     ;;
+  acquisition_demo)
+    cmake --build "${BUILD_DIR}" --target acquisition_demo >/dev/null
+    ;;
   all)
-    cmake --build "${BUILD_DIR}" --target replay_demo benchmark_decoders check_branch_metrics >/dev/null
+    cmake --build "${BUILD_DIR}" --target replay_demo benchmark_decoders check_branch_metrics acquisition_demo >/dev/null
     ;;
   *)
     echo "error: unsupported build target '${TARGET}'" >&2

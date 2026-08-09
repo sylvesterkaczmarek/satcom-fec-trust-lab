@@ -1,6 +1,11 @@
 # Architecture
 
-The supported public demo is a single offline replay path:
+The repository has two independent host-side IQ workflows. The acquisition
+workflow loads a generated complex preamble and receive window, prepares a grid
+of timing/CFO hypotheses, and runs the scalar matched-filter search described in
+`docs/acquisition_design.md`. Its entrypoint is `tools/acquisition_demo.cpp`.
+
+The replay workflow is:
 
 1. `load_iq_from_file` reads an interleaved float32 IQ recording.
 2. `run_front_end` removes DC bias and normalizes RMS level.

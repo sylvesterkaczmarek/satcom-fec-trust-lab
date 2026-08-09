@@ -6,14 +6,17 @@ without extra data downloads or hidden setup.
 Publicly supported workflow:
 
 1. Build the host-side tools.
-2. Run the baseline replay fixture.
-3. Run the impaired and failed fixtures to inspect trust degradation and CRC rejection.
-4. Verify the replay output, trust comparison, and decoder-path alignment.
+2. Run and verify the scalar acquisition fixtures.
+3. Run the baseline replay fixture.
+4. Run the impaired and failed fixtures to inspect trust degradation and CRC rejection.
+5. Verify the replay output, trust comparison, and decoder-path alignment.
 
 Exact commands:
 
 ```bash
 make build
+make acquisition
+make check-acquisition
 make replay
 make replay-impaired
 make replay-failed
@@ -29,6 +32,8 @@ Equivalent script-by-script flow:
 
 ```bash
 bash scripts/build_host_tools.sh all
+bash scripts/run_acquisition_demo.sh
+bash scripts/check_acquisition_demo.sh
 bash scripts/run_replay_demo.sh
 bash scripts/run_replay_demo.sh data/synthetic/canned_replay/demo_conv_bpsk_impaired.iq
 bash scripts/run_replay_demo.sh --allow-failure data/synthetic/canned_replay/demo_conv_bpsk_failed.iq
@@ -48,14 +53,20 @@ Checked-in fixtures:
 - `data/synthetic/canned_replay/demo_conv_bpsk_impaired.json`
 - `data/synthetic/canned_replay/demo_conv_bpsk_failed.iq`
 - `data/synthetic/canned_replay/demo_conv_bpsk_failed.json`
+- `data/synthetic/acquisition/preamble_qpsk_256.iq`
+- `data/synthetic/acquisition/{clean,noisy,frequency_offset,ambiguous,weak_faded}.iq`
+- matching JSON ground-truth sidecars for each acquisition capture
 
 Generated from source in this repo:
 
 - `scripts/generate_synthetic_iq.py`
+- `scripts/generate_acquisition_fixtures.py`
 
 What CI verifies:
 
 - baseline replay decode correctness
+- scalar acquisition timing/CFO recovery on five deterministic fixtures
+- deterministic byte-for-byte acquisition fixture regeneration
 - healthy versus impaired versus failed trust comparison
 - reference versus partial-NEON versus SME2-or-fallback path alignment on the
   same prepared replay frame

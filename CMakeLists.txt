@@ -4,6 +4,7 @@ project(satcom_fec_trust_lab LANGUAGES CXX)
 
 include(CheckCXXCompilerFlag)
 include(CheckCXXSourceCompiles)
+include(CTest)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -124,6 +125,7 @@ endif()
 add_library(
     satcom_replay_core
     STATIC
+    src/acquisition/acquisition_reference.cpp
     src/demo/replay_pipeline.cpp
     src/dsp/front_end_dsp.cpp
     src/dsp/framing.cpp
@@ -155,10 +157,27 @@ target_link_libraries(benchmark_decoders PRIVATE satcom_replay_core)
 add_executable(check_branch_metrics tools/check_branch_metrics.cpp)
 target_link_libraries(check_branch_metrics PRIVATE satcom_replay_core)
 
+add_executable(acquisition_demo tools/acquisition_demo.cpp)
+target_link_libraries(acquisition_demo PRIVATE satcom_replay_core)
+
+if(BUILD_TESTING)
+    add_test(
+        NAME acquisition_reference_clean
+        COMMAND acquisition_demo
+            --iq data/synthetic/acquisition/clean.iq
+            --metadata data/synthetic/acquisition/clean.json
+    )
+    set_tests_properties(
+        acquisition_reference_clean
+        PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+endif()
+
 foreach(target_name
         satcom_replay_core
         replay_demo
         benchmark_decoders
-        check_branch_metrics)
+        check_branch_metrics
+        acquisition_demo)
     target_compile_options("${target_name}" PRIVATE ${SATCOMFEC_ARCH_FLAGS})
 endforeach()

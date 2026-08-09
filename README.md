@@ -2,19 +2,19 @@
 
 ![Satcom FEC Trust Lab](assets/social/github-social-card-satcom-fec-trust-lab.png)
 
-This repository is a scoped host-side satcom replay and decoder-comparison
-project built around deterministic synthetic IQ fixtures. The supported public
-workflow loads a checked-in IQ file, performs front-end normalization,
-demodulates oversampled BPSK, locates a sync word, decodes a convolutionally
-coded frame with Viterbi, checks a CRC-8 byte, and reports structured trust
-diagnostics alongside the decoded payload.
+This repository is a host-side satcom signal-processing project built around
+deterministic synthetic IQ fixtures. It contains two portable public workflows:
+a scalar timing/CFO acquisition search over a complex preamble, and a compact
+BPSK replay path from IQ through framing, Viterbi decode, CRC, and structured
+trust diagnostics.
 
-The public repo provides a scoped host-side replay demo, not a supported
-Android app or full SME2-optimized Viterbi decoder.
+The public repo provides scoped host-side acquisition and replay demos, not a
+supported Android app or full SME2-optimized Viterbi decoder.
 
 ## Repo status
 
-- Publication-safe today: the host-side canned replay flow
+- Publication-safe today: the scalar IQ acquisition search and host-side canned
+  replay flow
 - Included validation: host-side automated tests and host CI
 - Not included: Android app packaging, JNI/mobile replay wiring,
   SME2-accelerated Viterbi trellis recurrence or traceback, live RF capture,
@@ -24,6 +24,8 @@ Android app or full SME2-optimized Viterbi decoder.
 
 - One host-side replay path from checked-in IQ to decoded payload plus trust
   output
+- One scalar reference acquisition path over 4,096-sample IQ windows, 3,841
+  timing hypotheses, 9 CFO hypotheses, and a 256-sample complex preamble
 - One local decoder-path timing comparison across `viterbi-reference`,
   `viterbi-neon`, and `viterbi-sme2`
 - One healthy versus impaired versus failed trust comparison using checked-in
@@ -33,6 +35,8 @@ Android app or full SME2-optimized Viterbi decoder.
 
 - A checked-in synthetic IQ recording at
   `data/synthetic/canned_replay/demo_conv_bpsk.iq`
+- Five deterministic acquisition captures and ground-truth metadata under
+  `data/synthetic/acquisition/`
 - A checked-in impaired synthetic IQ recording at
   `data/synthetic/canned_replay/demo_conv_bpsk_impaired.iq`
 - A checked-in CRC-failing synthetic IQ recording at
@@ -46,19 +50,22 @@ Android app or full SME2-optimized Viterbi decoder.
 - Purpose-built host-side sources under `src/`
 - A top-level `CMakeLists.txt` for host builds
 - A host-side runner at `scripts/run_replay_demo.sh`
+- A scalar acquisition runner at `scripts/run_acquisition_demo.sh`
 - A host-side build helper at `scripts/build_host_tools.sh`
 - A verification script at `scripts/check_replay_demo.sh`
+- An acquisition fixture check at `scripts/check_acquisition_demo.sh`
 - A trust comparison script at `scripts/compare_trust_cases.sh`
 - A decoder alignment check at `scripts/validate_decoder_alignment.sh`
 - A branch-metric equivalence check at `scripts/check_branch_metrics.sh`
 - A local benchmark harness at `scripts/benchmark_decoder_paths.sh`
 - Automated tests at `tests/test_host_replay.py`
+- Scalar acquisition tests at `tests/test_acquisition.py`
 - Golden structured-output subsets under `tests/golden/`
 - Host CI at `.github/workflows/host-replay.yml`
 - Native C++ modules for front-end processing, framing, Viterbi decode, a small
-  LDPC-style bit-flip decoder, and trust scoring
+  LDPC-style bit-flip decoder, scalar acquisition, and trust scoring
 
-## What the supported demo does
+## What the replay demo does
 
 The canned replay frame carries the ASCII payload `SATCOM DEMO OK`. The
 generator script appends a CRC-8 byte, convolutionally encodes the payload with
@@ -97,6 +104,8 @@ Recommended first run:
 
 ```bash
 make build
+make acquisition
+make check-acquisition
 make replay
 make check
 ```
@@ -105,6 +114,8 @@ Equivalent direct commands:
 
 ```bash
 bash scripts/build_host_tools.sh all
+bash scripts/run_acquisition_demo.sh
+bash scripts/check_acquisition_demo.sh
 bash scripts/run_replay_demo.sh
 bash scripts/check_replay_demo.sh
 ```
@@ -151,6 +162,29 @@ The supported quick start does not use Gradle. No Gradle wrapper or Android
 build entrypoint is included in this publication-scoped revision.
 
 ## Example sessions
+
+Scalar acquisition:
+
+```bash
+bash scripts/run_acquisition_demo.sh | jq '{scenario, detected_timing_offset, detected_cfo_hz, peak_ratio, acquisition_success, implementation}'
+```
+
+Example output:
+
+```json
+{
+  "scenario": "clean",
+  "detected_timing_offset": 768,
+  "detected_cfo_hz": 0,
+  "peak_ratio": 27.193396,
+  "acquisition_success": true,
+  "implementation": "reference"
+}
+```
+
+The acquisition design, score definition, fixture parameters, and correctness
+criteria are documented in
+[docs/acquisition_design.md](docs/acquisition_design.md).
 
 Healthy replay:
 
@@ -265,6 +299,8 @@ for the clean-checkout rerun procedure.
 - It does not ship a mobile JNI bridge or on-device replay workflow.
 - It does not claim end-to-end SME2 Viterbi acceleration.
 - It does not ship a mission-derived or Φsat-2 replay asset.
+- It does not include an accelerated acquisition kernel or claim acquisition
+  performance results.
 - It does not claim benchmark reproducibility, thermal behavior, or cross-device
   performance conclusions.
 
@@ -277,6 +313,7 @@ performance claims.
 What works today:
 
 - build and run the host-side canned replay flow
+- run the scalar timing/CFO acquisition search on five checked-in fixtures
 - regenerate the synthetic IQ asset and its metadata
 - compare healthy, impaired, and failed trust-monitoring cases on checked-in
   inputs
@@ -317,7 +354,12 @@ What is synthetic:
 - `data/synthetic/canned_replay/demo_conv_bpsk_impaired.json`
 - `data/synthetic/canned_replay/demo_conv_bpsk_failed.iq`
 - `data/synthetic/canned_replay/demo_conv_bpsk_failed.json`
+- `data/synthetic/acquisition/*.iq`
+- `data/synthetic/acquisition/*.json`
+- the deterministic QPSK preamble in `data/synthetic/acquisition/`
 - the replay payload and waveform produced by `scripts/generate_synthetic_iq.py`
+- the acquisition captures produced by
+  `scripts/generate_acquisition_fixtures.py`
 
 What is not included:
 
@@ -435,19 +477,21 @@ portable performance claim.
 Key paths:
 
 - `src/`
-  Purpose-built host-side replay pipeline, decoder wrappers, trust logic, and
-  utilities
+  Host-side acquisition, replay, decoder, DSP, trust, and utility modules
+- `data/synthetic/acquisition/`
+  Deterministic preamble, acquisition captures, and ground-truth metadata
 - `data/synthetic/canned_replay/`
   Checked-in healthy, impaired, and failed replay fixtures plus metadata
 - `scripts/`
-  Supported host-side build, replay, trust, and validation entrypoints
+  Supported host-side build, acquisition, replay, trust, and validation
+  entrypoints
 - `Makefile`
   Thin top-level command surface for the supported host-side workflow
 - `tools/`
   Host-side CLI binaries used by the shell wrappers
 - `tests/`
-  Python regression tests for replay correctness, trust behavior, and decoder
-  alignment
+  Python regression tests for acquisition, replay correctness, trust behavior,
+  and decoder alignment
 - `docs/`
   Scope, architecture, trust, benchmarking, and reproducibility notes
 
@@ -457,7 +501,9 @@ Supported host-side scripts:
 
 - `make help`
 - `scripts/build_host_tools.sh`
+- `scripts/run_acquisition_demo.sh`
 - `scripts/run_replay_demo.sh`
+- `scripts/check_acquisition_demo.sh`
 - `scripts/check_replay_demo.sh`
 - `scripts/compare_trust_cases.sh`
 - `scripts/validate_decoder_alignment.sh`
@@ -465,10 +511,12 @@ Supported host-side scripts:
 - `scripts/verify_arm_paths.sh`
 - `scripts/benchmark_decoder_paths.sh`
 - `scripts/generate_synthetic_iq.py`
+- `scripts/generate_acquisition_fixtures.py`
 
 Automated validation:
 
 - `tests/test_host_replay.py`
+- `tests/test_acquisition.py`
 - `.github/workflows/host-replay.yml`
 
 ## Repository layout
@@ -479,12 +527,13 @@ satcom-fec-trust-lab/
 ├─ CMakeLists.txt                    # Host-side CMake entrypoint
 ├─ README.md
 ├─ assets/social/                   # Repository artwork
-├─ data/synthetic/canned_replay/    # Checked-in demo IQ and metadata
+├─ data/synthetic/acquisition/      # Acquisition IQ and ground truth
+├─ data/synthetic/canned_replay/    # Replay IQ and metadata
 ├─ docs/                            # Short notes for the public demo
 ├─ scripts/                         # Host build, replay, and validation scripts
-├─ src/                             # Host-side replay, FEC, DSP, and trust code
-├─ tests/                           # Automated host replay checks
-└─ tools/                           # Host-side replay runner source
+├─ src/                             # Acquisition, replay, FEC, DSP, and trust code
+├─ tests/                           # Automated host workflow checks
+└─ tools/                           # Host-side CLI sources
 ```
 
 ## License

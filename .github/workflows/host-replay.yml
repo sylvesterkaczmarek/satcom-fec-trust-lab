@@ -22,8 +22,10 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Regenerate the canned replay asset
-        run: python3 scripts/generate_synthetic_iq.py
+      - name: Regenerate deterministic IQ assets
+        run: |
+          python3 scripts/generate_synthetic_iq.py
+          python3 scripts/generate_acquisition_fixtures.py
 
       - name: Check canned replay output
         run: bash scripts/check_replay_demo.sh
@@ -36,6 +38,9 @@ jobs:
 
       - name: Check branch-metric path alignment
         run: bash scripts/check_branch_metrics.sh
+
+      - name: Check scalar acquisition fixtures
+        run: bash scripts/check_acquisition_demo.sh
 
       - name: Verify Arm build modes
         run: bash scripts/verify_arm_paths.sh

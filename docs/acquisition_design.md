@@ -1,0 +1,68 @@
+# Scalar acquisition design
+
+## Problem definition
+
+The acquisition subsystem searches for a known complex preamble in a received
+IQ window. It evaluates a configured grid of integer sample offsets and
+carrier-frequency-offset (CFO) hypotheses, then reports the strongest and
+second-strongest candidates. This is an offline, grid-based correctness
+reference; it is not a tracking loop or a complete receiver synchronizer.
+
+## Reference correlation
+
+For received samples `r`, preamble samples `p`, timing hypothesis `tau`, CFO
+hypothesis `f`, sample rate `Fs`, and preamble length `L`, the reference kernel
+computes
+
+```text
+C(tau, f) = sum(n=0..L-1) r[tau + n] * conj(p[n]) * exp(-j 2 pi f n / Fs)
+S(tau, f) = |C(tau, f)|^2
+```
+
+`S` is the candidate score. `prepare_reference_acquisition` validates the
+configuration and precomputes `conj(p[n]) * exp(-j 2 pi f n / Fs)` once for
+each CFO hypothesis. `run_reference_acquisition` performs the scalar dot
+products and retains the two largest scores. Peak ratio is `Sbest / Ssecond`;
+normalized peak separation is `(Sbest - Ssecond) / Sbest`.
+
+The CFO sign convention matches the fixture generator: a preamble injected
+with `exp(+j 2 pi f n / Fs)` is corrected by the negative exponential above.
+
+## Fixture design
+
+`scripts/generate_acquisition_fixtures.py` produces a deterministic 256-sample
+QPSK preamble and 4,096-sample complex-IQ captures. Every JSON sidecar records
+the random seed, noise level, amplitude, phase, timing offset, CFO, search grid,
+fading depth, optional distractor, and IQ format.
+
+The checked-in classes are:
+
+- `clean`: high-SNR, zero-CFO acquisition
+- `noisy`: lower-SNR acquisition at `-500 Hz`
+- `frequency_offset`: acquisition at `1500 Hz`
+- `ambiguous`: a primary signal plus a weaker delayed/CFO-shifted copy
+- `weak_faded`: reduced amplitude with deterministic intra-preamble fading
+
+These are synthetic engineering fixtures. They are not recordings from a
+radio, spacecraft, or mission waveform.
+
+## Correctness criteria
+
+The injected timing and CFO values lie exactly on the configured search grid.
+A fixture passes when the maximum-score candidate equals both ground-truth
+values. Tests also require a valid lower-scoring runner-up, require the
+ambiguous fixture's runner-up to match its injected distractor, and regenerate
+all fixture bytes twice to verify deterministic output.
+
+The scalar kernel is the correctness oracle for later implementation work. No
+NEON, SVE, streaming-mode, or SME2 acquisition kernel is included.
+
+## Workload size
+
+The default search evaluates 3,841 timing hypotheses and 9 CFO hypotheses over
+a 256-sample complex preamble: 34,569 candidate correlations and 8,849,664
+complex multiply-accumulate terms per capture. Unlike the existing short
+Viterbi branch-metric experiment, this workload operates on a longer IQ window
+and exposes independent work across timing/CFO candidates and preamble samples.
+This observation defines the workload shape only; it is not a performance or
+acceleration claim.

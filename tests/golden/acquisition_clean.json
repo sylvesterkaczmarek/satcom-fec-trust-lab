@@ -1,0 +1,16 @@
+{
+  "ok": true,
+  "scenario": "clean",
+  "sample_count": 4096,
+  "preamble_length": 256,
+  "timing_hypothesis_count": 3841,
+  "cfo_hypothesis_count": 9,
+  "evaluated_candidate_count": 34569,
+  "true_timing_offset": 768,
+  "true_cfo_hz": 0.0,
+  "detected_timing_offset": 768,
+  "detected_cfo_hz": 0.0,
+  "acquisition_success": true,
+  "implementation": "reference",
+  "error": ""
+}
