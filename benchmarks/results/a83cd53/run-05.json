@@ -1,0 +1,1792 @@
+{
+  "schema_version": 2,
+  "ok": true,
+  "benchmark": {
+    "name": "acquisition-workload-sweep",
+    "scope": "Local timing of the checked scalar, NEON, and available SME2 acquisition implementations; no performance conclusion is embedded in the report.",
+    "timestamp_utc": "2026-08-14T00:42:45Z",
+    "git_commit_sha": "a83cd53ffe153fa69329194174f735d0a972380d",
+    "git_working_tree_dirty_at_build": "false",
+    "timer": "std::chrono::steady_clock",
+    "warmup_rounds": 2,
+    "timed_sample_count": 15,
+    "minimum_sample_duration_ms": 50.000,
+    "deterministic_seed": 5999168826704217669,
+    "execution_order": "Fisher-Yates shuffle of every valid implementation/mode pair before each warm-up and timed sample block",
+    "percentile_method": "nearest-rank",
+    "standard_deviation": "sample standard deviation (N-1)",
+    "steady_state_definition": "Prevalidated input, precomputed CFO weights, and preallocated SME2 workspace; complete correlation, magnitude-squared scoring, and top-two reduction are timed.",
+    "per_capture_definition": "The acquisition plan and allocations are reused while prevalidated IQ windows are cycled. Reference and NEON read each interleaved window directly; SME2 sample-major packing for every supplied window is timed before correlation and top-two reduction.",
+    "setup_inclusive_definition": "Includes acquisition-plan allocation/CFO-table generation and checked execution; SME2 additionally includes workspace allocation, packing, and release.",
+    "fairness_contract": {
+      "candidate_set": "One shared timing/CFO hypothesis plan is used by every implementation.",
+      "accelerated_precision": "NEON and SME2 use bitwise-aligned float32 weights and float32 accumulation; the scalar oracle uses float64 weights and accumulation.",
+      "scoring_and_selection": "Magnitude-squared scoring and top-two candidate selection are included for every path.",
+      "fallback_policy": "An accelerated path is timed only when its reported implementation matches the requested path.",
+      "target_isolation": "Reference vectorization controls and accelerated target flags are source-specific; an SME2 build gives NEON a target with SVE and SME disabled.",
+      "dead_code_control": "Every timed block consumes a fingerprint of its final acquisition result through a volatile sink."
+    }
+  },
+  "host": {
+    "os": "Darwin",
+    "os_release": "25.6.0",
+    "architecture": "arm64",
+    "cpu_model": "Apple M5 Pro",
+    "cpu_model_source": "sysctl machdep.cpu.brand_string",
+    "device_model": "Mac17,9"
+  },
+  "build": {
+    "compiler": "Clang",
+    "compiler_version": "21.0.0 (clang-2100.1.1.101)",
+    "cxx_standard": "C++17",
+    "build_type": "Release",
+    "common_compile_flags": "-O3 -DNDEBUG -std=c++17",
+    "source_compile_flags": {
+      "reference": "-fno-vectorize -fno-slp-vectorize",
+      "neon": "-mcpu=native+nosve+nosve2+nosme+nosme2",
+      "sme2": "-mcpu=native+sme2"
+    }
+  },
+  "runtime_cpu_features": {
+    "neon_hardware_supported": true,
+    "neon_kernel_compiled": true,
+    "neon_vector_bits": 128,
+    "sve_hardware_supported": false,
+    "sve_acquisition_implementation_included": false,
+    "sme_hardware_supported": true,
+    "sme2_hardware_supported": true,
+    "sme2_kernel_compiled": true,
+    "sme2_runtime_supported": true,
+    "sme_streaming_vector_bits": 512
+  },
+  "workloads": [
+    {
+      "name": "small",
+      "definition": {
+        "iq_sample_count": 2048,
+        "preamble_length": 64,
+        "timing_hypothesis_count": 1024,
+        "cfo_hypothesis_count": 5,
+        "candidate_correlation_count": 5120,
+        "complex_mac_count": 327680,
+        "sample_rate_hz": 48000.0,
+        "cfo_spacing_hz": 250.0
+      },
+      "memory_accounting": {
+        "scope": "Logical payload bytes unless the field explicitly names allocated capacity; allocator bookkeeping and stack objects are excluded.",
+        "common_input_capture_payload_bytes": 16384,
+        "benchmark_capture_bank_payload_bytes": 32768,
+        "shared_plan_allocated_capacity_bytes": 18712
+      },
+      "fixture": {
+        "synthetic": true,
+        "seed": 6190311474907106343,
+        "per_capture_window_count": 2,
+        "execution_order_seed": 14690494338305536050,
+        "true_timing_offset": 614,
+        "true_cfo_hz": 250.0
+      },
+      "fairness_checks": {
+        "shared_candidate_plan": true,
+        "accelerated_weight_tables_bitwise_equal": true,
+        "per_capture_reference_cases_valid": true,
+        "timed_execution_order_randomized": true,
+        "sme2_per_capture_packing_timed": true
+      },
+      "reference_result": {
+        "valid": true,
+        "detected_timing_offset": 614,
+        "detected_cfo_hz": 250.0,
+        "best_score": 3298.237775706,
+        "second_best_score": 2259.716301894
+      },
+      "execution_order_by_sample": [
+        ["sme2/steady-state", "reference/setup-inclusive", "neon/per-capture", "neon/steady-state", "sme2/setup-inclusive", "sme2/per-capture", "reference/steady-state", "neon/setup-inclusive", "reference/per-capture"],
+        ["neon/steady-state", "reference/steady-state", "reference/per-capture", "sme2/setup-inclusive", "neon/setup-inclusive", "sme2/steady-state", "sme2/per-capture", "neon/per-capture", "reference/setup-inclusive"],
+        ["neon/setup-inclusive", "reference/steady-state", "sme2/setup-inclusive", "sme2/per-capture", "reference/per-capture", "sme2/steady-state", "reference/setup-inclusive", "neon/steady-state", "neon/per-capture"],
+        ["reference/steady-state", "sme2/setup-inclusive", "reference/per-capture", "sme2/steady-state", "neon/steady-state", "sme2/per-capture", "reference/setup-inclusive", "neon/per-capture", "neon/setup-inclusive"],
+        ["sme2/per-capture", "reference/setup-inclusive", "sme2/steady-state", "neon/setup-inclusive", "neon/per-capture", "neon/steady-state", "reference/steady-state", "sme2/setup-inclusive", "reference/per-capture"],
+        ["sme2/per-capture", "neon/setup-inclusive", "reference/per-capture", "neon/per-capture", "sme2/steady-state", "neon/steady-state", "reference/steady-state", "reference/setup-inclusive", "sme2/setup-inclusive"],
+        ["sme2/steady-state", "neon/per-capture", "neon/steady-state", "reference/per-capture", "reference/steady-state", "reference/setup-inclusive", "sme2/setup-inclusive", "sme2/per-capture", "neon/setup-inclusive"],
+        ["sme2/setup-inclusive", "neon/per-capture", "sme2/per-capture", "sme2/steady-state", "neon/steady-state", "neon/setup-inclusive", "reference/per-capture", "reference/setup-inclusive", "reference/steady-state"],
+        ["sme2/setup-inclusive", "neon/per-capture", "sme2/per-capture", "neon/setup-inclusive", "sme2/steady-state", "reference/steady-state", "reference/setup-inclusive", "reference/per-capture", "neon/steady-state"],
+        ["neon/per-capture", "sme2/per-capture", "sme2/steady-state", "reference/steady-state", "reference/per-capture", "neon/setup-inclusive", "sme2/setup-inclusive", "neon/steady-state", "reference/setup-inclusive"],
+        ["sme2/per-capture", "reference/steady-state", "neon/setup-inclusive", "sme2/setup-inclusive", "reference/per-capture", "neon/per-capture", "sme2/steady-state", "reference/setup-inclusive", "neon/steady-state"],
+        ["reference/per-capture", "reference/steady-state", "reference/setup-inclusive", "neon/steady-state", "neon/setup-inclusive", "sme2/steady-state", "sme2/setup-inclusive", "sme2/per-capture", "neon/per-capture"],
+        ["sme2/per-capture", "sme2/setup-inclusive", "reference/setup-inclusive", "neon/steady-state", "reference/steady-state", "reference/per-capture", "neon/per-capture", "neon/setup-inclusive", "sme2/steady-state"],
+        ["reference/steady-state", "sme2/setup-inclusive", "sme2/steady-state", "reference/per-capture", "neon/setup-inclusive", "neon/per-capture", "neon/steady-state", "sme2/per-capture", "reference/setup-inclusive"],
+        ["neon/setup-inclusive", "sme2/setup-inclusive", "reference/per-capture", "neon/steady-state", "reference/setup-inclusive", "sme2/steady-state", "sme2/per-capture", "reference/steady-state", "neon/per-capture"]
+      ],
+      "implementations": [
+      {
+        "requested_implementation": "reference",
+        "implementation_class": "scalar-reference",
+        "mechanism": "scalar-complex-inner-product",
+        "available": true,
+        "executed": true,
+        "unavailable_reason": "",
+        "correctness": {
+          "executed": true,
+          "passed": true,
+          "result_ok": true,
+          "actual_implementation": "reference",
+          "ground_truth_match": true,
+          "candidate_count_match": true,
+          "best_candidate_match": true,
+          "second_best_candidate_match": true,
+          "best_score_difference": 0.000000000,
+          "best_score_tolerance": 0.660647555,
+          "best_score_within_tolerance": true,
+          "second_best_score_difference": 0.000000000,
+          "second_best_score_tolerance": 0.452943260,
+          "second_best_score_within_tolerance": true,
+          "per_capture_case_count": 2,
+          "per_capture_cases_passed": 2,
+          "error": ""
+        },
+        "memory_bytes": {
+          "reusable_plan_payload": 13352,
+          "per_capture_workspace_payload": 0,
+          "correlation_output_payload": 0,
+          "total_temporary_workspace_payload": 0,
+          "total_temporary_workspace_allocated_capacity": null
+        },
+        "modes": [
+          {
+            "name": "steady-state",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": false,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 1.000000,
+            "speedup_vs_neon": 0.273131,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 3191,
+              "total_timed_duration_ms": 751.785459,
+              "latency_ms": {
+                "median": 0.233157363,
+                "mean": 0.235764310,
+                "standard_deviation": 0.006842758,
+                "minimum": 0.232436727,
+                "maximum": 0.258977015,
+                "p50": 0.233157363,
+                "p95": 0.258977015
+              },
+              "candidate_correlations_per_second": 21959418.046,
+              "complex_macs_per_second": 1405402754.937,
+              "operations_per_sample": [215, 210, 211, 215, 215, 215, 216, 214, 216, 215, 216, 209, 194, 215, 215],
+              "sample_block_duration_ms": [50.179375, 50.175167, 50.052042, 50.128833, 50.194375, 50.005208, 50.208667, 50.011209, 50.206333, 50.083958, 50.214250, 50.023542, 50.241541, 50.014750, 50.046209],
+              "per_sample_latency_ms": [0.233392442, 0.238929367, 0.237213469, 0.233157363, 0.233462209, 0.232582363, 0.232447532, 0.233697238, 0.232436727, 0.232948642, 0.232473380, 0.239347091, 0.258977015, 0.232626744, 0.232773065]
+            },
+            "error": ""
+          },
+          {
+            "name": "per-capture",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 1.000000,
+            "speedup_vs_neon": 0.273187,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 3198,
+              "total_timed_duration_ms": 751.610835,
+              "latency_ms": {
+                "median": 0.232938563,
+                "mean": 0.235111928,
+                "standard_deviation": 0.004888333,
+                "minimum": 0.232528745,
+                "maximum": 0.249913970,
+                "p50": 0.232938563,
+                "p95": 0.249913970
+              },
+              "candidate_correlations_per_second": 21980044.603,
+              "complex_macs_per_second": 1406722854.620,
+              "operations_per_sample": [212, 212, 207, 215, 215, 215, 215, 215, 215, 215, 215, 201, 215, 216, 215],
+              "sample_block_duration_ms": [50.055042, 50.136917, 50.224833, 50.054917, 50.013833, 50.032834, 50.097292, 50.040792, 50.066875, 50.081791, 50.058042, 50.232708, 50.155542, 50.226209, 50.133208],
+              "per_sample_latency_ms": [0.236108689, 0.236494892, 0.242632043, 0.232813567, 0.232622479, 0.232710856, 0.233010660, 0.232747870, 0.232869186, 0.232938563, 0.232828102, 0.249913970, 0.233281591, 0.232528745, 0.233177712]
+            },
+            "error": ""
+          },
+          {
+            "name": "setup-inclusive",
+            "valid": true,
+            "allocations_included": true,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": true,
+            "speedup_vs_reference": 1.000000,
+            "speedup_vs_neon": 0.347916,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 2837,
+              "total_timed_duration_ms": 752.162124,
+              "latency_ms": {
+                "median": 0.263428289,
+                "mean": 0.265169338,
+                "standard_deviation": 0.003545486,
+                "minimum": 0.261469401,
+                "maximum": 0.270416665,
+                "p50": 0.263428289,
+                "p95": 0.270416665
+              },
+              "candidate_correlations_per_second": 19436029.480,
+              "complex_macs_per_second": 1243905886.701,
+              "operations_per_sample": [187, 190, 185, 191, 192, 188, 191, 191, 191, 192, 186, 186, 191, 190, 186],
+              "sample_block_duration_ms": [50.167542, 50.051375, 50.027083, 50.202083, 50.247792, 50.048708, 50.219416, 50.102791, 50.051459, 50.202125, 50.216084, 50.186167, 50.030458, 50.171125, 50.237916],
+              "per_sample_latency_ms": [0.268275626, 0.263428289, 0.270416665, 0.262838131, 0.261707250, 0.266216532, 0.262928880, 0.262318277, 0.262049524, 0.261469401, 0.269978946, 0.269818102, 0.261939571, 0.264058553, 0.270096323]
+            },
+            "error": ""
+          }
+        ]
+      },
+      {
+        "requested_implementation": "neon",
+        "implementation_class": "neon-intrinsics",
+        "mechanism": "neon-float32-complex-multiply-accumulate",
+        "available": true,
+        "executed": true,
+        "unavailable_reason": "",
+        "correctness": {
+          "executed": true,
+          "passed": true,
+          "result_ok": true,
+          "actual_implementation": "neon",
+          "ground_truth_match": true,
+          "candidate_count_match": true,
+          "best_candidate_match": true,
+          "second_best_candidate_match": true,
+          "best_score_difference": 0.000198456,
+          "best_score_tolerance": 0.660647555,
+          "best_score_within_tolerance": true,
+          "second_best_score_difference": 0.000366638,
+          "second_best_score_tolerance": 0.452943260,
+          "second_best_score_within_tolerance": true,
+          "per_capture_case_count": 2,
+          "per_capture_cases_passed": 2,
+          "error": ""
+        },
+        "memory_bytes": {
+          "reusable_plan_payload": 10792,
+          "per_capture_workspace_payload": 0,
+          "correlation_output_payload": 0,
+          "total_temporary_workspace_payload": 0,
+          "total_temporary_workspace_allocated_capacity": null
+        },
+        "modes": [
+          {
+            "name": "steady-state",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": false,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 3.661246,
+            "speedup_vs_neon": 1.000000,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 11701,
+              "total_timed_duration_ms": 750.540585,
+              "latency_ms": {
+                "median": 0.063682518,
+                "mean": 0.064162336,
+                "standard_deviation": 0.001166322,
+                "minimum": 0.063277602,
+                "maximum": 0.066995705,
+                "p50": 0.063682518,
+                "p95": 0.066995705
+              },
+              "candidate_correlations_per_second": 80398831.201,
+              "complex_macs_per_second": 5145525196.866,
+              "operations_per_sample": [778, 771, 782, 791, 787, 790, 786, 790, 787, 789, 747, 751, 782, 786, 784],
+              "sample_block_duration_ms": [50.048209, 50.059750, 50.006041, 50.052583, 50.004208, 50.014042, 50.001792, 50.057500, 50.036708, 50.001792, 50.045792, 50.056125, 50.035334, 50.054459, 50.066250],
+              "per_sample_latency_ms": [0.064329317, 0.064928340, 0.063946344, 0.063277602, 0.063537748, 0.063308914, 0.063615511, 0.063363924, 0.063579044, 0.063373627, 0.066995705, 0.066652630, 0.063983803, 0.063682518, 0.063860013]
+            },
+            "error": ""
+          },
+          {
+            "name": "per-capture",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 3.660492,
+            "speedup_vs_neon": 1.000000,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 11797,
+              "total_timed_duration_ms": 750.473291,
+              "latency_ms": {
+                "median": 0.063635866,
+                "mean": 0.063616010,
+                "standard_deviation": 0.000164030,
+                "minimum": 0.063369568,
+                "maximum": 0.064052283,
+                "p50": 0.063635866,
+                "p95": 0.064052283
+              },
+              "candidate_correlations_per_second": 80457771.516,
+              "complex_macs_per_second": 5149297377.007,
+              "operations_per_sample": [781, 786, 785, 785, 787, 786, 788, 790, 786, 788, 788, 788, 788, 785, 786],
+              "sample_block_duration_ms": [50.024833, 50.053208, 50.018375, 50.023291, 50.015542, 50.017791, 50.044541, 50.061959, 50.017916, 50.058250, 50.038709, 50.002458, 50.025167, 50.040042, 50.031209],
+              "per_sample_latency_ms": [0.064052283, 0.063680926, 0.063717675, 0.063723938, 0.063552150, 0.063635866, 0.063508301, 0.063369568, 0.063636025, 0.063525698, 0.063500900, 0.063454896, 0.063483714, 0.063745276, 0.063652938]
+            },
+            "error": ""
+          },
+          {
+            "name": "setup-inclusive",
+            "valid": true,
+            "allocations_included": true,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": true,
+            "speedup_vs_reference": 2.874258,
+            "speedup_vs_neon": 1.000000,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 8140,
+              "total_timed_duration_ms": 750.513040,
+              "latency_ms": {
+                "median": 0.091650870,
+                "mean": 0.092223129,
+                "standard_deviation": 0.001494166,
+                "minimum": 0.090551161,
+                "maximum": 0.095082620,
+                "p50": 0.091650870,
+                "p95": 0.095082620
+              },
+              "candidate_correlations_per_second": 55864172.397,
+              "complex_macs_per_second": 3575307033.430,
+              "operations_per_sample": [543, 530, 526, 547, 545, 546, 550, 549, 549, 546, 543, 533, 551, 553, 529],
+              "sample_block_duration_ms": [50.001416, 50.020250, 50.013458, 50.035500, 50.019625, 50.025375, 50.010208, 50.045458, 50.013958, 50.041375, 50.096417, 50.019458, 50.059584, 50.074792, 50.036166],
+              "per_sample_latency_ms": [0.092083639, 0.094377830, 0.095082620, 0.091472578, 0.091779128, 0.091621566, 0.090927651, 0.091157483, 0.091100106, 0.091650870, 0.092258595, 0.093845137, 0.090852240, 0.090551161, 0.094586325]
+            },
+            "error": ""
+          }
+        ]
+      },
+      {
+        "requested_implementation": "sme2",
+        "implementation_class": "sme2-za-vgx4",
+        "mechanism": "za-vgx4-fmla-fmls",
+        "available": true,
+        "executed": true,
+        "unavailable_reason": "",
+        "correctness": {
+          "executed": true,
+          "passed": true,
+          "result_ok": true,
+          "actual_implementation": "sme2",
+          "ground_truth_match": true,
+          "candidate_count_match": true,
+          "best_candidate_match": true,
+          "second_best_candidate_match": true,
+          "best_score_difference": 0.000529107,
+          "best_score_tolerance": 0.660647555,
+          "best_score_within_tolerance": true,
+          "second_best_score_difference": 0.000590504,
+          "second_best_score_tolerance": 0.452943260,
+          "second_best_score_within_tolerance": true,
+          "per_capture_case_count": 2,
+          "per_capture_cases_passed": 2,
+          "error": ""
+        },
+        "memory_bytes": {
+          "reusable_plan_payload": 10792,
+          "per_capture_workspace_payload": 524288,
+          "correlation_output_payload": 40960,
+          "total_temporary_workspace_payload": 565248,
+          "total_temporary_workspace_allocated_capacity": 565248
+        },
+        "modes": [
+          {
+            "name": "steady-state",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": false,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 13.508755,
+            "speedup_vs_neon": 3.689661,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 44025,
+              "total_timed_duration_ms": 750.114875,
+              "latency_ms": {
+                "median": 0.017259723,
+                "mean": 0.017047305,
+                "standard_deviation": 0.000394627,
+                "minimum": 0.015907973,
+                "maximum": 0.017297691,
+                "p50": 0.017259723,
+                "p95": 0.017297691
+              },
+              "candidate_correlations_per_second": 296644393.098,
+              "complex_macs_per_second": 18985241158.266,
+              "operations_per_sample": [3144, 2933, 3018, 2892, 2895, 2912, 2893, 2897, 2894, 3006, 2953, 2909, 2892, 2896, 2891],
+              "sample_block_duration_ms": [50.014666, 50.008708, 50.008667, 50.015166, 50.002500, 50.003250, 50.001959, 50.001417, 50.005875, 50.008667, 50.016125, 50.000750, 50.014916, 50.004584, 50.007625],
+              "per_sample_latency_ms": [0.015907973, 0.017050361, 0.016570135, 0.017294317, 0.017272021, 0.017171446, 0.017283774, 0.017259723, 0.017279155, 0.016636283, 0.016937394, 0.017188295, 0.017294231, 0.017266776, 0.017297691]
+            },
+            "error": ""
+          },
+          {
+            "name": "per-capture",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 4.566183,
+            "speedup_vs_neon": 1.247423,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 14771,
+              "total_timed_duration_ms": 750.494250,
+              "latency_ms": {
+                "median": 0.051013846,
+                "mean": 0.050834691,
+                "standard_deviation": 0.001188550,
+                "minimum": 0.048381931,
+                "maximum": 0.053163789,
+                "p50": 0.051013846,
+                "p95": 0.053163789
+              },
+              "candidate_correlations_per_second": 100364908.626,
+              "complex_macs_per_second": 6423354152.037,
+              "operations_per_sample": [1017, 1006, 1006, 941, 1034, 968, 971, 966, 973, 972, 978, 990, 986, 982, 981],
+              "sample_block_duration_ms": [50.031250, 50.032959, 50.001125, 50.027125, 50.026917, 50.039875, 50.032459, 50.044833, 50.022125, 50.041541, 50.049125, 50.048375, 50.038083, 50.013875, 50.044583],
+              "per_sample_latency_ms": [0.049194936, 0.049734552, 0.049702908, 0.053163789, 0.048381931, 0.051694086, 0.051526734, 0.051806245, 0.051410200, 0.051483067, 0.051174974, 0.050553914, 0.050748563, 0.050930626, 0.051013846]
+            },
+            "error": ""
+          },
+          {
+            "name": "setup-inclusive",
+            "valid": true,
+            "allocations_included": true,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": true,
+            "speedup_vs_reference": 3.017980,
+            "speedup_vs_neon": 1.050003,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 8646,
+              "total_timed_duration_ms": 750.576544,
+              "latency_ms": {
+                "median": 0.087286286,
+                "mean": 0.086828361,
+                "standard_deviation": 0.001222618,
+                "minimum": 0.083235233,
+                "maximum": 0.087803654,
+                "p50": 0.087286286,
+                "p95": 0.087803654
+              },
+              "candidate_correlations_per_second": 58657553.462,
+              "complex_macs_per_second": 3754083421.543,
+              "operations_per_sample": [601, 570, 573, 576, 572, 571, 572, 574, 572, 573, 573, 573, 577, 580, 589],
+              "sample_block_duration_ms": [50.024375, 50.048083, 50.043084, 50.038333, 50.052417, 50.058542, 50.000542, 50.079834, 50.040083, 50.004458, 50.069209, 50.015042, 50.030000, 50.066500, 50.006042],
+              "per_sample_latency_ms": [0.083235233, 0.087803654, 0.087335225, 0.086872106, 0.087504226, 0.087668200, 0.087413535, 0.087247098, 0.087482663, 0.087267815, 0.087380818, 0.087286286, 0.086707106, 0.086321552, 0.084899902]
+            },
+            "error": ""
+          }
+        ]
+      }
+      ]
+    },
+    {
+      "name": "medium",
+      "definition": {
+        "iq_sample_count": 8192,
+        "preamble_length": 128,
+        "timing_hypothesis_count": 4096,
+        "cfo_hypothesis_count": 9,
+        "candidate_correlation_count": 36864,
+        "complex_mac_count": 4718592,
+        "sample_rate_hz": 48000.0,
+        "cfo_spacing_hz": 250.0
+      },
+      "memory_accounting": {
+        "scope": "Logical payload bytes unless the field explicitly names allocated capacity; allocator bookkeeping and stack objects are excluded.",
+        "common_input_capture_payload_bytes": 65536,
+        "benchmark_capture_bank_payload_bytes": 131072,
+        "shared_plan_allocated_capacity_bytes": 70136
+      },
+      "fixture": {
+        "synthetic": true,
+        "seed": 6097062480352231801,
+        "per_capture_window_count": 2,
+        "execution_order_seed": 14603598802302254444,
+        "true_timing_offset": 2457,
+        "true_cfo_hz": 250.0
+      },
+      "fairness_checks": {
+        "shared_candidate_plan": true,
+        "accelerated_weight_tables_bitwise_equal": true,
+        "per_capture_reference_cases_valid": true,
+        "timed_execution_order_randomized": true,
+        "sme2_per_capture_packing_timed": true
+      },
+      "reference_result": {
+        "valid": true,
+        "detected_timing_offset": 2457,
+        "detected_cfo_hz": 250.0,
+        "best_score": 13260.967191501,
+        "second_best_score": 2284.754594938
+      },
+      "execution_order_by_sample": [
+        ["reference/steady-state", "reference/setup-inclusive", "neon/per-capture", "sme2/setup-inclusive", "sme2/steady-state", "neon/steady-state", "sme2/per-capture", "neon/setup-inclusive", "reference/per-capture"],
+        ["neon/setup-inclusive", "reference/per-capture", "neon/steady-state", "reference/steady-state", "sme2/per-capture", "sme2/setup-inclusive", "sme2/steady-state", "reference/setup-inclusive", "neon/per-capture"],
+        ["neon/setup-inclusive", "neon/steady-state", "reference/setup-inclusive", "sme2/per-capture", "sme2/steady-state", "sme2/setup-inclusive", "neon/per-capture", "reference/steady-state", "reference/per-capture"],
+        ["reference/per-capture", "sme2/steady-state", "neon/steady-state", "sme2/setup-inclusive", "sme2/per-capture", "neon/per-capture", "reference/setup-inclusive", "neon/setup-inclusive", "reference/steady-state"],
+        ["reference/steady-state", "sme2/per-capture", "reference/per-capture", "neon/per-capture", "neon/setup-inclusive", "sme2/steady-state", "reference/setup-inclusive", "neon/steady-state", "sme2/setup-inclusive"],
+        ["sme2/per-capture", "reference/steady-state", "reference/setup-inclusive", "neon/setup-inclusive", "sme2/steady-state", "neon/per-capture", "neon/steady-state", "reference/per-capture", "sme2/setup-inclusive"],
+        ["sme2/steady-state", "neon/per-capture", "neon/setup-inclusive", "sme2/setup-inclusive", "reference/setup-inclusive", "reference/per-capture", "sme2/per-capture", "reference/steady-state", "neon/steady-state"],
+        ["neon/steady-state", "reference/per-capture", "sme2/setup-inclusive", "neon/per-capture", "sme2/steady-state", "reference/setup-inclusive", "neon/setup-inclusive", "reference/steady-state", "sme2/per-capture"],
+        ["sme2/steady-state", "sme2/setup-inclusive", "reference/setup-inclusive", "neon/steady-state", "neon/setup-inclusive", "reference/steady-state", "sme2/per-capture", "reference/per-capture", "neon/per-capture"],
+        ["sme2/setup-inclusive", "sme2/per-capture", "reference/steady-state", "reference/setup-inclusive", "neon/setup-inclusive", "neon/steady-state", "reference/per-capture", "sme2/steady-state", "neon/per-capture"],
+        ["reference/setup-inclusive", "neon/per-capture", "sme2/setup-inclusive", "reference/per-capture", "sme2/per-capture", "neon/steady-state", "sme2/steady-state", "neon/setup-inclusive", "reference/steady-state"],
+        ["reference/setup-inclusive", "sme2/steady-state", "reference/per-capture", "sme2/setup-inclusive", "neon/per-capture", "neon/steady-state", "reference/steady-state", "sme2/per-capture", "neon/setup-inclusive"],
+        ["neon/per-capture", "sme2/steady-state", "sme2/setup-inclusive", "neon/setup-inclusive", "reference/per-capture", "reference/setup-inclusive", "reference/steady-state", "sme2/per-capture", "neon/steady-state"],
+        ["neon/per-capture", "sme2/steady-state", "sme2/setup-inclusive", "neon/setup-inclusive", "reference/steady-state", "reference/per-capture", "neon/steady-state", "reference/setup-inclusive", "sme2/per-capture"],
+        ["neon/setup-inclusive", "neon/steady-state", "reference/steady-state", "sme2/per-capture", "neon/per-capture", "reference/setup-inclusive", "sme2/setup-inclusive", "reference/per-capture", "sme2/steady-state"]
+      ],
+      "implementations": [
+      {
+        "requested_implementation": "reference",
+        "implementation_class": "scalar-reference",
+        "mechanism": "scalar-complex-inner-product",
+        "available": true,
+        "executed": true,
+        "unavailable_reason": "",
+        "correctness": {
+          "executed": true,
+          "passed": true,
+          "result_ok": true,
+          "actual_implementation": "reference",
+          "ground_truth_match": true,
+          "candidate_count_match": true,
+          "best_candidate_match": true,
+          "second_best_candidate_match": true,
+          "best_score_difference": 0.000000000,
+          "best_score_tolerance": 2.653193438,
+          "best_score_within_tolerance": true,
+          "second_best_score_difference": 0.000000000,
+          "second_best_score_tolerance": 0.457950919,
+          "second_best_score_within_tolerance": true,
+          "per_capture_case_count": 2,
+          "per_capture_cases_passed": 2,
+          "error": ""
+        },
+        "memory_bytes": {
+          "reusable_plan_payload": 51272,
+          "per_capture_workspace_payload": 0,
+          "correlation_output_payload": 0,
+          "total_temporary_workspace_payload": 0,
+          "total_temporary_workspace_allocated_capacity": null
+        },
+        "modes": [
+          {
+            "name": "steady-state",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": false,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 1.000000,
+            "speedup_vs_neon": 0.260738,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 239,
+              "total_timed_duration_ms": 789.366709,
+              "latency_ms": {
+                "median": 3.291354188,
+                "mean": 3.302923672,
+                "standard_deviation": 0.018614261,
+                "minimum": 3.284760438,
+                "maximum": 3.334972267,
+                "p50": 3.291354188,
+                "p95": 3.334972267
+              },
+              "candidate_correlations_per_second": 11200253.118,
+              "complex_macs_per_second": 1433632399.066,
+              "operations_per_sample": [16, 16, 16, 16, 15, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16],
+              "sample_block_duration_ms": [53.170875, 53.256042, 53.124541, 53.285667, 50.024584, 52.632708, 52.661667, 52.723500, 52.625625, 52.816917, 52.620416, 52.646125, 52.657208, 52.556167, 52.564667],
+              "per_sample_latency_ms": [3.323179688, 3.328502625, 3.320283813, 3.330354187, 3.334972267, 3.289544250, 3.291354188, 3.295218750, 3.289101562, 3.301057312, 3.288776000, 3.290382812, 3.291075500, 3.284760438, 3.285291688]
+            },
+            "error": ""
+          },
+          {
+            "name": "per-capture",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 1.000000,
+            "speedup_vs_neon": 0.260945,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 240,
+              "total_timed_duration_ms": 792.190959,
+              "latency_ms": {
+                "median": 3.292085938,
+                "mean": 3.300795663,
+                "standard_deviation": 0.016839824,
+                "minimum": 3.283825500,
+                "maximum": 3.329744812,
+                "p50": 3.292085938,
+                "p95": 3.329744812
+              },
+              "candidate_correlations_per_second": 11197763.576,
+              "complex_macs_per_second": 1433313737.728,
+              "operations_per_sample": [16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16],
+              "sample_block_duration_ms": [53.078334, 53.275917, 53.226875, 53.154292, 53.030333, 52.673375, 52.602875, 52.611458, 52.854292, 52.541208, 52.601458, 52.547208, 52.816042, 52.607792, 52.569500],
+              "per_sample_latency_ms": [3.317395875, 3.329744812, 3.326679687, 3.322143250, 3.314395812, 3.292085938, 3.287679687, 3.288216125, 3.303393250, 3.283825500, 3.287591125, 3.284200500, 3.301002625, 3.287987000, 3.285593750]
+            },
+            "error": ""
+          },
+          {
+            "name": "setup-inclusive",
+            "valid": true,
+            "allocations_included": true,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": true,
+            "speedup_vs_reference": 1.000000,
+            "speedup_vs_neon": 0.286149,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 225,
+              "total_timed_duration_ms": 772.696415,
+              "latency_ms": {
+                "median": 3.417747200,
+                "mean": 3.434206289,
+                "standard_deviation": 0.034389457,
+                "minimum": 3.403602733,
+                "maximum": 3.517000000,
+                "p50": 3.417747200,
+                "p95": 3.517000000
+              },
+              "candidate_correlations_per_second": 10786052.286,
+              "complex_macs_per_second": 1380614692.626,
+              "operations_per_sample": [15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15],
+              "sample_block_duration_ms": [51.589750, 51.737458, 51.726458, 51.616875, 52.755000, 51.120292, 51.142917, 51.639458, 52.479000, 51.085416, 51.054041, 51.208250, 51.157000, 51.118292, 51.266208],
+              "per_sample_latency_ms": [3.439316667, 3.449163867, 3.448430533, 3.441125000, 3.517000000, 3.408019467, 3.409527800, 3.442630533, 3.498600000, 3.405694400, 3.403602733, 3.413883333, 3.410466667, 3.407886133, 3.417747200]
+            },
+            "error": ""
+          }
+        ]
+      },
+      {
+        "requested_implementation": "neon",
+        "implementation_class": "neon-intrinsics",
+        "mechanism": "neon-float32-complex-multiply-accumulate",
+        "available": true,
+        "executed": true,
+        "unavailable_reason": "",
+        "correctness": {
+          "executed": true,
+          "passed": true,
+          "result_ok": true,
+          "actual_implementation": "neon",
+          "ground_truth_match": true,
+          "candidate_count_match": true,
+          "best_candidate_match": true,
+          "second_best_candidate_match": true,
+          "best_score_difference": 0.000241499,
+          "best_score_tolerance": 2.653193438,
+          "best_score_within_tolerance": true,
+          "second_best_score_difference": 0.000057487,
+          "second_best_score_tolerance": 0.457950919,
+          "second_best_score_within_tolerance": true,
+          "per_capture_case_count": 2,
+          "per_capture_cases_passed": 2,
+          "error": ""
+        },
+        "memory_bytes": {
+          "reusable_plan_payload": 42056,
+          "per_capture_workspace_payload": 0,
+          "correlation_output_payload": 0,
+          "total_temporary_workspace_payload": 0,
+          "total_temporary_workspace_allocated_capacity": null
+        },
+        "modes": [
+          {
+            "name": "steady-state",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": false,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 3.835272,
+            "speedup_vs_neon": 1.000000,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 878,
+              "total_timed_duration_ms": 756.658457,
+              "latency_ms": {
+                "median": 0.858180085,
+                "mean": 0.861879820,
+                "standard_deviation": 0.008603171,
+                "minimum": 0.854652542,
+                "maximum": 0.887750000,
+                "p50": 0.858180085,
+                "p95": 0.887750000
+              },
+              "candidate_correlations_per_second": 42956018.970,
+              "complex_macs_per_second": 5498370428.158,
+              "operations_per_sample": [58, 58, 58, 58, 59, 59, 59, 59, 57, 59, 58, 59, 59, 59, 59],
+              "sample_block_duration_ms": [50.109375, 50.200125, 50.303416, 50.479167, 50.642708, 50.632625, 50.520708, 50.424500, 50.601750, 50.611792, 50.029583, 50.546500, 50.515125, 50.541875, 50.499208],
+              "per_sample_latency_ms": [0.863954741, 0.865519397, 0.867300276, 0.870330466, 0.858350983, 0.858180085, 0.856283186, 0.854652542, 0.887750000, 0.857826983, 0.862579017, 0.856720339, 0.856188559, 0.856641949, 0.855918780]
+            },
+            "error": ""
+          },
+          {
+            "name": "per-capture",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 3.832224,
+            "speedup_vs_neon": 1.000000,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 879,
+              "total_timed_duration_ms": 757.104420,
+              "latency_ms": {
+                "median": 0.859053678,
+                "mean": 0.861368554,
+                "standard_deviation": 0.006159607,
+                "minimum": 0.853980220,
+                "maximum": 0.875176000,
+                "p50": 0.859053678,
+                "p95": 0.875176000
+              },
+              "candidate_correlations_per_second": 42912335.917,
+              "complex_macs_per_second": 5492778997.433,
+              "operations_per_sample": [58, 58, 58, 58, 58, 59, 58, 59, 59, 59, 59, 59, 59, 59, 59],
+              "sample_block_duration_ms": [50.109584, 50.237334, 50.228834, 50.318459, 50.337083, 50.490708, 50.760208, 50.405375, 50.684167, 50.384833, 50.808625, 50.615583, 50.595959, 50.489709, 50.637959],
+              "per_sample_latency_ms": [0.863958345, 0.866160931, 0.866014379, 0.867559638, 0.867880741, 0.855774712, 0.875176000, 0.854328390, 0.859053678, 0.853980220, 0.861163136, 0.857891237, 0.857558627, 0.855757780, 0.858270492]
+            },
+            "error": ""
+          },
+          {
+            "name": "setup-inclusive",
+            "valid": true,
+            "allocations_included": true,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": true,
+            "speedup_vs_reference": 3.494686,
+            "speedup_vs_neon": 1.000000,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 775,
+              "total_timed_duration_ms": 757.142332,
+              "latency_ms": {
+                "median": 0.977983962,
+                "mean": 0.977000032,
+                "standard_deviation": 0.006273218,
+                "minimum": 0.967528038,
+                "maximum": 0.987593961,
+                "p50": 0.977983962,
+                "p95": 0.987593961
+              },
+              "candidate_correlations_per_second": 37693869.685,
+              "complex_macs_per_second": 4824815319.647,
+              "operations_per_sample": [52, 52, 51, 51, 52, 52, 52, 51, 52, 52, 51, 52, 52, 51, 52],
+              "sample_block_duration_ms": [50.855166, 50.873334, 50.050875, 50.068708, 50.973708, 50.716667, 50.747208, 50.263833, 50.694458, 50.388167, 50.051625, 50.311458, 50.440333, 50.367292, 50.339500],
+              "per_sample_latency_ms": [0.977983962, 0.978333346, 0.981389706, 0.981739373, 0.980263615, 0.975320519, 0.975907846, 0.985565353, 0.974893423, 0.969003212, 0.981404412, 0.967528038, 0.970006404, 0.987593961, 0.968067308]
+            },
+            "error": ""
+          }
+        ]
+      },
+      {
+        "requested_implementation": "sme2",
+        "implementation_class": "sme2-za-vgx4",
+        "mechanism": "za-vgx4-fmla-fmls",
+        "available": true,
+        "executed": true,
+        "unavailable_reason": "",
+        "correctness": {
+          "executed": true,
+          "passed": true,
+          "result_ok": true,
+          "actual_implementation": "sme2",
+          "ground_truth_match": true,
+          "candidate_count_match": true,
+          "best_candidate_match": true,
+          "second_best_candidate_match": true,
+          "best_score_difference": 0.003519771,
+          "best_score_tolerance": 2.653193438,
+          "best_score_within_tolerance": true,
+          "second_best_score_difference": 0.000633968,
+          "second_best_score_tolerance": 0.457950919,
+          "second_best_score_within_tolerance": true,
+          "per_capture_case_count": 2,
+          "per_capture_cases_passed": 2,
+          "error": ""
+        },
+        "memory_bytes": {
+          "reusable_plan_payload": 42056,
+          "per_capture_workspace_payload": 4194304,
+          "correlation_output_payload": 294912,
+          "total_temporary_workspace_payload": 4489216,
+          "total_temporary_workspace_allocated_capacity": 4489216
+        },
+        "modes": [
+          {
+            "name": "steady-state",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": false,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 16.611809,
+            "speedup_vs_neon": 4.331325,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 3761,
+              "total_timed_duration_ms": 751.702044,
+              "latency_ms": {
+                "median": 0.198133399,
+                "mean": 0.199923244,
+                "standard_deviation": 0.003510922,
+                "minimum": 0.197091701,
+                "maximum": 0.208561113,
+                "p50": 0.198133399,
+                "p95": 0.208561113
+              },
+              "candidate_correlations_per_second": 186056465.730,
+              "complex_macs_per_second": 23815227613.448,
+              "operations_per_sample": [250, 242, 251, 250, 253, 249, 253, 253, 254, 252, 240, 254, 253, 254, 253],
+              "sample_block_duration_ms": [50.194167, 50.131709, 50.185292, 50.157833, 50.043125, 50.189083, 50.101042, 50.075166, 50.151917, 50.003042, 50.054667, 50.061292, 50.040000, 50.185959, 50.127750],
+              "per_sample_latency_ms": [0.200776668, 0.207155822, 0.199941402, 0.200631332, 0.197798913, 0.201562582, 0.198027834, 0.197925557, 0.197448492, 0.198424770, 0.208561113, 0.197091701, 0.197786561, 0.197582516, 0.198133399]
+            },
+            "error": ""
+          },
+          {
+            "name": "per-capture",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 8.737021,
+            "speedup_vs_neon": 2.279883,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 1993,
+              "total_timed_duration_ms": 752.183793,
+              "latency_ms": {
+                "median": 0.376797301,
+                "mean": 0.377452543,
+                "standard_deviation": 0.004061215,
+                "minimum": 0.373706157,
+                "maximum": 0.388839473,
+                "p50": 0.376797301,
+                "p95": 0.388839473
+              },
+              "candidate_correlations_per_second": 97835095.757,
+              "complex_macs_per_second": 12522892256.883,
+              "operations_per_sample": [133, 129, 132, 132, 133, 134, 134, 134, 134, 134, 131, 134, 133, 133, 133],
+              "sample_block_duration_ms": [50.149625, 50.160292, 50.062250, 50.175125, 50.187000, 50.363292, 50.082916, 50.174667, 50.158417, 50.144334, 50.144792, 50.076625, 50.182959, 50.114041, 50.007458],
+              "per_sample_latency_ms": [0.377064850, 0.388839473, 0.379259470, 0.380114583, 0.377345865, 0.375845463, 0.373753104, 0.374437813, 0.374316545, 0.374211448, 0.382784672, 0.373706157, 0.377315481, 0.376797301, 0.375995925]
+            },
+            "error": ""
+          },
+          {
+            "name": "setup-inclusive",
+            "valid": true,
+            "allocations_included": true,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": true,
+            "speedup_vs_reference": 6.722135,
+            "speedup_vs_neon": 1.923530,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 1478,
+              "total_timed_duration_ms": 753.076248,
+              "latency_ms": {
+                "median": 0.508431818,
+                "mean": 0.509548461,
+                "standard_deviation": 0.003706952,
+                "minimum": 0.504970830,
+                "maximum": 0.517250423,
+                "p50": 0.508431818,
+                "p95": 0.517250423
+              },
+              "candidate_correlations_per_second": 72505297.036,
+              "complex_macs_per_second": 9280678020.652,
+              "operations_per_sample": [98, 97, 98, 98, 98, 98, 99, 99, 99, 99, 99, 100, 99, 98, 99],
+              "sample_block_duration_ms": [50.251958, 50.173291, 50.317958, 50.192083, 50.161292, 50.281042, 50.248333, 50.125792, 50.020917, 50.205041, 50.334750, 50.497083, 50.080333, 50.017000, 50.169375],
+              "per_sample_latency_ms": [0.512775082, 0.517250423, 0.513448551, 0.512164112, 0.511849918, 0.513071857, 0.507558919, 0.506321131, 0.505261788, 0.507121626, 0.508431818, 0.504970830, 0.505861949, 0.510377551, 0.506761364]
+            },
+            "error": ""
+          }
+        ]
+      }
+      ]
+    },
+    {
+      "name": "large",
+      "definition": {
+        "iq_sample_count": 32768,
+        "preamble_length": 256,
+        "timing_hypothesis_count": 16384,
+        "cfo_hypothesis_count": 17,
+        "candidate_correlation_count": 278528,
+        "complex_mac_count": 71303168,
+        "sample_rate_hz": 48000.0,
+        "cfo_spacing_hz": 250.0
+      },
+      "memory_accounting": {
+        "scope": "Logical payload bytes unless the field explicitly names allocated capacity; allocator bookkeeping and stack objects are excluded.",
+        "common_input_capture_payload_bytes": 262144,
+        "benchmark_capture_bank_payload_bytes": 524288,
+        "shared_plan_allocated_capacity_bytes": 271288
+      },
+      "fixture": {
+        "synthetic": true,
+        "seed": 10781830309444993915,
+        "per_capture_window_count": 2,
+        "execution_order_seed": 835338788443537262,
+        "true_timing_offset": 9830,
+        "true_cfo_hz": 250.0
+      },
+      "fairness_checks": {
+        "shared_candidate_plan": true,
+        "accelerated_weight_tables_bitwise_equal": true,
+        "per_capture_reference_cases_valid": true,
+        "timed_execution_order_randomized": true,
+        "sme2_per_capture_packing_timed": true
+      },
+      "reference_result": {
+        "valid": true,
+        "detected_timing_offset": 9830,
+        "detected_cfo_hz": 250.0,
+        "best_score": 53033.373717734,
+        "second_best_score": 2257.045377870
+      },
+      "execution_order_by_sample": [
+        ["sme2/steady-state", "reference/steady-state", "sme2/setup-inclusive", "sme2/per-capture", "neon/setup-inclusive", "neon/steady-state", "reference/setup-inclusive", "reference/per-capture", "neon/per-capture"],
+        ["reference/per-capture", "sme2/per-capture", "sme2/steady-state", "reference/steady-state", "neon/steady-state", "reference/setup-inclusive", "neon/setup-inclusive", "neon/per-capture", "sme2/setup-inclusive"],
+        ["reference/setup-inclusive", "sme2/setup-inclusive", "sme2/steady-state", "sme2/per-capture", "reference/per-capture", "neon/steady-state", "reference/steady-state", "neon/setup-inclusive", "neon/per-capture"],
+        ["neon/per-capture", "reference/steady-state", "sme2/steady-state", "reference/per-capture", "neon/setup-inclusive", "neon/steady-state", "reference/setup-inclusive", "sme2/per-capture", "sme2/setup-inclusive"],
+        ["neon/setup-inclusive", "reference/setup-inclusive", "sme2/setup-inclusive", "sme2/steady-state", "reference/steady-state", "reference/per-capture", "sme2/per-capture", "neon/steady-state", "neon/per-capture"],
+        ["reference/setup-inclusive", "neon/setup-inclusive", "sme2/steady-state", "sme2/setup-inclusive", "reference/per-capture", "neon/per-capture", "neon/steady-state", "sme2/per-capture", "reference/steady-state"],
+        ["neon/setup-inclusive", "sme2/per-capture", "reference/steady-state", "reference/per-capture", "neon/per-capture", "sme2/steady-state", "sme2/setup-inclusive", "reference/setup-inclusive", "neon/steady-state"],
+        ["neon/setup-inclusive", "neon/steady-state", "reference/per-capture", "reference/setup-inclusive", "reference/steady-state", "neon/per-capture", "sme2/setup-inclusive", "sme2/steady-state", "sme2/per-capture"],
+        ["neon/setup-inclusive", "sme2/setup-inclusive", "neon/per-capture", "reference/setup-inclusive", "reference/per-capture", "sme2/per-capture", "sme2/steady-state", "reference/steady-state", "neon/steady-state"],
+        ["neon/steady-state", "reference/steady-state", "neon/per-capture", "sme2/steady-state", "sme2/per-capture", "neon/setup-inclusive", "sme2/setup-inclusive", "reference/per-capture", "reference/setup-inclusive"],
+        ["reference/steady-state", "neon/steady-state", "neon/per-capture", "sme2/steady-state", "sme2/per-capture", "reference/per-capture", "sme2/setup-inclusive", "reference/setup-inclusive", "neon/setup-inclusive"],
+        ["sme2/steady-state", "reference/setup-inclusive", "reference/steady-state", "neon/setup-inclusive", "neon/per-capture", "sme2/setup-inclusive", "neon/steady-state", "sme2/per-capture", "reference/per-capture"],
+        ["reference/steady-state", "sme2/steady-state", "neon/steady-state", "reference/per-capture", "sme2/per-capture", "neon/per-capture", "reference/setup-inclusive", "neon/setup-inclusive", "sme2/setup-inclusive"],
+        ["sme2/steady-state", "sme2/per-capture", "neon/setup-inclusive", "neon/per-capture", "reference/per-capture", "neon/steady-state", "reference/setup-inclusive", "reference/steady-state", "sme2/setup-inclusive"],
+        ["reference/steady-state", "sme2/setup-inclusive", "neon/steady-state", "neon/setup-inclusive", "sme2/steady-state", "reference/per-capture", "sme2/per-capture", "neon/per-capture", "reference/setup-inclusive"]
+      ],
+      "implementations": [
+      {
+        "requested_implementation": "reference",
+        "implementation_class": "scalar-reference",
+        "mechanism": "scalar-complex-inner-product",
+        "available": true,
+        "executed": true,
+        "unavailable_reason": "",
+        "correctness": {
+          "executed": true,
+          "passed": true,
+          "result_ok": true,
+          "actual_implementation": "reference",
+          "ground_truth_match": true,
+          "candidate_count_match": true,
+          "best_candidate_match": true,
+          "second_best_candidate_match": true,
+          "best_score_difference": 0.000000000,
+          "best_score_tolerance": 10.607674744,
+          "best_score_within_tolerance": true,
+          "second_best_score_difference": 0.000000000,
+          "second_best_score_tolerance": 0.452409076,
+          "second_best_score_within_tolerance": true,
+          "per_capture_case_count": 2,
+          "per_capture_cases_passed": 2,
+          "error": ""
+        },
+        "memory_bytes": {
+          "reusable_plan_payload": 200840,
+          "per_capture_workspace_payload": 0,
+          "correlation_output_payload": 0,
+          "total_temporary_workspace_payload": 0,
+          "total_temporary_workspace_allocated_capacity": null
+        },
+        "modes": [
+          {
+            "name": "steady-state",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": false,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 1.000000,
+            "speedup_vs_neon": 0.254362,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 28,
+              "total_timed_duration_ms": 1392.583543,
+              "latency_ms": {
+                "median": 49.552979500,
+                "mean": 49.771898667,
+                "standard_deviation": 0.426621398,
+                "minimum": 49.432854000,
+                "maximum": 50.827979000,
+                "p50": 49.552979500,
+                "p95": 50.827979000
+              },
+              "candidate_correlations_per_second": 5620812.367,
+              "complex_macs_per_second": 1438927965.976,
+              "operations_per_sample": [2, 2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 1],
+              "sample_block_duration_ms": [98.953416, 100.311500, 99.119708, 99.094500, 98.929917, 99.049584, 98.865708, 50.492083, 99.105959, 101.655958, 99.276792, 99.652792, 98.983500, 99.010792, 50.081334],
+              "per_sample_latency_ms": [49.476708000, 50.155750000, 49.559854000, 49.547250000, 49.464958500, 49.524792000, 49.432854000, 50.492083000, 49.552979500, 50.827979000, 49.638396000, 49.826396000, 49.491750000, 49.505396000, 50.081334000]
+            },
+            "error": ""
+          },
+          {
+            "name": "per-capture",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 1.000000,
+            "speedup_vs_neon": 0.254512,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 28,
+              "total_timed_duration_ms": 1389.606623,
+              "latency_ms": {
+                "median": 49.534375000,
+                "mean": 49.679622167,
+                "standard_deviation": 0.316627562,
+                "minimum": 49.475125000,
+                "maximum": 50.537833000,
+                "p50": 49.534375000,
+                "p95": 50.537833000
+              },
+              "candidate_correlations_per_second": 5622923.475,
+              "complex_macs_per_second": 1439468409.564,
+              "operations_per_sample": [1, 2, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+              "sample_block_duration_ms": [50.244209, 99.073666, 99.025708, 99.068500, 99.068750, 50.537833, 99.001208, 99.935792, 99.050958, 98.950250, 99.049667, 99.002084, 99.252791, 99.127916, 99.217291],
+              "per_sample_latency_ms": [50.244209000, 49.536833000, 49.512854000, 49.534250000, 49.534375000, 50.537833000, 49.500604000, 49.967896000, 49.525479000, 49.475125000, 49.524833500, 49.501042000, 49.626395500, 49.563958000, 49.608645500]
+            },
+            "error": ""
+          },
+          {
+            "name": "setup-inclusive",
+            "valid": true,
+            "allocations_included": true,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": true,
+            "speedup_vs_reference": 1.000000,
+            "speedup_vs_neon": 0.261482,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 19,
+              "total_timed_duration_ms": 954.880499,
+              "latency_ms": {
+                "median": 50.091125000,
+                "mean": 50.282552733,
+                "standard_deviation": 0.562759459,
+                "minimum": 49.985583000,
+                "maximum": 52.207834000,
+                "p50": 50.091125000,
+                "p95": 52.207834000
+              },
+              "candidate_correlations_per_second": 5560426.123,
+              "complex_macs_per_second": 1423469087.588,
+              "operations_per_sample": [1, 1, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+              "sample_block_duration_ms": [50.401333, 50.153416, 100.019500, 101.263500, 100.030250, 99.971166, 50.182917, 52.207834, 50.067292, 50.091125, 50.035459, 50.006250, 50.018250, 50.341041, 50.091166],
+              "per_sample_latency_ms": [50.401333000, 50.153416000, 50.009750000, 50.631750000, 50.015125000, 49.985583000, 50.182917000, 52.207834000, 50.067292000, 50.091125000, 50.035459000, 50.006250000, 50.018250000, 50.341041000, 50.091166000]
+            },
+            "error": ""
+          }
+        ]
+      },
+      {
+        "requested_implementation": "neon",
+        "implementation_class": "neon-intrinsics",
+        "mechanism": "neon-float32-complex-multiply-accumulate",
+        "available": true,
+        "executed": true,
+        "unavailable_reason": "",
+        "correctness": {
+          "executed": true,
+          "passed": true,
+          "result_ok": true,
+          "actual_implementation": "neon",
+          "ground_truth_match": true,
+          "candidate_count_match": true,
+          "best_candidate_match": true,
+          "second_best_candidate_match": true,
+          "best_score_difference": 0.005513016,
+          "best_score_tolerance": 10.607674744,
+          "best_score_within_tolerance": true,
+          "second_best_score_difference": 0.000116338,
+          "second_best_score_tolerance": 0.452409076,
+          "second_best_score_within_tolerance": true,
+          "per_capture_case_count": 2,
+          "per_capture_cases_passed": 2,
+          "error": ""
+        },
+        "memory_bytes": {
+          "reusable_plan_payload": 166024,
+          "per_capture_workspace_payload": 0,
+          "correlation_output_payload": 0,
+          "total_temporary_workspace_payload": 0,
+          "total_temporary_workspace_allocated_capacity": null
+        },
+        "modes": [
+          {
+            "name": "steady-state",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": false,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 3.931411,
+            "speedup_vs_neon": 1.000000,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 60,
+              "total_timed_duration_ms": 756.807291,
+              "latency_ms": {
+                "median": 12.604375000,
+                "mean": 12.613454850,
+                "standard_deviation": 0.046006240,
+                "minimum": 12.555791500,
+                "maximum": 12.729625000,
+                "p50": 12.604375000,
+                "p95": 12.729625000
+              },
+              "candidate_correlations_per_second": 22097724.005,
+              "complex_macs_per_second": 5657017345.168,
+              "operations_per_sample": [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+              "sample_block_duration_ms": [50.563750, 50.392625, 50.475875, 50.370083, 50.223166, 50.918500, 50.336208, 50.582709, 50.420375, 50.368917, 50.417500, 50.283375, 50.286916, 50.743250, 50.424042],
+              "per_sample_latency_ms": [12.640937500, 12.598156250, 12.618968750, 12.592520750, 12.555791500, 12.729625000, 12.584052000, 12.645677250, 12.605093750, 12.592229250, 12.604375000, 12.570843750, 12.571729000, 12.685812500, 12.606010500]
+            },
+            "error": ""
+          },
+          {
+            "name": "per-capture",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 3.929091,
+            "speedup_vs_neon": 1.000000,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 60,
+              "total_timed_duration_ms": 760.149748,
+              "latency_ms": {
+                "median": 12.607083250,
+                "mean": 12.669162467,
+                "standard_deviation": 0.125792205,
+                "minimum": 12.578312500,
+                "maximum": 13.002531250,
+                "p50": 12.607083250,
+                "p95": 13.002531250
+              },
+              "candidate_correlations_per_second": 22092976.978,
+              "complex_macs_per_second": 5655802106.328,
+              "operations_per_sample": [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+              "sample_block_duration_ms": [51.440458, 50.506583, 50.369292, 50.313250, 50.370208, 52.010125, 50.386708, 51.065000, 50.428333, 50.510542, 50.568083, 51.111333, 50.370458, 50.325667, 50.373708],
+              "per_sample_latency_ms": [12.860114500, 12.626645750, 12.592323000, 12.578312500, 12.592552000, 13.002531250, 12.596677000, 12.766250000, 12.607083250, 12.627635500, 12.642020750, 12.777833250, 12.592614500, 12.581416750, 12.593427000]
+            },
+            "error": ""
+          },
+          {
+            "name": "setup-inclusive",
+            "valid": true,
+            "allocations_included": true,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": true,
+            "speedup_vs_reference": 3.824352,
+            "speedup_vs_neon": 1.000000,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 60,
+              "total_timed_duration_ms": 787.793583,
+              "latency_ms": {
+                "median": 13.097937500,
+                "mean": 13.129893050,
+                "standard_deviation": 0.079243172,
+                "minimum": 13.056760250,
+                "maximum": 13.342979000,
+                "p50": 13.097937500,
+                "p95": 13.342979000
+              },
+              "candidate_correlations_per_second": 21265027.414,
+              "complex_macs_per_second": 5443847017.899,
+              "operations_per_sample": [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+              "sample_block_duration_ms": [52.256125, 52.901917, 52.299875, 52.741750, 52.281959, 52.391750, 52.341250, 52.227041, 52.564417, 52.545334, 52.439708, 53.371916, 52.800375, 52.264166, 52.366000],
+              "per_sample_latency_ms": [13.064031250, 13.225479250, 13.074968750, 13.185437500, 13.070489750, 13.097937500, 13.085312500, 13.056760250, 13.141104250, 13.136333500, 13.109927000, 13.342979000, 13.200093750, 13.066041500, 13.091500000]
+            },
+            "error": ""
+          }
+        ]
+      },
+      {
+        "requested_implementation": "sme2",
+        "implementation_class": "sme2-za-vgx4",
+        "mechanism": "za-vgx4-fmla-fmls",
+        "available": true,
+        "executed": true,
+        "unavailable_reason": "",
+        "correctness": {
+          "executed": true,
+          "passed": true,
+          "result_ok": true,
+          "actual_implementation": "sme2",
+          "ground_truth_match": true,
+          "candidate_count_match": true,
+          "best_candidate_match": true,
+          "second_best_candidate_match": true,
+          "best_score_difference": 0.013540406,
+          "best_score_tolerance": 10.607674744,
+          "best_score_within_tolerance": true,
+          "second_best_score_difference": 0.001419868,
+          "second_best_score_tolerance": 0.452409076,
+          "second_best_score_within_tolerance": true,
+          "per_capture_case_count": 2,
+          "per_capture_cases_passed": 2,
+          "error": ""
+        },
+        "memory_bytes": {
+          "reusable_plan_payload": 166024,
+          "per_capture_workspace_payload": 33554432,
+          "correlation_output_payload": 2228224,
+          "total_temporary_workspace_payload": 35782656,
+          "total_temporary_workspace_allocated_capacity": 35782656
+        },
+        "modes": [
+          {
+            "name": "steady-state",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": false,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 5.773690,
+            "speedup_vs_neon": 1.468605,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 95,
+              "total_timed_duration_ms": 815.148374,
+              "latency_ms": {
+                "median": 8.582548667,
+                "mean": 8.605424197,
+                "standard_deviation": 0.420176904,
+                "minimum": 8.032011857,
+                "maximum": 9.251590167,
+                "p50": 8.582548667,
+                "p95": 9.251590167
+              },
+              "candidate_correlations_per_second": 32452830.834,
+              "complex_macs_per_second": 8307924693.388,
+              "operations_per_sample": [6, 6, 6, 6, 7, 6, 6, 7, 7, 6, 6, 6, 6, 7, 7],
+              "sample_block_duration_ms": [51.017167, 52.241625, 53.517375, 55.509541, 56.224083, 51.409166, 55.331709, 56.682708, 58.568042, 54.714583, 51.495292, 53.487500, 51.803042, 56.457458, 56.689083],
+              "per_sample_latency_ms": [8.502861167, 8.706937500, 8.919562500, 9.251590167, 8.032011857, 8.568194333, 9.221951500, 8.097529714, 8.366863143, 9.119097167, 8.582548667, 8.914583333, 8.633840333, 8.065351143, 8.098440429]
+            },
+            "error": ""
+          },
+          {
+            "name": "per-capture",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 4.956053,
+            "speedup_vs_neon": 1.261374,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 83,
+              "total_timed_duration_ms": 827.284000,
+              "latency_ms": {
+                "median": 9.994722333,
+                "mean": 9.997825182,
+                "standard_deviation": 0.418479335,
+                "minimum": 9.322298667,
+                "maximum": 10.849958400,
+                "p50": 9.994722333,
+                "p95": 10.849958400
+              },
+              "candidate_correlations_per_second": 27867507.542,
+              "complex_macs_per_second": 7134081930.640,
+              "operations_per_sample": [6, 5, 5, 5, 6, 5, 5, 6, 6, 5, 6, 6, 5, 6, 6],
+              "sample_block_duration_ms": [58.113834, 54.249792, 50.551541, 51.885875, 58.700416, 51.434000, 51.662166, 57.641917, 57.208125, 51.952458, 59.968334, 55.933792, 50.865500, 57.162375, 59.953875],
+              "per_sample_latency_ms": [9.685639000, 10.849958400, 10.110308200, 10.377175000, 9.783402667, 10.286800000, 10.332433200, 9.606986167, 9.534687500, 10.390491600, 9.994722333, 9.322298667, 10.173100000, 9.527062500, 9.992312500]
+            },
+            "error": ""
+          },
+          {
+            "name": "setup-inclusive",
+            "valid": true,
+            "allocations_included": true,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": true,
+            "speedup_vs_reference": 4.915183,
+            "speedup_vs_neon": 1.285233,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 76,
+              "total_timed_duration_ms": 779.211625,
+              "latency_ms": {
+                "median": 10.191100000,
+                "mean": 10.256422687,
+                "standard_deviation": 0.201292581,
+                "minimum": 9.979923500,
+                "maximum": 10.715641600,
+                "p50": 10.191100000,
+                "p95": 10.715641600
+              },
+              "candidate_correlations_per_second": 27330513.880,
+              "complex_macs_per_second": 6996611553.218,
+              "operations_per_sample": [5, 5, 6, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
+              "sample_block_duration_ms": [50.828500, 51.997542, 59.879541, 51.037542, 50.926750, 53.578208, 50.779500, 51.284084, 53.312084, 50.744958, 50.955500, 50.979167, 50.926416, 51.675750, 50.306083],
+              "per_sample_latency_ms": [10.165700000, 10.399508400, 9.979923500, 10.207508400, 10.185350000, 10.715641600, 10.155900000, 10.256816800, 10.662416800, 10.148991600, 10.191100000, 10.195833400, 10.185283200, 10.335150000, 10.061216600]
+            },
+            "error": ""
+          }
+        ]
+      }
+      ]
+    },
+    {
+      "name": "very-large",
+      "definition": {
+        "iq_sample_count": 65536,
+        "preamble_length": 512,
+        "timing_hypothesis_count": 32768,
+        "cfo_hypothesis_count": 25,
+        "candidate_correlation_count": 819200,
+        "complex_mac_count": 419430400,
+        "sample_rate_hz": 48000.0,
+        "cfo_spacing_hz": 250.0
+      },
+      "memory_accounting": {
+        "scope": "Logical payload bytes unless the field explicitly names allocated capacity; allocator bookkeeping and stack objects are excluded.",
+        "common_input_capture_payload_bytes": 524288,
+        "benchmark_capture_bank_payload_bytes": 1048576,
+        "shared_plan_allocated_capacity_bytes": 673144
+      },
+      "fixture": {
+        "synthetic": true,
+        "seed": 18163836732020525852,
+        "per_capture_window_count": 2,
+        "execution_order_seed": 7072218205972657929,
+        "true_timing_offset": 19660,
+        "true_cfo_hz": 250.0
+      },
+      "fairness_checks": {
+        "shared_candidate_plan": true,
+        "accelerated_weight_tables_bitwise_equal": true,
+        "per_capture_reference_cases_valid": true,
+        "timed_execution_order_randomized": true,
+        "sme2_per_capture_packing_timed": true
+      },
+      "reference_result": {
+        "valid": true,
+        "detected_timing_offset": 19660,
+        "detected_cfo_hz": 250.0,
+        "best_score": 212242.253047649,
+        "second_best_score": 3438.884604454
+      },
+      "execution_order_by_sample": [
+        ["reference/steady-state", "reference/per-capture", "neon/per-capture", "reference/setup-inclusive", "neon/steady-state", "neon/setup-inclusive", "sme2/setup-inclusive", "sme2/steady-state", "sme2/per-capture"],
+        ["neon/steady-state", "sme2/setup-inclusive", "reference/setup-inclusive", "reference/steady-state", "neon/setup-inclusive", "sme2/per-capture", "reference/per-capture", "sme2/steady-state", "neon/per-capture"],
+        ["neon/steady-state", "neon/setup-inclusive", "reference/per-capture", "sme2/steady-state", "sme2/setup-inclusive", "sme2/per-capture", "reference/setup-inclusive", "reference/steady-state", "neon/per-capture"],
+        ["sme2/per-capture", "sme2/setup-inclusive", "neon/per-capture", "reference/steady-state", "reference/per-capture", "sme2/steady-state", "neon/setup-inclusive", "reference/setup-inclusive", "neon/steady-state"],
+        ["neon/setup-inclusive", "sme2/per-capture", "neon/steady-state", "sme2/setup-inclusive", "neon/per-capture", "sme2/steady-state", "reference/steady-state", "reference/setup-inclusive", "reference/per-capture"],
+        ["sme2/steady-state", "neon/per-capture", "sme2/per-capture", "neon/steady-state", "reference/setup-inclusive", "reference/per-capture", "reference/steady-state", "sme2/setup-inclusive", "neon/setup-inclusive"],
+        ["neon/steady-state", "neon/setup-inclusive", "reference/per-capture", "reference/setup-inclusive", "sme2/per-capture", "sme2/steady-state", "reference/steady-state", "sme2/setup-inclusive", "neon/per-capture"],
+        ["neon/per-capture", "neon/setup-inclusive", "reference/setup-inclusive", "neon/steady-state", "sme2/per-capture", "reference/steady-state", "sme2/setup-inclusive", "sme2/steady-state", "reference/per-capture"],
+        ["sme2/steady-state", "sme2/setup-inclusive", "neon/steady-state", "sme2/per-capture", "reference/per-capture", "reference/setup-inclusive", "neon/setup-inclusive", "reference/steady-state", "neon/per-capture"],
+        ["neon/steady-state", "sme2/per-capture", "reference/per-capture", "sme2/steady-state", "reference/steady-state", "neon/per-capture", "reference/setup-inclusive", "sme2/setup-inclusive", "neon/setup-inclusive"],
+        ["reference/per-capture", "sme2/per-capture", "neon/per-capture", "reference/setup-inclusive", "sme2/steady-state", "neon/steady-state", "reference/steady-state", "sme2/setup-inclusive", "neon/setup-inclusive"],
+        ["reference/steady-state", "sme2/setup-inclusive", "neon/steady-state", "neon/per-capture", "reference/setup-inclusive", "reference/per-capture", "sme2/steady-state", "sme2/per-capture", "neon/setup-inclusive"],
+        ["reference/per-capture", "neon/steady-state", "reference/steady-state", "sme2/setup-inclusive", "sme2/steady-state", "neon/per-capture", "sme2/per-capture", "reference/setup-inclusive", "neon/setup-inclusive"],
+        ["sme2/per-capture", "reference/steady-state", "sme2/steady-state", "reference/per-capture", "sme2/setup-inclusive", "neon/per-capture", "neon/steady-state", "neon/setup-inclusive", "reference/setup-inclusive"],
+        ["sme2/steady-state", "sme2/per-capture", "reference/per-capture", "sme2/setup-inclusive", "neon/setup-inclusive", "neon/per-capture", "reference/setup-inclusive", "neon/steady-state", "reference/steady-state"]
+      ],
+      "implementations": [
+      {
+        "requested_implementation": "reference",
+        "implementation_class": "scalar-reference",
+        "mechanism": "scalar-complex-inner-product",
+        "available": true,
+        "executed": true,
+        "unavailable_reason": "",
+        "correctness": {
+          "executed": true,
+          "passed": true,
+          "result_ok": true,
+          "actual_implementation": "reference",
+          "ground_truth_match": true,
+          "candidate_count_match": true,
+          "best_candidate_match": true,
+          "second_best_candidate_match": true,
+          "best_score_difference": 0.000000000,
+          "best_score_tolerance": 42.449450610,
+          "best_score_within_tolerance": true,
+          "second_best_score_difference": 0.000000000,
+          "second_best_score_tolerance": 0.688776921,
+          "second_best_score_within_tolerance": true,
+          "per_capture_case_count": 2,
+          "per_capture_cases_passed": 2,
+          "error": ""
+        },
+        "memory_bytes": {
+          "reusable_plan_payload": 467144,
+          "per_capture_workspace_payload": 0,
+          "correlation_output_payload": 0,
+          "total_temporary_workspace_payload": 0,
+          "total_temporary_workspace_allocated_capacity": null
+        },
+        "modes": [
+          {
+            "name": "steady-state",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": false,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 1.000000,
+            "speedup_vs_neon": 0.260694,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 15,
+              "total_timed_duration_ms": 4399.265667,
+              "latency_ms": {
+                "median": 292.617291000,
+                "mean": 293.284377800,
+                "standard_deviation": 1.847450343,
+                "minimum": 291.029459000,
+                "maximum": 296.054042000,
+                "p50": 292.617291000,
+                "p95": 296.054042000
+              },
+              "candidate_correlations_per_second": 2799561.151,
+              "complex_macs_per_second": 1433375309.322,
+              "operations_per_sample": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+              "sample_block_duration_ms": [294.677542, 294.986792, 296.054042, 294.357333, 295.593208, 295.937000, 291.949416, 293.591625, 291.526000, 292.165375, 291.029459, 292.568709, 291.127042, 291.084833, 292.617291],
+              "per_sample_latency_ms": [294.677542000, 294.986792000, 296.054042000, 294.357333000, 295.593208000, 295.937000000, 291.949416000, 293.591625000, 291.526000000, 292.165375000, 291.029459000, 292.568709000, 291.127042000, 291.084833000, 292.617291000]
+            },
+            "error": ""
+          },
+          {
+            "name": "per-capture",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 1.000000,
+            "speedup_vs_neon": 0.258437,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 15,
+              "total_timed_duration_ms": 4412.603792,
+              "latency_ms": {
+                "median": 294.279958000,
+                "mean": 294.173586133,
+                "standard_deviation": 2.411194741,
+                "minimum": 291.100417000,
+                "maximum": 298.759042000,
+                "p50": 294.279958000,
+                "p95": 298.759042000
+              },
+              "candidate_correlations_per_second": 2783743.771,
+              "complex_macs_per_second": 1425276810.730,
+              "operations_per_sample": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+              "sample_block_duration_ms": [294.781875, 295.225583, 294.279958, 295.339417, 296.245958, 294.894917, 298.759042, 291.295709, 293.148792, 292.898708, 291.100417, 291.369333, 298.268916, 291.485208, 293.509959],
+              "per_sample_latency_ms": [294.781875000, 295.225583000, 294.279958000, 295.339417000, 296.245958000, 294.894917000, 298.759042000, 291.295709000, 293.148792000, 292.898708000, 291.100417000, 291.369333000, 298.268916000, 291.485208000, 293.509959000]
+            },
+            "error": ""
+          },
+          {
+            "name": "setup-inclusive",
+            "valid": true,
+            "allocations_included": true,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": true,
+            "speedup_vs_reference": 1.000000,
+            "speedup_vs_neon": 0.263859,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 15,
+              "total_timed_duration_ms": 4425.663668,
+              "latency_ms": {
+                "median": 294.343542000,
+                "mean": 295.044244533,
+                "standard_deviation": 3.082087956,
+                "minimum": 292.197459000,
+                "maximum": 302.974584000,
+                "p50": 294.343542000,
+                "p95": 302.974584000
+              },
+              "candidate_correlations_per_second": 2783142.427,
+              "complex_macs_per_second": 1424968922.879,
+              "operations_per_sample": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+              "sample_block_duration_ms": [297.686459, 295.527417, 295.832125, 297.227792, 297.862000, 296.783416, 292.907334, 292.246000, 292.491125, 292.663291, 292.197459, 292.431666, 302.974584, 292.489458, 294.343542],
+              "per_sample_latency_ms": [297.686459000, 295.527417000, 295.832125000, 297.227792000, 297.862000000, 296.783416000, 292.907334000, 292.246000000, 292.491125000, 292.663291000, 292.197459000, 292.431666000, 302.974584000, 292.489458000, 294.343542000]
+            },
+            "error": ""
+          }
+        ]
+      },
+      {
+        "requested_implementation": "neon",
+        "implementation_class": "neon-intrinsics",
+        "mechanism": "neon-float32-complex-multiply-accumulate",
+        "available": true,
+        "executed": true,
+        "unavailable_reason": "",
+        "correctness": {
+          "executed": true,
+          "passed": true,
+          "result_ok": true,
+          "actual_implementation": "neon",
+          "ground_truth_match": true,
+          "candidate_count_match": true,
+          "best_candidate_match": true,
+          "second_best_candidate_match": true,
+          "best_score_difference": 0.031583465,
+          "best_score_tolerance": 42.449450610,
+          "best_score_within_tolerance": true,
+          "second_best_score_difference": 0.000058304,
+          "second_best_score_tolerance": 0.688776921,
+          "second_best_score_within_tolerance": true,
+          "per_capture_case_count": 2,
+          "per_capture_cases_passed": 2,
+          "error": ""
+        },
+        "memory_bytes": {
+          "reusable_plan_payload": 364744,
+          "per_capture_workspace_payload": 0,
+          "correlation_output_payload": 0,
+          "total_temporary_workspace_payload": 0,
+          "total_temporary_workspace_allocated_capacity": null
+        },
+        "modes": [
+          {
+            "name": "steady-state",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": false,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 3.835912,
+            "speedup_vs_neon": 1.000000,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 15,
+              "total_timed_duration_ms": 1145.118165,
+              "latency_ms": {
+                "median": 76.283625000,
+                "mean": 76.341211000,
+                "standard_deviation": 0.702630965,
+                "minimum": 75.608500000,
+                "maximum": 77.484750000,
+                "p50": 76.283625000,
+                "p95": 77.484750000
+              },
+              "candidate_correlations_per_second": 10738870.891,
+              "complex_macs_per_second": 5498301896.377,
+              "operations_per_sample": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+              "sample_block_duration_ms": [76.577834, 76.283625, 76.320667, 77.433458, 77.180458, 77.184583, 77.484750, 75.792458, 75.647458, 75.759542, 76.685750, 75.711333, 75.710666, 75.608500, 75.737083],
+              "per_sample_latency_ms": [76.577834000, 76.283625000, 76.320667000, 77.433458000, 77.180458000, 77.184583000, 77.484750000, 75.792458000, 75.647458000, 75.759542000, 76.685750000, 75.711333000, 75.710666000, 75.608500000, 75.737083000]
+            },
+            "error": ""
+          },
+          {
+            "name": "per-capture",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 3.869417,
+            "speedup_vs_neon": 1.000000,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 15,
+              "total_timed_duration_ms": 1144.869749,
+              "latency_ms": {
+                "median": 76.052791000,
+                "mean": 76.324649933,
+                "standard_deviation": 0.696660365,
+                "minimum": 75.615792000,
+                "maximum": 77.765958000,
+                "p50": 76.052791000,
+                "p95": 77.765958000
+              },
+              "candidate_correlations_per_second": 10771465.310,
+              "complex_macs_per_second": 5514990238.820,
+              "operations_per_sample": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+              "sample_block_duration_ms": [77.333375, 76.643084, 76.668250, 76.468958, 77.374625, 77.765958, 75.689333, 75.687875, 75.806083, 76.051208, 75.839375, 76.052791, 75.615792, 75.723083, 76.149959],
+              "per_sample_latency_ms": [77.333375000, 76.643084000, 76.668250000, 76.468958000, 77.374625000, 77.765958000, 75.689333000, 75.687875000, 75.806083000, 76.051208000, 75.839375000, 76.052791000, 75.615792000, 75.723083000, 76.149959000]
+            },
+            "error": ""
+          },
+          {
+            "name": "setup-inclusive",
+            "valid": true,
+            "allocations_included": true,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": true,
+            "speedup_vs_reference": 3.789904,
+            "speedup_vs_neon": 1.000000,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 15,
+              "total_timed_duration_ms": 1167.540957,
+              "latency_ms": {
+                "median": 77.665167000,
+                "mean": 77.836063800,
+                "standard_deviation": 1.174370124,
+                "minimum": 76.608583000,
+                "maximum": 80.143333000,
+                "p50": 77.665167000,
+                "p95": 80.143333000
+              },
+              "candidate_correlations_per_second": 10547843.153,
+              "complex_macs_per_second": 5400495694.550,
+              "operations_per_sample": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+              "sample_block_duration_ms": [77.672125, 79.262792, 79.787875, 77.097250, 78.340125, 78.460250, 78.355875, 76.738750, 76.810083, 76.791750, 77.665167, 76.608583, 77.026416, 76.780583, 80.143333],
+              "per_sample_latency_ms": [77.672125000, 79.262792000, 79.787875000, 77.097250000, 78.340125000, 78.460250000, 78.355875000, 76.738750000, 76.810083000, 76.791750000, 77.665167000, 76.608583000, 77.026416000, 76.780583000, 80.143333000]
+            },
+            "error": ""
+          }
+        ]
+      },
+      {
+        "requested_implementation": "sme2",
+        "implementation_class": "sme2-za-vgx4",
+        "mechanism": "za-vgx4-fmla-fmls",
+        "available": true,
+        "executed": true,
+        "unavailable_reason": "",
+        "correctness": {
+          "executed": true,
+          "passed": true,
+          "result_ok": true,
+          "actual_implementation": "sme2",
+          "ground_truth_match": true,
+          "candidate_count_match": true,
+          "best_candidate_match": true,
+          "second_best_candidate_match": true,
+          "best_score_difference": 0.046876519,
+          "best_score_tolerance": 42.449450610,
+          "best_score_within_tolerance": true,
+          "second_best_score_difference": 0.001286029,
+          "second_best_score_tolerance": 0.688776921,
+          "second_best_score_within_tolerance": true,
+          "per_capture_case_count": 2,
+          "per_capture_cases_passed": 2,
+          "error": ""
+        },
+        "memory_bytes": {
+          "reusable_plan_payload": 364744,
+          "per_capture_workspace_payload": 134217728,
+          "correlation_output_payload": 6553600,
+          "total_temporary_workspace_payload": 140771328,
+          "total_temporary_workspace_allocated_capacity": 140771328
+        },
+        "modes": [
+          {
+            "name": "steady-state",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": false,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 5.093861,
+            "speedup_vs_neon": 1.327940,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 15,
+              "total_timed_duration_ms": 863.682708,
+              "latency_ms": {
+                "median": 57.445084000,
+                "mean": 57.578847200,
+                "standard_deviation": 1.347484576,
+                "minimum": 56.097792000,
+                "maximum": 59.483000000,
+                "p50": 57.445084000,
+                "p95": 59.483000000
+              },
+              "candidate_correlations_per_second": 14260576.240,
+              "complex_macs_per_second": 7301415034.923,
+              "operations_per_sample": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+              "sample_block_duration_ms": [56.551666, 56.858000, 57.600250, 59.483000, 57.445084, 58.925292, 56.148292, 56.174000, 56.515125, 56.175041, 57.779334, 59.318708, 56.097792, 59.160583, 59.450541],
+              "per_sample_latency_ms": [56.551666000, 56.858000000, 57.600250000, 59.483000000, 57.445084000, 58.925292000, 56.148292000, 56.174000000, 56.515125000, 56.175041000, 57.779334000, 59.318708000, 56.097792000, 59.160583000, 59.450541000]
+            },
+            "error": ""
+          },
+          {
+            "name": "per-capture",
+            "valid": true,
+            "allocations_included": false,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": false,
+            "speedup_vs_reference": 4.691805,
+            "speedup_vs_neon": 1.212535,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 15,
+              "total_timed_duration_ms": 942.171294,
+              "latency_ms": {
+                "median": 62.722125000,
+                "mean": 62.811419600,
+                "standard_deviation": 0.836366616,
+                "minimum": 61.694042000,
+                "maximum": 64.800834000,
+                "p50": 62.722125000,
+                "p95": 64.800834000
+              },
+              "candidate_correlations_per_second": 13060781.981,
+              "complex_macs_per_second": 6687120374.190,
+              "operations_per_sample": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+              "sample_block_duration_ms": [62.328875, 62.493792, 62.200959, 62.722125, 63.010792, 64.800834, 62.629833, 63.013250, 61.995458, 63.377917, 62.894708, 61.694042, 61.838292, 63.028042, 64.142375],
+              "per_sample_latency_ms": [62.328875000, 62.493792000, 62.200959000, 62.722125000, 63.010792000, 64.800834000, 62.629833000, 63.013250000, 61.995458000, 63.377917000, 62.894708000, 61.694042000, 61.838292000, 63.028042000, 64.142375000]
+            },
+            "error": ""
+          },
+          {
+            "name": "setup-inclusive",
+            "valid": true,
+            "allocations_included": true,
+            "new_capture_preparation_included": true,
+            "reusable_plan_generation_included": true,
+            "speedup_vs_reference": 4.588751,
+            "speedup_vs_neon": 1.210783,
+            "timing": {
+              "sample_count": 15,
+              "total_operation_count": 15,
+              "total_timed_duration_ms": 970.911379,
+              "latency_ms": {
+                "median": 64.144584000,
+                "mean": 64.727425267,
+                "standard_deviation": 1.164637184,
+                "minimum": 63.503666000,
+                "maximum": 67.180417000,
+                "p50": 64.144584000,
+                "p95": 67.180417000
+              },
+              "candidate_correlations_per_second": 12771148.379,
+              "complex_macs_per_second": 6538827970.262,
+              "operations_per_sample": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+              "sample_block_duration_ms": [64.670167, 64.100959, 63.984417, 64.072750, 64.328125, 65.685334, 64.144584, 63.531875, 63.503666, 67.180417, 65.492834, 63.894959, 66.907250, 63.925750, 65.488292],
+              "per_sample_latency_ms": [64.670167000, 64.100959000, 63.984417000, 64.072750000, 64.328125000, 65.685334000, 64.144584000, 63.531875000, 63.503666000, 67.180417000, 65.492834000, 63.894959000, 66.907250000, 63.925750000, 65.488292000]
+            },
+            "error": ""
+          }
+        ]
+      }
+      ]
+    }
+  ],
+  "result_sink": 7805739583713744572,
+  "limitations": [
+    "Results describe one local process run and are not device-independent performance claims.",
+    "No CPU affinity, frequency locking, thermal stabilization, or energy measurement is performed.",
+    "Synthetic workload classes are engineering sweeps, not mission-derived waveform standards.",
+    "Steady-state timing includes score calculation and top-two selection; it is not an instruction-only microbenchmark.",
+    "Per-capture timing reuses the plan and allocations but includes SME2 sample-major packing for every supplied IQ window.",
+    "The setup-inclusive mode includes implementation-specific setup costs and is not expected to rank paths identically to steady state.",
+    "The scalar oracle accumulates in float64; NEON and SME2 use the same float32 weights and float32 accumulation and are correctness-gated against the oracle.",
+    "Reported memory is payload/capacity accounting, not process resident-set size or allocator overhead.",
+    "The legacy Viterbi decoder benchmark is independent and is not evidence for acquisition performance."
+  ]
+}
