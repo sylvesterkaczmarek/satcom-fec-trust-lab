@@ -53,7 +53,7 @@ Implemented acquisition paths:
 | Path | Implementation | Availability behavior |
 | --- | --- | --- |
 | `reference` | Scalar float64 correlation oracle | Portable |
-| `neon` | Float32 NEON complex multiply-accumulate | Runs only when the NEON kernel is compiled |
+| `neon` | Float32 NEON complex multiply-accumulate over timing tiles | Runs only when the NEON kernel is compiled |
 | `sme2` | Float32 ZA VGx4 `FMLA`/`FMLS` across timing tiles | Runs only when SME2 compilation and runtime checks pass |
 
 An unavailable accelerated path reports `unavailable`; it never executes
@@ -120,8 +120,8 @@ bash scripts/verify_sme2_acquisition_assembly.sh
 ```
 
 The first command requires real SME2 execution. The second requires emitted
-streaming-mode boundaries, ZA transfers, and VGx4 ZA `FMLA`/`FMLS`; a feature
-macro alone is insufficient.
+streaming-mode boundaries, vector IQ load/deinterleave, ZA transfers, and VGx4
+ZA `FMLA`/`FMLS`; a feature macro alone is insufficient.
 
 ### Android target
 
@@ -156,46 +156,20 @@ frame-sync evidence, demodulation clipping, and CRC state. The score and bands
 are deterministic demo heuristics, not calibrated probabilities or operational
 assurance levels. See [docs/trust_monitors.md](docs/trust_monitors.md).
 
-## Checked performance evidence
+## Performance evidence
 
-The repository contains one tracked performance result set:
-[benchmarks/results/a83cd53](benchmarks/results/a83cd53/README.md). It contains
-five independent clean-tree process runs from source commit
-`a83cd53ffe153fa69329194174f735d0a972380d`.
+Tracked reports are versioned by benchmarked source commit under
+[`benchmarks/results/`](benchmarks/results/README.md). The existing
+[`a83cd53`](benchmarks/results/a83cd53/README.md) report is retained as
+historical evidence for an earlier four-vector NEON baseline and packed-input
+SME2 implementation. Its JSON remains authoritative for that source commit,
+but its timing and memory values do not describe the current kernels.
 
-Recorded platform and build:
-
-- Apple M5 Pro, device model `Mac17,9`, Darwin 25.6.0 arm64;
-- Apple Clang 21.0.0 (`clang-2100.1.1.101`);
-- common flags `-O3 -DNDEBUG -std=c++17`;
-- reference flags `-fno-vectorize -fno-slp-vectorize`;
-- NEON flags `-mcpu=native+nosve+nosve2+nosme+nosme2`;
-- SME2 flags `-mcpu=native+sme2`, with runtime SME2 and 512-bit streaming
-  vector length reported by the host.
-
-The table below reports **per-capture median latency**, using the median of the
-five process-level medians. Per-capture timing reuses the preamble/CFO plan but
-includes SME2 packing for each new IQ window. The comparison baseline is NEON.
-
-| Workload | Correlations | Reference ms | NEON ms | SME2 ms | NEON latency / SME2 latency across runs | SME2 temporary bytes |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| small | 5,120 | 0.232264 | 0.063225 | 0.051513 | 1.166-1.247x | 565,248 |
-| medium | 36,864 | 3.295987 | 0.855379 | 0.375940 | 2.202-2.290x | 4,489,216 |
-| large | 278,528 | 49.491479 | 12.590271 | 10.323333 | 1.215-1.261x | 35,782,656 |
-| very-large | 819,200 | 291.876208 | 75.972875 | 62.420666 | 1.200-1.217x | 140,771,328 |
-
-In this checked result set, SME2 had lower median latency than NEON in all
-twelve workload/mode combinations. The result does not show a crossover where
-SME2 loses, but it does show strong sensitivity to workload and timing
-contract: small setup-inclusive speedup was only 1.015-1.050x, while medium
-per-capture was 2.202-2.290x. The sample-major SME2 workspace is a significant
-cost and reaches 140,771,328 temporary bytes for `very-large`.
-
-These are local measurements from one computer. CPU affinity, frequency, and
-thermal state were not controlled; energy was not measured. They do not prove
-speedup on another processor, Android phone, capture distribution, or waveform.
-Raw samples, correctness records, execution order, and all three timing modes
-are preserved in the result directory.
+The fixed benchmark reports steady-state, per-capture, and setup-inclusive
+timing. Consecutive timing grids let the current SME2 kernel read interleaved IQ
+directly; arbitrary timing grids require an explicitly reported and timed
+packing step. Results are local process timing: CPU affinity, frequency, and
+thermal state are not controlled, and energy is not measured.
 
 Run a non-authoritative local smoke benchmark with:
 
@@ -221,9 +195,6 @@ fairness contract. CI timing is used only as a smoke check.
   level without relabeling fallback code.
 - Healthy, impaired, ambiguous, CRC-failed, and no-signal inputs produce
   inspectable and reproducible trust diagnostics.
-- On the single checked Apple M5 Pro result set, SME2 acquisition latency was
-  lower than NEON for the fixed synthetic workloads and timing contracts shown
-  above.
 
 ## What it does not prove
 
@@ -236,6 +207,8 @@ fairness contract. CI timing is used only as a smoke check.
 - Android application support or Android performance.
 - General NEON/SME2 speedup, thermal behavior, power, energy, or performance on
   hardware other than the checked result host.
+- Optimality of direct correlation for long windows, long preambles, or dense
+  CFO grids; FFT/filter-bank and hierarchical alternatives are not implemented.
 
 ## Repository map
 

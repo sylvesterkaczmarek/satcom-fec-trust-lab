@@ -100,52 +100,65 @@ done
 OBJECT_ROOT="${ANDROID_BENCHMARK_BUILD_DIR}/CMakeFiles/satcom_replay_core.dir/src/acquisition"
 REFERENCE_OBJECT="${OBJECT_ROOT}/acquisition_reference.cpp.o"
 NEON_OBJECT="${OBJECT_ROOT}/acquisition_neon.cpp.o"
-SME2_OBJECT="${OBJECT_ROOT}/acquisition_sme2.cpp.o"
-for object in "${REFERENCE_OBJECT}" "${NEON_OBJECT}" "${SME2_OBJECT}"; do
+SME2_CONTROL_OBJECT="${OBJECT_ROOT}/acquisition_sme2.cpp.o"
+SME2_KERNEL_OBJECT="${OBJECT_ROOT}/acquisition_sme2_kernel.cpp.o"
+for object in \
+  "${REFERENCE_OBJECT}" \
+  "${NEON_OBJECT}" \
+  "${SME2_CONTROL_OBJECT}" \
+  "${SME2_KERNEL_OBJECT}"; do
   if [[ ! -f "${object}" ]]; then
     echo "error: expected Android acquisition object not found: ${object}" >&2
     exit 1
   fi
 done
 
-NEON_DISASSEMBLY="$(${OBJDUMP} -d "${NEON_OBJECT}")"
-REFERENCE_DISASSEMBLY="$(${OBJDUMP} -d "${REFERENCE_OBJECT}")"
-if ! grep -Eq '(ld2|uzp1|uzp2)[[:space:]]' <<<"${NEON_DISASSEMBLY}"; then
-  echo "error: Android NEON object lacks vector deinterleave evidence" >&2
-  exit 1
-fi
-if ! grep -Eq '(fmul|fmla|fmls)[[:space:]].*v[0-9]+\.' <<<"${NEON_DISASSEMBLY}"; then
-  echo "error: Android NEON object lacks vector floating-point evidence" >&2
-  exit 1
-fi
-if grep -Eq '(ld2|uzp1|uzp2)[[:space:]]' <<<"${REFERENCE_DISASSEMBLY}" &&
-   grep -Eq '(fmul|fmla|fmls)[[:space:]].*v[0-9]+\.' <<<"${REFERENCE_DISASSEMBLY}"; then
-  echo "error: scalar reference object contains the equivalent NEON kernel sequence" >&2
-  exit 1
-fi
+NEON_DISASSEMBLY_FILE="${OUTPUT_DIR}/acquisition_neon.disassembly.txt"
+REFERENCE_DISASSEMBLY_FILE="${OUTPUT_DIR}/acquisition_reference.disassembly.txt"
+"${OBJDUMP}" -d "${NEON_OBJECT}" >"${NEON_DISASSEMBLY_FILE}"
+"${OBJDUMP}" -d "${REFERENCE_OBJECT}" >"${REFERENCE_DISASSEMBLY_FILE}"
+bash "${ROOT_DIR}/scripts/check_neon_disassembly.sh" \
+  "${NEON_DISASSEMBLY_FILE}" "${REFERENCE_DISASSEMBLY_FILE}"
 
 if [[ "${SATCOMFEC_ANDROID_SME2_COMPILED}" == "ON" ]]; then
-  SME2_DISASSEMBLY="$(${OBJDUMP} -d "${SME2_OBJECT}")"
+  SME2_DISASSEMBLY_FILE="${OUTPUT_DIR}/acquisition_sme2.disassembly.txt"
+  SME2_CONTROL_DISASSEMBLY_FILE="${OUTPUT_DIR}/acquisition_sme2_control.disassembly.txt"
+  "${OBJDUMP}" -d "${SME2_KERNEL_OBJECT}" >"${SME2_DISASSEMBLY_FILE}"
+  "${OBJDUMP}" -d "${SME2_CONTROL_OBJECT}" >"${SME2_CONTROL_DISASSEMBLY_FILE}"
   for pattern in 'smstart' 'smstop' 'fmla.*za\.s.*vgx4' 'fmls.*za\.s.*vgx4'; do
-    if ! grep -Eq "${pattern}" <<<"${SME2_DISASSEMBLY}"; then
+    if ! grep -Eq "${pattern}" "${SME2_DISASSEMBLY_FILE}"; then
       echo "error: Android SME2 object lacks instruction pattern: ${pattern}" >&2
       exit 1
     fi
   done
+  if grep -Eiq '(^|[[:space:]])ld2w[[:space:]]' "${SME2_DISASSEMBLY_FILE}"; then
+    SME2_INPUT_LOAD_EVIDENCE='predicated SVE LD2W deinterleaving load'
+  elif grep -Eiq '(^|[[:space:]])ld1w[[:space:]]' "${SME2_DISASSEMBLY_FILE}" &&
+       grep -Eiq '(^|[[:space:]])uzp[12][[:space:]]' "${SME2_DISASSEMBLY_FILE}"; then
+    SME2_INPUT_LOAD_EVIDENCE='predicated SVE loads plus explicit UZP deinterleaving'
+  else
+    echo "error: Android SME2 object lacks interleaved-IQ vector load evidence" >&2
+    exit 1
+  fi
+  if grep -Eiq \
+    'smstart|smstop|(^|[[:space:],{])z[0-9]+[.][bhsd]|(^|[[:space:]])(ptrue|whilel[ot]|ld[1-4][bhwd]|st[1-4][bhwd])[[:space:]]|(fmla|fmls).*za\.[sd]' \
+    "${SME2_CONTROL_DISASSEMBLY_FILE}"; then
+    echo "error: Android SME2 control/workspace object contains SVE/SME instructions" >&2
+    exit 1
+  fi
 fi
 
 echo "Android ELF evidence:"
 grep -E 'Type:|Machine:' <<<"${ELF_HEADER}"
 echo "Android runtime libraries:"
 grep 'NEEDED' <<<"${DYNAMIC_SECTION}"
-echo "NEON instruction evidence:"
-grep -E '(ld2|uzp1|uzp2|fmul|fmla|fmls)[[:space:]]' <<<"${NEON_DISASSEMBLY}" | sed -n '1,8p'
-echo "Scalar reference contains no equivalent checked NEON sequence."
 
 if [[ "${SATCOMFEC_ANDROID_SME2_COMPILED}" == "ON" ]]; then
   echo "SME2 instruction evidence:"
   grep -E 'smstart|smstop|fmla.*za\.s.*vgx4|fmls.*za\.s.*vgx4' \
-    <<<"${SME2_DISASSEMBLY}" | sed -n '1,8p'
+    "${SME2_DISASSEMBLY_FILE}" | sed -n '1,8p'
+  echo "SME2 input load/deinterleave: ${SME2_INPUT_LOAD_EVIDENCE}"
+  echo "Generic SME2 control/workspace object contains no checked SVE/SME instructions."
 else
   echo "SME2 kernel was not compiled by this NDK build."
 fi

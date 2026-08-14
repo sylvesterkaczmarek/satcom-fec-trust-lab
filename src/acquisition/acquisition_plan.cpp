@@ -15,6 +15,18 @@ bool finite_iq(const ComplexF& sample) {
     return std::isfinite(sample.real()) && std::isfinite(sample.imag());
 }
 
+bool timing_offsets_are_contiguous(
+    const std::vector<std::size_t>& timing_offsets) {
+    const std::size_t first = timing_offsets.front();
+    for (std::size_t index = 1; index < timing_offsets.size(); ++index) {
+        if (first > std::numeric_limits<std::size_t>::max() - index ||
+            timing_offsets[index] != first + index) {
+            return false;
+        }
+    }
+    return true;
+}
+
 }  // namespace
 
 bool prepare_acquisition_plan(
@@ -86,6 +98,9 @@ bool prepare_acquisition_plan(
     plan.sample_rate_hz = config.sample_rate_hz;
     plan.preamble_length = preamble.size();
     plan.timing_offsets = config.timing_offsets;
+    plan.contiguous_timing_start = config.timing_offsets.front();
+    plan.timing_offsets_contiguous =
+        timing_offsets_are_contiguous(config.timing_offsets);
     plan.frequency_hypotheses.reserve(config.frequency_offsets_hz.size());
     plan.matched_filter_weights_real_f32.reserve(flattened_weight_count);
     plan.matched_filter_weights_imag_f32.reserve(flattened_weight_count);

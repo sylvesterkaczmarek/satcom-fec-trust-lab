@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -122,6 +123,33 @@ class HostReplayTests(unittest.TestCase):
             result["trust_breakdown"]["score"],
             places=6,
         )
+
+    def test_replay_detection_does_not_require_fixture_metadata(self) -> None:
+        source_iq = ROOT_DIR / "data/synthetic/canned_replay/demo_conv_bpsk.iq"
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            iq_copy = Path(temporary_directory) / "capture_without_metadata.iq"
+            shutil.copyfile(source_iq, iq_copy)
+            result = run_json_command(
+                "bash",
+                "scripts/run_replay_demo.sh",
+                str(iq_copy),
+                "viterbi-reference",
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["metadata_path"], "")
+        self.assertFalse(result["acquisition"]["ground_truth"]["available"])
+        self.assertTrue(result["acquisition"]["acquisition_success"])
+        self.assertEqual(
+            result["acquisition"]["detected_timing_offset"],
+            self.metadata["true_timing_offset"],
+        )
+        self.assertEqual(
+            result["acquisition"]["detected_cfo_hz"],
+            self.metadata["true_cfo_hz"],
+        )
+        self.assertEqual(result["decoded_text"], self.metadata["message"])
+        self.assertTrue(result["crc_ok"])
 
     def test_decoder_entrypoints_align_on_same_prepared_frame(self) -> None:
         result = run_json_command(

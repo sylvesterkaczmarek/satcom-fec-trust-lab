@@ -26,8 +26,10 @@ bash scripts/verify_android_benchmark_build.sh --sme2 auto
 The output is `build/android/arm64-v8a/benchmark_acquisition`. The
 benchmark-only CMake mode is `SATCOMFEC_ANDROID_BENCHMARK_ONLY=ON`. Reference
 code retains scalar auto-vectorization controls, the NEON source is built for
-baseline Armv8-A SIMD, and only `src/acquisition/acquisition_sme2.cpp` receives
-the SME2 target flag.
+baseline Armv8-A SIMD, and only
+`src/acquisition/acquisition_sme2_kernel.cpp` receives the SME2 target flag.
+Runtime detection and optional workspace preparation remain in a generic
+translation unit.
 
 `--sme2 auto` prints whether the resulting binary contains the SME2 kernel.
 Use `--sme2 on` when compilation of that kernel is a test requirement.

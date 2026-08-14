@@ -28,7 +28,7 @@ help:
 	  '  make benchmark-android-build Build the arm64-v8a ADB benchmark' \
 	  '  make benchmark-android-verify Inspect the Android ELF and SIMD objects' \
 	  '  make benchmark-android-run Build and run it on an authorized ADB device' \
-  '  make experiment-viterbi-branch-metrics Run the historical FEC microbenchmark' \
+	  '  make experiment-viterbi-branch-metrics Run the historical FEC microbenchmark' \
 	  '  make test            Run the host-side automated tests' \
 	  '  make regenerate      Regenerate the checked-in synthetic fixtures'
 

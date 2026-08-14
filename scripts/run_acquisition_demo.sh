@@ -3,7 +3,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="${ROOT_DIR}/build/host_replay"
+BUILD_DIR="${SATCOMFEC_BUILD_DIR:-${ROOT_DIR}/build/host_replay}"
+if [[ "${BUILD_DIR}" != /* ]]; then
+  BUILD_DIR="${ROOT_DIR}/${BUILD_DIR}"
+fi
 BIN_PATH="${BUILD_DIR}/acquisition_demo"
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
@@ -31,7 +34,8 @@ if [[ ! -f "${METADATA_PATH}" ]]; then
   exit 1
 fi
 
-"${ROOT_DIR}/scripts/build_host_tools.sh" acquisition_demo
+SATCOMFEC_BUILD_DIR="${BUILD_DIR}" \
+  "${ROOT_DIR}/scripts/build_host_tools.sh" acquisition_demo
 "${BIN_PATH}" \
   --iq "${IQ_PATH}" \
   --metadata "${METADATA_PATH}" \

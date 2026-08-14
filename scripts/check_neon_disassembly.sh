@@ -23,7 +23,7 @@ LD2_F32_PATTERN='(^|[[:space:]])ld2.*[.]4s'
 VECTOR_LOAD_PATTERN='(^|[[:space:]])(ldr|ldur)[[:space:]]+q[0-9]+|(^|[[:space:]])ldp[[:space:]]+q[0-9]+|(^|[[:space:]])ld1.*[.]4s'
 UZP1_F32_PATTERN='(^|[[:space:]])uzp1.*[.]4s'
 UZP2_F32_PATTERN='(^|[[:space:]])uzp2.*[.]4s'
-VECTOR_MULTIPLY_PATTERN='(^|[[:space:]])fmul.*[.]4s'
+VECTOR_PRODUCT_PATTERN='(^|[[:space:]])(fmul|fmla|fmls).*[.]4s'
 VECTOR_ACCUMULATE_PATTERN='(^|[[:space:]])(fmla|fmls|fadd|fsub).*[.]4s'
 
 has_pattern() {
@@ -54,8 +54,8 @@ if ! has_deinterleaving_load "${NEON_ASSEMBLY}"; then
   echo "error: expected a float32 LD2 or vector-load plus UZP1/UZP2 deinterleave sequence" >&2
   exit 1
 fi
-if ! has_pattern "${VECTOR_MULTIPLY_PATTERN}" "${NEON_ASSEMBLY}"; then
-  echo "error: expected float32 vector multiply arithmetic was not found" >&2
+if ! has_pattern "${VECTOR_PRODUCT_PATTERN}" "${NEON_ASSEMBLY}"; then
+  echo "error: expected float32 vector multiply or multiply-accumulate arithmetic was not found" >&2
   exit 1
 fi
 if ! has_pattern "${VECTOR_ACCUMULATE_PATTERN}" "${NEON_ASSEMBLY}"; then
@@ -64,7 +64,7 @@ if ! has_pattern "${VECTOR_ACCUMULATE_PATTERN}" "${NEON_ASSEMBLY}"; then
 fi
 
 if has_deinterleaving_load "${REFERENCE_ASSEMBLY}" &&
-  has_pattern "${VECTOR_MULTIPLY_PATTERN}" "${REFERENCE_ASSEMBLY}" &&
+  has_pattern "${VECTOR_PRODUCT_PATTERN}" "${REFERENCE_ASSEMBLY}" &&
   has_pattern "${VECTOR_ACCUMULATE_PATTERN}" "${REFERENCE_ASSEMBLY}"; then
   echo "error: scalar reference object contains an equivalent acquisition vector sequence" >&2
   exit 1
@@ -80,7 +80,7 @@ else
   print_evidence "  UZP1 instructions" "${UZP1_F32_PATTERN}" "${NEON_ASSEMBLY}"
   print_evidence "  UZP2 instructions" "${UZP2_F32_PATTERN}" "${NEON_ASSEMBLY}"
 fi
-print_evidence "  vector multiplies" "${VECTOR_MULTIPLY_PATTERN}" "${NEON_ASSEMBLY}"
+print_evidence "  vector multiply operations" "${VECTOR_PRODUCT_PATTERN}" "${NEON_ASSEMBLY}"
 print_evidence "  vector accumulation" "${VECTOR_ACCUMULATE_PATTERN}" "${NEON_ASSEMBLY}"
 
 echo "Scalar reference evidence: no complete deinterleave/multiply/accumulate sequence found."

@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERIFY_ROOT="${ROOT_DIR}/build/verify"
 PORTABLE_BUILD="${VERIFY_ROOT}/portable"
 SANITIZER_BUILD="${VERIFY_ROOT}/sanitizers"
+WORKFLOW_BUILD="${VERIFY_ROOT}/workflow"
 
 require_command() {
   local command_name="$1"
@@ -39,6 +40,7 @@ ctest --test-dir "${PORTABLE_BUILD}" --output-on-failure
 
 echo
 echo "== Supported replay, trust, acquisition, and FEC scripts =="
+export SATCOMFEC_BUILD_DIR="${WORKFLOW_BUILD}"
 bash "${ROOT_DIR}/scripts/check_replay_demo.sh"
 bash "${ROOT_DIR}/scripts/compare_trust_cases.sh"
 bash "${ROOT_DIR}/scripts/check_acquisition_demo.sh"
@@ -49,7 +51,8 @@ bash "${ROOT_DIR}/scripts/check_branch_metrics.sh"
 
 echo
 echo "== Python regression suite =="
-python3 -m unittest discover -s "${ROOT_DIR}/tests" -v
+SATCOMFEC_TEST_BUILD_DIR="${WORKFLOW_BUILD}" \
+  python3 -m unittest discover -s "${ROOT_DIR}/tests" -v
 
 echo
 echo "== Portable ASan/UBSan build =="

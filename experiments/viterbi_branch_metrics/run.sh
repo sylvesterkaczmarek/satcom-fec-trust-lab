@@ -3,7 +3,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-BUILD_DIR="${ROOT_DIR}/build/host_replay"
+BUILD_DIR="${SATCOMFEC_BUILD_DIR:-${ROOT_DIR}/build/host_replay}"
+if [[ "${BUILD_DIR}" != /* ]]; then
+  BUILD_DIR="${ROOT_DIR}/${BUILD_DIR}"
+fi
 BIN_PATH="${BUILD_DIR}/viterbi_branch_metric_experiment"
 IQ_PATH="${1:-${ROOT_DIR}/data/synthetic/canned_replay/demo_conv_bpsk.iq}"
 WARMUP="${2:-10}"
@@ -25,7 +28,7 @@ if [[ ! -f "${IQ_PATH}" ]]; then
   exit 1
 fi
 
-mkdir -p "${BUILD_DIR}"
-"${ROOT_DIR}/scripts/build_host_tools.sh" viterbi_branch_metric_experiment
+SATCOMFEC_BUILD_DIR="${BUILD_DIR}" \
+  "${ROOT_DIR}/scripts/build_host_tools.sh" viterbi_branch_metric_experiment
 
 "${BIN_PATH}" --iq "${IQ_PATH}" --warmup "${WARMUP}" --iterations "${ITERATIONS}"

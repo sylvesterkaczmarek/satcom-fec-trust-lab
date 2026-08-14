@@ -69,20 +69,23 @@ ambiguous fixture's runner-up to match its injected distractor, and regenerate
 all fixture bytes twice to verify deterministic output.
 
 The scalar kernel is the correctness oracle. A separate Arm NEON translation
-unit evaluates the same candidate grid using four-lane float32 complex
-multiply-accumulate operations and a scalar tail for lengths not divisible by
-four. The NEON path uses float32 prepared weights and accumulation, while the
-reference path retains double-precision weights and accumulation. Supporting
-GCC/Clang builds disable loop and SLP auto-vectorization specifically for the
-reference translation unit; Arm target flags are applied only to intrinsic
-sources.
+unit evaluates consecutive timing hypotheses in tiles of up to eight 128-bit
+vectors. Each lane holds one timing correlation, so each float32 CFO/preamble
+weight is reused across as many as 32 candidates before the sample index
+advances. Smaller timing tiles, arbitrary timing grids, odd preamble lengths,
+and tails use explicit checked paths. The reference retains float64 weights
+and accumulation. Supporting GCC/Clang builds disable loop and SLP
+auto-vectorization specifically for the reference translation unit; Arm target
+flags are applied only to intrinsic sources.
 
-The opt-in SME2 translation unit evaluates the same grid with float32 weights
-and accumulation. It groups timing hypotheses into four scalable vectors and
-uses SME2 VGx4 multiply-add and multiply-subtract operations with ZA
-accumulators. Its packed workspace is prepared before the kernel call. Score
-calculation and top-two candidate selection remain scalar. The implementation
-and streaming boundary are specified in `docs/sme2_acquisition.md`.
+The opt-in SME2 kernel translation unit evaluates the same grid with float32
+weights and accumulation. It groups timing hypotheses into four scalable
+vectors and uses SME2 VGx4 multiply-add and multiply-subtract operations with
+ZA accumulators. Consecutive timing grids are read directly from interleaved
+IQ with predicated `LD2W`; non-contiguous grids use an explicitly reported
+sample-major packing step. Score calculation and top-two candidate selection
+remain scalar. The target-specific kernel and generic runtime/workspace code
+are separate translation units, as specified in `docs/sme2_acquisition.md`.
 
 The CLI accepts `--implementation reference|neon|sme2`. A NEON or SME2 request
 on a build without the selected intrinsic kernel returns
@@ -95,13 +98,19 @@ plus a relative tolerance of `2e-4`. Direct deterministic kernel cases use a
 forward-error bound per real/imaginary correlation component:
 
 ```text
-32 * float_epsilon * preamble_length *
+8 * float_epsilon * preamble_length *
     sum(abs(received[n]) * abs(weight[n]))
 ```
 
 The score bound is propagated from that complex-correlation bound. The safety
 factor covers float32 weight rounding, accumulation order, fused multiply-add
 behavior, and path-specific tail handling.
+
+An independent Python test constructs its own odd-length preamble and capture,
+computes every timing/CFO correlation directly from the equation above, and
+checks the C++ reference's complex result, score, best candidate, and
+second-best candidate. This prevents agreement among the three C++ paths from
+being the only evidence for the sign and conjugation convention.
 
 ## Workload size
 
@@ -116,3 +125,13 @@ Unlike the short Viterbi branch-metric experiment, acquisition operates on
 longer IQ windows and exposes independent work across timing/CFO candidates
 and preamble samples. This defines the workload shape only; it is not a
 performance claim.
+
+The implemented search is direct correlation with complexity proportional to
+`timing hypotheses * CFO hypotheses * preamble length`. That is a reasonable
+reference and SIMD workload for bounded timing/CFO grids and short known
+preambles. It is not asserted to be the best acquisition algorithm at every
+size. For long windows, long preambles, or dense frequency grids, overlap-save
+FFT correlation, polyphase/filter-bank search, or hierarchical acquisition may
+reduce total work. The repository does not implement or benchmark those
+alternatives, so `large` and `very-large` are direct-kernel stress sweeps rather
+than claims about an optimal receiver architecture.

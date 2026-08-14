@@ -12,7 +12,8 @@ from pathlib import Path
 
 REFERENCE_SOURCE = "src/acquisition/acquisition_reference.cpp"
 NEON_SOURCE = "src/acquisition/acquisition_neon.cpp"
-SME2_SOURCE = "src/acquisition/acquisition_sme2.cpp"
+SME2_CONTROL_SOURCE = "src/acquisition/acquisition_sme2.cpp"
+SME2_SOURCE = "src/acquisition/acquisition_sme2_kernel.cpp"
 FEC_NEON_SOURCE = "src/fec/viterbi_decoder_neon.cpp"
 FEC_STREAMING_VECTOR_SOURCE = "src/fec/branch_metrics_streaming_vector.cpp"
 GENERIC_FEC_SOURCE = "src/fec/convolutional_codec.cpp"
@@ -103,7 +104,12 @@ def main() -> int:
         key = source_key(entry, root)
         commands.setdefault(key, command_tokens(entry))
 
-    for required_source in (REFERENCE_SOURCE, NEON_SOURCE, SME2_SOURCE):
+    for required_source in (
+        REFERENCE_SOURCE,
+        NEON_SOURCE,
+        SME2_CONTROL_SOURCE,
+        SME2_SOURCE,
+    ):
         if required_source not in commands:
             fail(f"missing compile command for {required_source}")
 
@@ -111,8 +117,14 @@ def main() -> int:
     reference_arch = architecture_flags(reference_tokens)
     if any(is_scalable_target_flag(token) for token in reference_arch):
         fail("scalar acquisition reference received an SVE/SME target flag")
-    if has_definition(reference_tokens, "SATCOMFEC_ACQUISITION_NEON_COMPILED") or has_definition(
-        reference_tokens, "SATCOMFEC_ACQUISITION_SME2_COMPILED"
+    if (
+        has_definition(reference_tokens, "SATCOMFEC_ACQUISITION_NEON_COMPILED")
+        or has_definition(
+            reference_tokens, "SATCOMFEC_ACQUISITION_SME2_KERNEL_COMPILED"
+        )
+        or has_definition(
+            reference_tokens, "SATCOMFEC_ACQUISITION_SME2_KERNEL_AVAILABLE"
+        )
     ):
         fail("scalar acquisition reference received an accelerated-kernel definition")
     if not any(
@@ -127,9 +139,19 @@ def main() -> int:
         fail("scalar acquisition reference is missing SLP-vectorization control")
 
     neon_tokens = commands[NEON_SOURCE]
+    sme2_control_tokens = commands[SME2_CONTROL_SOURCE]
     sme2_tokens = commands[SME2_SOURCE]
     if any(is_sme2_target_flag(token) for token in architecture_flags(neon_tokens)):
         fail("NEON acquisition source received an SME2 target flag")
+    if any(
+        is_scalable_target_flag(token)
+        for token in architecture_flags(sme2_control_tokens)
+    ):
+        fail("SME2 runtime control and workspace source received an SVE/SME target flag")
+    if has_definition(
+        sme2_control_tokens, "SATCOMFEC_ACQUISITION_SME2_KERNEL_COMPILED"
+    ):
+        fail("SME2 runtime control source was labeled as the target-specific kernel")
 
     sme2_target_sources = {
         source
@@ -146,8 +168,14 @@ def main() -> int:
     if arguments.expect == "sme2":
         if not any(is_sme2_target_flag(token) for token in architecture_flags(sme2_tokens)):
             fail("SME2 acquisition source has no SME2 target flag")
-        if not has_definition(sme2_tokens, "SATCOMFEC_ACQUISITION_SME2_COMPILED"):
+        if not has_definition(
+            sme2_tokens, "SATCOMFEC_ACQUISITION_SME2_KERNEL_COMPILED"
+        ):
             fail("SME2 acquisition source has no compiled-kernel definition")
+        if not has_definition(
+            sme2_control_tokens, "SATCOMFEC_ACQUISITION_SME2_KERNEL_AVAILABLE"
+        ):
+            fail("SME2 runtime control source has no kernel-availability definition")
         if SME2_SOURCE not in sme2_target_sources:
             fail("SME2 acquisition source was not identified as SME2-targeted")
         streaming_tokens = commands.get(FEC_STREAMING_VECTOR_SOURCE, [])
@@ -163,8 +191,14 @@ def main() -> int:
     else:
         if sme2_target_sources:
             fail(f"{arguments.expect} build unexpectedly contains SME2-targeted sources")
-        if has_definition(sme2_tokens, "SATCOMFEC_ACQUISITION_SME2_COMPILED"):
+        if has_definition(
+            sme2_tokens, "SATCOMFEC_ACQUISITION_SME2_KERNEL_COMPILED"
+        ):
             fail(f"{arguments.expect} build labels the SME2 acquisition kernel compiled")
+        if has_definition(
+            sme2_control_tokens, "SATCOMFEC_ACQUISITION_SME2_KERNEL_AVAILABLE"
+        ):
+            fail(f"{arguments.expect} build labels an SME2 kernel available")
 
     if arguments.expect == "neon" and not has_definition(
         neon_tokens, "SATCOMFEC_ACQUISITION_NEON_COMPILED"
@@ -182,6 +216,7 @@ def main() -> int:
     for source in (
         REFERENCE_SOURCE,
         NEON_SOURCE,
+        SME2_CONTROL_SOURCE,
         SME2_SOURCE,
         FEC_NEON_SOURCE,
         FEC_STREAMING_VECTOR_SOURCE,
@@ -196,7 +231,10 @@ def main() -> int:
                 tokens, "SATCOMFEC_ACQUISITION_NEON_COMPILED"
             ) or has_definition(tokens, "SATCOMFEC_FEC_NEON_COMPILED"),
             "sme2_kernel_definition": has_definition(
-                tokens, "SATCOMFEC_ACQUISITION_SME2_COMPILED"
+                tokens, "SATCOMFEC_ACQUISITION_SME2_KERNEL_COMPILED"
+            ),
+            "sme2_kernel_available_definition": has_definition(
+                tokens, "SATCOMFEC_ACQUISITION_SME2_KERNEL_AVAILABLE"
             ),
             "streaming_vector_definition": has_definition(
                 tokens, "SATCOMFEC_FEC_STREAMING_VECTOR_COMPILED"

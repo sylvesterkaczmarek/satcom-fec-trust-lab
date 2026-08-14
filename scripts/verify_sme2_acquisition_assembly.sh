@@ -38,11 +38,13 @@ echo "Running SME2 equivalence with execution required:"
 "${BUILD_DIR}/check_sme2_acquisition" --require-sme2
 
 if command -v cmake >/dev/null 2>&1; then
-  object_path="${BUILD_DIR}/CMakeFiles/satcom_replay_core.dir/src/acquisition/acquisition_sme2.cpp.o"
+  object_path="${BUILD_DIR}/CMakeFiles/satcom_replay_core.dir/src/acquisition/acquisition_sme2_kernel.cpp.o"
+  control_object_path="${BUILD_DIR}/CMakeFiles/satcom_replay_core.dir/src/acquisition/acquisition_sme2.cpp.o"
   neon_object_path="${BUILD_DIR}/CMakeFiles/satcom_replay_core.dir/src/acquisition/acquisition_neon.cpp.o"
   reference_object_path="${BUILD_DIR}/CMakeFiles/satcom_replay_core.dir/src/acquisition/acquisition_reference.cpp.o"
 else
-  object_path="${BUILD_DIR}/direct_objects/acquisition_sme2.o"
+  object_path="${BUILD_DIR}/direct_objects/acquisition_sme2_kernel.o"
+  control_object_path="${BUILD_DIR}/direct_objects/acquisition_sme2.o"
   neon_object_path="${BUILD_DIR}/direct_objects/acquisition_neon.o"
   reference_object_path="${BUILD_DIR}/direct_objects/acquisition_reference.o"
 fi
@@ -52,6 +54,10 @@ if [[ ! -f "${object_path}" ]]; then
 fi
 if [[ ! -f "${reference_object_path}" ]]; then
   echo "error: scalar acquisition reference object was not found" >&2
+  exit 1
+fi
+if [[ ! -f "${control_object_path}" ]]; then
+  echo "error: generic SME2 control/workspace object was not found" >&2
   exit 1
 fi
 if [[ ! -f "${neon_object_path}" ]]; then
@@ -68,10 +74,13 @@ if command -v nm >/dev/null 2>&1; then
 fi
 
 assembly_file="${BUILD_DIR}/acquisition_sme2.disassembly.txt"
+control_assembly_file="${BUILD_DIR}/acquisition_sme2_control.disassembly.txt"
 neon_assembly_file="${BUILD_DIR}/acquisition_neon_sme2_build.disassembly.txt"
 reference_assembly_file="${BUILD_DIR}/acquisition_reference_sme2_check.disassembly.txt"
 if command -v llvm-objdump >/dev/null 2>&1; then
   llvm-objdump --disassemble --no-show-raw-insn "${object_path}" >"${assembly_file}"
+  llvm-objdump --disassemble --no-show-raw-insn \
+    "${control_object_path}" >"${control_assembly_file}"
   llvm-objdump --disassemble --no-show-raw-insn \
     "${neon_object_path}" >"${neon_assembly_file}"
   llvm-objdump --disassemble --no-show-raw-insn \
@@ -81,15 +90,19 @@ elif command -v xcrun >/dev/null 2>&1 && \
   xcrun llvm-objdump --disassemble --no-show-raw-insn \
     "${object_path}" >"${assembly_file}"
   xcrun llvm-objdump --disassemble --no-show-raw-insn \
+    "${control_object_path}" >"${control_assembly_file}"
+  xcrun llvm-objdump --disassemble --no-show-raw-insn \
     "${neon_object_path}" >"${neon_assembly_file}"
   xcrun llvm-objdump --disassemble --no-show-raw-insn \
     "${reference_object_path}" >"${reference_assembly_file}"
 elif command -v objdump >/dev/null 2>&1; then
   objdump -d "${object_path}" >"${assembly_file}"
+  objdump -d "${control_object_path}" >"${control_assembly_file}"
   objdump -d "${neon_object_path}" >"${neon_assembly_file}"
   objdump -d "${reference_object_path}" >"${reference_assembly_file}"
 elif command -v otool >/dev/null 2>&1; then
   otool -tvV "${object_path}" >"${assembly_file}"
+  otool -tvV "${control_object_path}" >"${control_assembly_file}"
   otool -tvV "${neon_object_path}" >"${neon_assembly_file}"
   otool -tvV "${reference_object_path}" >"${reference_assembly_file}"
 else
@@ -113,28 +126,45 @@ require_instruction "SME2 VGx4 ZA FMLS" 'fmls.*za\.s.*vgx4'
 require_instruction "VGx4 transfer into ZA" 'mov.*za\.[ds].*vgx4'
 require_instruction "VGx4 transfer from ZA" 'mov.*\{[^}]*z[0-9]+[^}]*\}.*za\.[ds].*vgx4'
 
+if grep -Eiq '(^|[[:space:]])ld2w[[:space:]]' "${assembly_file}"; then
+  input_load_evidence='predicated SVE LD2W deinterleaving load'
+elif grep -Eiq '(^|[[:space:]])ld1w[[:space:]]' "${assembly_file}" &&
+     grep -Eiq '(^|[[:space:]])uzp[12][[:space:]]' "${assembly_file}"; then
+  input_load_evidence='predicated SVE loads plus explicit UZP deinterleaving'
+else
+  echo "error: expected direct interleaved-IQ vector load/deinterleave evidence was not found" >&2
+  exit 1
+fi
+
 if grep -Eiq '(fmla|fmls).*za\.[sd].*vgx4' \
   "${reference_assembly_file}"; then
   echo "error: scalar reference object contains SME2 ZA VGx4 instructions" >&2
   exit 1
 fi
 
+scalable_or_matrix_pattern='smstart|smstop|(^|[[:space:],{])z[0-9]+[.][bhsd]|(^|[[:space:]])(ptrue|whilel[ot]|ld[1-4][bhwd]|st[1-4][bhwd])[[:space:]]|(fmla|fmls).*za\.[sd]'
+if grep -Eiq "${scalable_or_matrix_pattern}" "${control_assembly_file}"; then
+  echo "error: generic SME2 control/workspace object contains scalable-vector or SME instructions" >&2
+  grep -m 20 -Ei "${scalable_or_matrix_pattern}" "${control_assembly_file}" >&2
+  exit 1
+fi
+
 echo
 echo "Verified SME2 instruction evidence:"
 grep -m 20 -Ei \
-  'smstart|smstop|(fmla|fmls).*za\.[sd].*vgx4|mov.*(za\.[ds].*vgx4|\{[^}]*z[0-9]+[^}]*\}.*za\.[ds])' \
+  'smstart|smstop|ld2w|(fmla|fmls).*za\.[sd].*vgx4|mov.*(za\.[ds].*vgx4|\{[^}]*z[0-9]+[^}]*\}.*za\.[ds])' \
   "${assembly_file}"
+echo "  input load/deinterleave: ${input_load_evidence}"
 
 echo
 echo "Scalar reference object contains none of the checked SME2 ZA VGx4 patterns."
+echo "Generic SME2 control/workspace object contains no checked SVE/SME instructions."
 
 echo
 bash "${ROOT_DIR}/scripts/check_neon_disassembly.sh" \
   "${neon_assembly_file}" "${reference_assembly_file}"
 
-if grep -Eiq \
-  'smstart|smstop|(^|[[:space:],{])z[0-9]+[.][bhsd]|(^|[[:space:]])(ptrue|whilel[ot]|ld1[bhwd]|st1[bhwd])[[:space:]]' \
-  "${neon_assembly_file}"; then
+if grep -Eiq "${scalable_or_matrix_pattern}" "${neon_assembly_file}"; then
   echo "error: NEON comparison object contains scalable-vector or SME instructions" >&2
   exit 1
 fi

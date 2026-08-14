@@ -8,21 +8,27 @@ shared by all timing hypotheses. The SME2 path therefore uses timing as its
 parallel dimension rather than expanding a separate weight vector for every
 candidate.
 
-`prepare_sme2_acquisition_workspace` packs received samples as two float32
-sample-major arrays:
+For the consecutive timing grids used by replay and the fixed benchmark,
+samples for adjacent timing hypotheses are already adjacent in interleaved IQ.
+The kernel reads them directly with predicated `LD2W` loads; no input copy or
+sample-major workspace is required.
+
+Arbitrary non-contiguous timing grids cannot use that layout. For those grids,
+`prepare_sme2_acquisition_workspace` explicitly packs complex float32 samples
+as:
 
 ```text
-received_real[sample][timing]
-received_imag[sample][timing]
+received_by_sample_and_timing[sample][timing]
 ```
 
 The acquisition plan stores precomputed matched-filter weights as
-`weight_real[cfo][sample]` and `weight_imag[cfo][sample]`. Packing, allocation,
-and CFO-weight generation occur before the prepared kernel call.
+`weight_real[cfo][sample]` and `weight_imag[cfo][sample]`. CFO-weight generation
+occurs before the prepared kernel call. The workspace reports whether packing
+was required, and per-capture timing includes it when it is required.
 
 ## SME2 mechanism
 
-`src/acquisition/acquisition_sme2.cpp` processes `4 * SVL.W` timing hypotheses
+`src/acquisition/acquisition_sme2_kernel.cpp` processes `4 * SVL.W` timing hypotheses
 per batch. Four scalable vectors are transferred to a ZA vector group. Two ZA
 groups hold the real and imaginary correlation accumulators:
 
@@ -34,9 +40,11 @@ imag += received_imag * weight_real
 ```
 
 The implementation uses SME2 VGx4 `FMLA` and `FMLS` ACLE intrinsics targeting
-ZA, plus VGx4 ZA write/read intrinsics. Predicated loads and stores handle any
-timing count, including a final batch shorter than the streaming vector length.
-This is a ZA-backed SME2 multi-vector kernel, not an SVE loop labeled as SME2.
+ZA, plus VGx4 ZA write/read intrinsics. Predicated `LD2W` loads deinterleave
+direct IQ; the packed path uses predicated complex loads. Predicated stores
+handle any timing count, including a final batch shorter than the streaming
+vector length. This is a ZA-backed SME2 multi-vector kernel, not an SVE loop
+labeled as SME2.
 
 The kernel does not use `FMOPA`. A full timing-by-CFO outer-product tile would
 consume the float32 ZA tile for one complex component at a time, requiring
@@ -58,7 +66,7 @@ tests compare every complex correlation component with this forward-error
 bound:
 
 ```text
-32 * float_epsilon * preamble_length *
+8 * float_epsilon * preamble_length *
     sum(abs(received[n]) * abs(weight[n]))
 ```
 
@@ -71,24 +79,30 @@ reference, NEON when compiled, and SME2.
 Workspace preparation, score calculation, confidence calculation, and top-two
 candidate selection remain scalar and are outside the SME2 correlation kernel.
 The fixture CLI is an end-to-end functional demo and therefore includes setup.
-The separate benchmark measures prepared steady-state execution, per-capture
-execution with sample-major packing included, and setup-inclusive execution.
-It reports workspace bytes.
+The benchmark measures prepared steady-state execution, per-capture execution,
+and setup-inclusive execution. For consecutive timing grids, per-capture SME2
+execution does not pack input; for non-contiguous grids, the required packing
+is timed and reported.
 
-The one checked Apple M5 Pro result set under
-`benchmarks/results/a83cd53/` reports lower SME2 latency than NEON for all four
-fixed workloads and all three timing contracts. This is a result for that
-recorded host, compiler, source commit, and synthetic workload only. The
-per-capture SME2 workspace reaches 140,771,328 temporary bytes for the
-`very-large` workload; no general speedup, energy, or thermal conclusion is
-drawn.
+For the fixed benchmark grids, dynamic SME2 storage is the complex correlation
+output: `2 * CFO hypotheses * timing hypotheses * sizeof(float)`. This is
+40,960 bytes for `small`, 294,912 for `medium`, 2,228,224 for `large`, and
+6,553,600 for `very-large`. An arbitrary timing grid additionally requires
+`timing hypotheses * preamble length * sizeof(ComplexF)` bytes of packed input.
+Allocator bookkeeping, stack state, and ZA register storage are not counted.
 
-The SME2 translation unit is enabled only with `SATCOMFEC_ENABLE_SME2=ON`, a
-compiler defining `__ARM_FEATURE_SME2`, and ACLE support for ZA VGx4
-multiply-accumulate intrinsics. Runtime execution additionally requires SME2
-hardware reported by the operating system. An unsupported request returns
-`implementation = "unavailable"`; it never runs a scalar fallback under the
-SME2 label.
+`benchmarks/results/a83cd53/` is retained as historical evidence for the prior
+packed-input SME2 implementation and prior NEON baseline. Its timing and memory
+values must not be attributed to the current kernels.
+
+The target-specific SME2 translation unit is enabled only with
+`SATCOMFEC_ENABLE_SME2=ON`, a compiler defining `__ARM_FEATURE_SME2`, and ACLE
+support for ZA VGx4 multiply-accumulate intrinsics. Runtime feature detection,
+validation, score selection, and optional workspace packing remain in the generic
+`src/acquisition/acquisition_sme2.cpp` translation unit without an SVE/SME
+target. Runtime execution additionally requires SME2 hardware reported by the
+operating system. An unsupported request returns `implementation =
+"unavailable"`; it never runs a scalar fallback under the SME2 label.
 
 Verification commands:
 
@@ -98,8 +112,9 @@ bash scripts/verify_sme2_acquisition_assembly.sh
 ```
 
 The second command requires emitted `smstart`/`smstop`, VGx4 ZA `fmla`/`fmls`,
-and ZA transfer instructions. A feature macro alone does not satisfy the
-assembly check.
+ZA transfer instructions, and vector IQ load/deinterleave evidence. It also
+rejects checked SVE/SME instructions in the generic control/workspace object.
+A feature macro alone does not satisfy the assembly check.
 
 ## Arm references
 

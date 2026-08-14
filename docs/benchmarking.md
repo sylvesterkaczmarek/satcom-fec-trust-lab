@@ -29,32 +29,18 @@ SATCOMFEC_ENABLE_SME2=ON python3 scripts/repeat_acquisition_benchmark.py \
 An unavailable accelerated implementation is recorded as unavailable and is
 not timed. No scalar fallback is reported as NEON or SME2.
 
-## Tracked result
+## Tracked results
 
-`benchmarks/results/a83cd53/` is the only checked performance result set. It
-contains five independent clean-tree runs of source commit
-`a83cd53ffe153fa69329194174f735d0a972380d` on an Apple M5 Pro (`Mac17,9`),
-Darwin 25.6.0 arm64, using Apple Clang 21.0.0. The report records 128-bit NEON,
-runtime SME2 support, and a 512-bit streaming vector length.
+Each directory under `benchmarks/results/` states the exact source commit,
+dirty-tree status, host, compiler, flags, kernel mechanisms, and memory model
+that produced it. Reports are not silently carried forward after an
+implementation changes.
 
-For the operational `per-capture` contract, median-of-run-median latency was:
-
-| Workload | Reference ms | NEON ms | SME2 ms | NEON latency / SME2 latency range |
-| --- | ---: | ---: | ---: | ---: |
-| small | 0.232264 | 0.063225 | 0.051513 | 1.166-1.247x |
-| medium | 3.295987 | 0.855379 | 0.375940 | 2.202-2.290x |
-| large | 49.491479 | 12.590271 | 10.323333 | 1.215-1.261x |
-| very-large | 291.876208 | 75.972875 | 62.420666 | 1.200-1.217x |
-
-SME2 had lower latency than NEON in every recorded workload/mode combination
-on that host. The margin was not uniform: small setup-inclusive timing was
-1.015-1.050x, while medium per-capture timing was 2.202-2.290x. This result set
-does not show a crossover to an SME2 loss within the four fixed workloads.
-
-The result also records a substantial sample-major workspace: total temporary
-SME2 payload ranges from 565,248 bytes for `small` to 140,771,328 bytes for
-`very-large`. See the result directory for raw samples, setup-inclusive and
-steady-state values, execution order, and correctness records.
+`benchmarks/results/a83cd53/` is historical evidence for source commit
+`a83cd53ffe153fa69329194174f735d0a972380d`. It measured an earlier four-vector
+NEON kernel and a packed-input SME2 kernel. Its JSON remains authoritative for
+that implementation, but its latency and 0.57-140.8 MB workspace values do not
+describe the current kernels.
 
 ## Fixed workloads
 
@@ -90,15 +76,17 @@ mission-derived waveform profiles.
   where the compiler supports those controls. NEON and SME2 target flags are
   confined to their respective translation units.
 - `steady-state` includes correlation, magnitude-squared scoring, and top-two
-  reduction using validated inputs and precomputed tables. SME2 packing and
-  output buffers are preallocated.
+  reduction using validated inputs and precomputed tables. Any required SME2
+  input layout and correlation-output buffers are already prepared.
 - `per-capture` reuses the acquisition plan and all realistic allocations, but
   cycles between two deterministic prevalidated IQ windows. Reference and NEON
-  read the supplied interleaved IQ directly. SME2 sample-major packing for each
-  supplied window is inside the timed operation.
+  read the supplied interleaved IQ directly. SME2 also reads interleaved IQ
+  directly for the consecutive timing grids used by the fixed workloads. If a
+  caller supplies an arbitrary timing grid, its required packing is inside the
+  timed operation and is reported.
 - `setup-inclusive` additionally includes acquisition-plan allocation and CFO
-  table generation. For SME2 it also includes workspace allocation, input
-  packing, and release.
+  table generation. For SME2 it also includes workspace allocation, any
+  required input packing, and release.
 
 The report provides median, mean, sample standard deviation, minimum, maximum,
 nearest-rank p50/p95, raw per-sample latencies, block durations, operation
@@ -118,6 +106,9 @@ tracked `compile_commands.json` separation check.
 
 - All implementations receive one shared timing/CFO hypothesis plan and the
   same deterministic capture set.
+- Timing-grid contiguity is computed once when that shared plan is built. The
+  accelerated fixed-grid kernels do not rescan the timing list inside timed
+  candidate traversal.
 - NEON and SME2 use bitwise-identical precomputed float32 weights and float32
   accumulation. The scalar correctness oracle intentionally retains float64
   weights and accumulation.
@@ -130,9 +121,10 @@ tracked `compile_commands.json` separation check.
   the corresponding base target with SVE and SME explicitly disabled where the
   compiler accepts it; otherwise configuration requires a NEON-only Armv8
   target. The report records both source flags.
-- `scripts/verify_sme2_acquisition_assembly.sh` verifies the ZA VGx4 SME2
-  instructions and separately confirms NEON arithmetic without checked
-  SVE/SME instruction patterns in the comparison object.
+- `scripts/verify_sme2_acquisition_assembly.sh` verifies streaming boundaries,
+  vector IQ load/deinterleave, and ZA VGx4 SME2 instructions. It separately
+  confirms NEON arithmetic without checked SVE/SME instruction patterns and
+  rejects checked scalable-vector instructions in generic SME2 control code.
 - Every timed block consumes a result fingerprint through a volatile sink, and
   valid implementation/mode blocks are shuffled with the reported seed.
 
@@ -145,11 +137,14 @@ workspace payload, and measured allocated capacity when that workspace is
 instantiated. The values exclude allocator bookkeeping, stack objects, process
 resident-set size, and code pages.
 
-The SME2 sample-major workspace scales with
-`2 * preamble_length * timing_hypotheses * sizeof(float)`. Its correlation
-output scales with
-`2 * CFO_hypotheses * timing_hypotheses * sizeof(float)`. Reference and NEON
-do not allocate corresponding dynamic workspaces in the current implementation.
+For consecutive timing grids, SME2 input-workspace bytes are zero: the kernel
+uses the supplied interleaved IQ directly. Correlation output scales with
+`2 * CFO hypotheses * timing hypotheses * sizeof(float)`, giving 40,960 bytes
+for `small`, 294,912 for `medium`, 2,228,224 for `large`, and 6,553,600 for
+`very-large`. An arbitrary non-contiguous timing grid additionally requires
+`timing hypotheses * preamble length * sizeof(ComplexF)` bytes of packed input.
+Reference and NEON allocate no corresponding dynamic acquisition workspace in
+the current implementation.
 
 ## Independent process runs
 
@@ -187,12 +182,21 @@ in those JSON files are authoritative.
 
 This is local process timing. It does not control CPU affinity, frequency,
 thermal state, or competing system activity, and it does not measure energy.
-Results from one device are not a general architecture claim. The checked
-Apple M5 Pro result supports only the host/workload statements above.
+Results from one device are not a general architecture claim. Each tracked
+result supports only its recorded host, source, compiler, and workload.
 Steady-state, per-capture, and setup-inclusive rankings may differ. Independent
-process runs do not control thermal state or frequency. The benchmark contains no SVE
-acquisition path, so it does not label streaming SVE as SME2 or provide an SVE
-comparison.
+process runs do not control thermal state or frequency. The benchmark contains
+no SVE acquisition path, so it does not label streaming SVE as SME2 or provide
+an SVE comparison.
+
+The implemented algorithm is direct correlation with work proportional to
+`timing hypotheses * CFO hypotheses * preamble length`. It is appropriate for
+auditing matched-filter mathematics and for bounded grids with short known
+preambles. `large` and `very-large` are direct-kernel stress sweeps, not claims
+that a production receiver should always use this algorithm. Long windows,
+long preambles, or dense frequency searches may favor overlap-save FFT
+correlation, filter banks, or hierarchical acquisition; those alternatives are
+not implemented or benchmarked here.
 
 ## Legacy decoder experiment
 

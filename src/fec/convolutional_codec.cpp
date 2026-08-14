@@ -53,10 +53,8 @@ const char* implementation_class_label(ImplementationClass value) {
             return "fallback";
         case ImplementationClass::kSimplified:
             return "simplified";
-        case ImplementationClass::kPlaceholder:
-            return "placeholder";
     }
-    return "placeholder";
+    return "unknown";
 }
 
 std::vector<uint8_t> convolutional_encode(const std::vector<uint8_t>& input_bits) {

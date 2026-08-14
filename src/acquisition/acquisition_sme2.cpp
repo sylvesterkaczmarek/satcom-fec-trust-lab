@@ -1,15 +1,14 @@
 #include "acquisition/acquisition_sme2.h"
 
+#include "acquisition/acquisition_sme2_kernel.h"
+
 #include <algorithm>
 #include <cmath>
 #include <complex>
-#include <cstdint>
 #include <limits>
 #include <string>
 
-#if defined(SATCOMFEC_ACQUISITION_SME2_COMPILED) && defined(__ARM_FEATURE_SME2)
-#include <arm_sme.h>
-#include <arm_sve.h>
+#if defined(SATCOMFEC_ACQUISITION_SME2_KERNEL_AVAILABLE)
 #define SATCOMFEC_ACQUISITION_HAS_SME2 1
 #if defined(__APPLE__)
 #include <sys/sysctl.h>
@@ -30,6 +29,10 @@ namespace {
 
 constexpr const char* kSme2Mechanism = "za-vgx4-fmla-fmls";
 
+static_assert(
+    sizeof(ComplexF) == 2 * sizeof(float),
+    "SME2 interleaved loads require two contiguous float components per sample");
+
 bool finite_iq(const ComplexF& sample) {
     return std::isfinite(sample.real()) && std::isfinite(sample.imag());
 }
@@ -42,11 +45,34 @@ bool checked_product(std::size_t left, std::size_t right, std::size_t& product) 
     return true;
 }
 
+bool timing_grid_is_contiguous(
+    const std::vector<std::size_t>& timing_offsets,
+    std::size_t& first_timing) {
+    first_timing = timing_offsets.front();
+    for (std::size_t index = 1; index < timing_offsets.size(); ++index) {
+        if (first_timing > std::numeric_limits<std::size_t>::max() - index ||
+            timing_offsets[index] != first_timing + index) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool validate_sme2_plan(const AcquisitionPlan& plan, std::string& error_message) {
     if (!std::isfinite(plan.sample_rate_hz) || plan.sample_rate_hz <= 0.0 ||
         plan.preamble_length == 0 || plan.timing_offsets.empty() ||
         plan.frequency_hypotheses.empty()) {
         error_message = "acquisition plan is incomplete";
+        return false;
+    }
+
+    std::size_t contiguous_timing_start = 0;
+    const bool timing_offsets_contiguous = timing_grid_is_contiguous(
+        plan.timing_offsets, contiguous_timing_start);
+    if (plan.timing_offsets_contiguous != timing_offsets_contiguous ||
+        (timing_offsets_contiguous &&
+         plan.contiguous_timing_start != contiguous_timing_start)) {
+        error_message = "acquisition plan has inconsistent timing-layout metadata";
         return false;
     }
 
@@ -154,143 +180,31 @@ AcquisitionResult result_from_workspace(
 
 bool runtime_has_sme2() {
 #if defined(__APPLE__)
-    int supported = 0;
-    std::size_t supported_size = sizeof(supported);
-    const bool hardware_supported =
-        sysctlbyname(
-            "hw.optional.arm.FEAT_SME2",
-            &supported,
-            &supported_size,
-            nullptr,
-            0) == 0 &&
-        supported != 0;
-    return hardware_supported && __arm_has_sme();
+    const auto feature_enabled = [](const char* name) {
+        int supported = 0;
+        std::size_t supported_size = sizeof(supported);
+        return sysctlbyname(
+                   name,
+                   &supported,
+                   &supported_size,
+                   nullptr,
+                   0) == 0 &&
+               supported != 0;
+    };
+    return feature_enabled("hw.optional.arm.FEAT_SME") &&
+           feature_enabled("hw.optional.arm.FEAT_SME2");
 #elif defined(__linux__) && defined(HWCAP2_SME2)
     // Check the kernel-provided capability mask before touching streaming state.
-    return (getauxval(AT_HWCAP2) & HWCAP2_SME2) != 0 && __arm_has_sme();
+    const unsigned long capabilities = getauxval(AT_HWCAP2);
+#if defined(HWCAP2_SME)
+    return (capabilities & HWCAP2_SME) != 0 &&
+           (capabilities & HWCAP2_SME2) != 0;
+#else
+    return (capabilities & HWCAP2_SME2) != 0;
+#endif
 #else
     return false;
 #endif
-}
-
-__arm_locally_streaming std::size_t streaming_lanes_f32() {
-    return svcntw();
-}
-
-__arm_locally_streaming __arm_new("za")
-void correlate_sme2_kernel(
-    const float* received_real,
-    const float* received_imag,
-    const float* weight_real,
-    const float* weight_imag,
-    std::size_t timing_count,
-    std::size_t frequency_count,
-    std::size_t preamble_length,
-    float* correlation_real,
-    float* correlation_imag) {
-    const std::size_t lanes = svcntw();
-    const std::size_t batch_width = 4 * lanes;
-    const svfloat32_t zero = svdup_f32(0.0F);
-    const svfloat32x4_t zeros = svcreate4_f32(zero, zero, zero, zero);
-
-    for (std::size_t frequency_index = 0;
-         frequency_index < frequency_count;
-         ++frequency_index) {
-        const std::size_t weight_base = frequency_index * preamble_length;
-        const std::size_t output_base = frequency_index * timing_count;
-
-        for (std::size_t timing_base = 0;
-             timing_base < timing_count;
-             timing_base += batch_width) {
-            const std::size_t lane_base_0 = timing_base;
-            const std::size_t lane_base_1 = timing_base + lanes;
-            const std::size_t lane_base_2 = timing_base + 2 * lanes;
-            const std::size_t lane_base_3 = timing_base + 3 * lanes;
-            const svbool_t pg0 = svwhilelt_b32(
-                static_cast<std::uint64_t>(lane_base_0),
-                static_cast<std::uint64_t>(timing_count));
-            const svbool_t pg1 = svwhilelt_b32(
-                static_cast<std::uint64_t>(lane_base_1),
-                static_cast<std::uint64_t>(timing_count));
-            const svbool_t pg2 = svwhilelt_b32(
-                static_cast<std::uint64_t>(lane_base_2),
-                static_cast<std::uint64_t>(timing_count));
-            const svbool_t pg3 = svwhilelt_b32(
-                static_cast<std::uint64_t>(lane_base_3),
-                static_cast<std::uint64_t>(timing_count));
-            const std::size_t safe_base_1 = std::min(lane_base_1, timing_count);
-            const std::size_t safe_base_2 = std::min(lane_base_2, timing_count);
-            const std::size_t safe_base_3 = std::min(lane_base_3, timing_count);
-
-            // Two ZA vector groups retain 4 * SVL real and imaginary correlations.
-            svwrite_za32_f32_vg1x4(0, zeros);
-            svwrite_za32_f32_vg1x4(1, zeros);
-
-            for (std::size_t sample_index = 0;
-                 sample_index < preamble_length;
-                 ++sample_index) {
-                const std::size_t sample_base = sample_index * timing_count;
-                const svfloat32x4_t received_real_group = svcreate4_f32(
-                    svld1_f32(pg0, received_real + sample_base + lane_base_0),
-                    svld1_f32(pg1, received_real + sample_base + safe_base_1),
-                    svld1_f32(pg2, received_real + sample_base + safe_base_2),
-                    svld1_f32(pg3, received_real + sample_base + safe_base_3));
-                const svfloat32x4_t received_imag_group = svcreate4_f32(
-                    svld1_f32(pg0, received_imag + sample_base + lane_base_0),
-                    svld1_f32(pg1, received_imag + sample_base + safe_base_1),
-                    svld1_f32(pg2, received_imag + sample_base + safe_base_2),
-                    svld1_f32(pg3, received_imag + sample_base + safe_base_3));
-                const svfloat32_t weight_real_vector = svdup_f32(
-                    weight_real[weight_base + sample_index]);
-                const svfloat32_t weight_imag_vector = svdup_f32(
-                    weight_imag[weight_base + sample_index]);
-
-                svmla_single_za32_f32_vg1x4(
-                    0, received_real_group, weight_real_vector);
-                svmls_single_za32_f32_vg1x4(
-                    0, received_imag_group, weight_imag_vector);
-                svmla_single_za32_f32_vg1x4(
-                    1, received_real_group, weight_imag_vector);
-                svmla_single_za32_f32_vg1x4(
-                    1, received_imag_group, weight_real_vector);
-            }
-
-            const svfloat32x4_t real_group = svread_za32_f32_vg1x4(0);
-            const svfloat32x4_t imag_group = svread_za32_f32_vg1x4(1);
-            svst1_f32(
-                pg0,
-                correlation_real + output_base + lane_base_0,
-                svget4_f32(real_group, 0));
-            svst1_f32(
-                pg1,
-                correlation_real + output_base + safe_base_1,
-                svget4_f32(real_group, 1));
-            svst1_f32(
-                pg2,
-                correlation_real + output_base + safe_base_2,
-                svget4_f32(real_group, 2));
-            svst1_f32(
-                pg3,
-                correlation_real + output_base + safe_base_3,
-                svget4_f32(real_group, 3));
-            svst1_f32(
-                pg0,
-                correlation_imag + output_base + lane_base_0,
-                svget4_f32(imag_group, 0));
-            svst1_f32(
-                pg1,
-                correlation_imag + output_base + safe_base_1,
-                svget4_f32(imag_group, 1));
-            svst1_f32(
-                pg2,
-                correlation_imag + output_base + safe_base_2,
-                svget4_f32(imag_group, 2));
-            svst1_f32(
-                pg3,
-                correlation_imag + output_base + safe_base_3,
-                svget4_f32(imag_group, 3));
-        }
-    }
 }
 
 #endif
@@ -322,19 +236,27 @@ bool prepare_sme2_acquisition_workspace(
     workspace.timing_count = plan.timing_offsets.size();
     workspace.frequency_count = plan.frequency_hypotheses.size();
     workspace.preamble_length = plan.preamble_length;
-    workspace.received_real_by_sample_and_timing.resize(packed_sample_count);
-    workspace.received_imag_by_sample_and_timing.resize(packed_sample_count);
+    workspace.packed_input_required = !plan.timing_offsets_contiguous;
+    workspace.contiguous_timing_start = plan.contiguous_timing_start;
+    if (workspace.packed_input_required) {
+        workspace.received_by_sample_and_timing.resize(packed_sample_count);
+    } else {
+        std::vector<ComplexF>().swap(workspace.received_by_sample_and_timing);
+    }
     workspace.correlation_real_by_frequency_and_timing.resize(candidate_count);
     workspace.correlation_imag_by_frequency_and_timing.resize(candidate_count);
 
-    pack_sme2_acquisition_capture_steady_state(received_iq, plan, workspace);
+    prepare_sme2_acquisition_capture_steady_state(received_iq, plan, workspace);
     return true;
 }
 
-void pack_sme2_acquisition_capture_steady_state(
+void prepare_sme2_acquisition_capture_steady_state(
     const std::vector<ComplexF>& received_iq,
     const AcquisitionPlan& plan,
     Sme2AcquisitionWorkspace& workspace) {
+    if (!workspace.packed_input_required) {
+        return;
+    }
 
     // Sample-major packing makes each timing batch contiguous for scalable loads.
     for (std::size_t sample_index = 0;
@@ -346,15 +268,14 @@ void pack_sme2_acquisition_capture_steady_state(
              ++timing_index) {
             const ComplexF& sample = received_iq[
                 plan.timing_offsets[timing_index] + sample_index];
-            workspace.received_real_by_sample_and_timing[packed_base + timing_index] =
-                sample.real();
-            workspace.received_imag_by_sample_and_timing[packed_base + timing_index] =
-                sample.imag();
+            workspace.received_by_sample_and_timing[packed_base + timing_index] =
+                sample;
         }
     }
 }
 
 AcquisitionResult run_sme2_acquisition_prepared(
+    const std::vector<ComplexF>& received_iq,
     const AcquisitionPlan& plan,
     Sme2AcquisitionWorkspace& workspace) {
     AcquisitionResult result;
@@ -367,7 +288,7 @@ AcquisitionResult run_sme2_acquisition_prepared(
     }
 
     std::string plan_error;
-    if (!validate_sme2_plan(plan, plan_error)) {
+    if (!validate_plan_and_input(received_iq, plan, plan_error)) {
         result.implementation = "sme2";
         result.error_message = plan_error;
         return result;
@@ -382,8 +303,8 @@ AcquisitionResult run_sme2_acquisition_prepared(
         workspace.timing_count != plan.timing_offsets.size() ||
         workspace.frequency_count != plan.frequency_hypotheses.size() ||
         workspace.preamble_length != plan.preamble_length ||
-        workspace.received_real_by_sample_and_timing.size() != packed_sample_count ||
-        workspace.received_imag_by_sample_and_timing.size() != packed_sample_count ||
+        workspace.received_by_sample_and_timing.size() !=
+            (workspace.packed_input_required ? packed_sample_count : 0) ||
         workspace.correlation_real_by_frequency_and_timing.size() != candidate_count ||
         workspace.correlation_imag_by_frequency_and_timing.size() != candidate_count) {
         result.implementation = "sme2";
@@ -391,8 +312,17 @@ AcquisitionResult run_sme2_acquisition_prepared(
         return result;
     }
 
-    return run_sme2_acquisition_steady_state(plan, workspace);
+    if (workspace.packed_input_required == plan.timing_offsets_contiguous ||
+        (!workspace.packed_input_required &&
+         workspace.contiguous_timing_start != plan.contiguous_timing_start)) {
+        result.implementation = "sme2";
+        result.error_message = "SME2 acquisition workspace layout is inconsistent";
+        return result;
+    }
+
+    return run_sme2_acquisition_steady_state(received_iq, plan, workspace);
 #else
+    static_cast<void>(received_iq);
     static_cast<void>(plan);
     static_cast<void>(workspace);
     result.implementation = "unavailable";
@@ -402,12 +332,20 @@ AcquisitionResult run_sme2_acquisition_prepared(
 }
 
 AcquisitionResult run_sme2_acquisition_steady_state(
+    const std::vector<ComplexF>& received_iq,
     const AcquisitionPlan& plan,
     Sme2AcquisitionWorkspace& workspace) {
 #if SATCOMFEC_ACQUISITION_HAS_SME2
-    correlate_sme2_kernel(
-        workspace.received_real_by_sample_and_timing.data(),
-        workspace.received_imag_by_sample_and_timing.data(),
+    const ComplexF* received = workspace.packed_input_required
+                                   ? workspace.received_by_sample_and_timing.data()
+                                   : received_iq.data() +
+                                         workspace.contiguous_timing_start;
+    const std::size_t sample_stride = workspace.packed_input_required
+                                          ? workspace.timing_count
+                                          : 1;
+    detail::correlate_sme2_kernel(
+        reinterpret_cast<const float*>(received),
+        sample_stride,
         plan.matched_filter_weights_real_f32.data(),
         plan.matched_filter_weights_imag_f32.data(),
         workspace.timing_count,
@@ -418,6 +356,7 @@ AcquisitionResult run_sme2_acquisition_steady_state(
     return result_from_workspace(plan, workspace);
 #else
     AcquisitionResult result;
+    static_cast<void>(received_iq);
     static_cast<void>(plan);
     static_cast<void>(workspace);
     result.implementation = "unavailable";
@@ -450,7 +389,7 @@ AcquisitionResult run_sme2_acquisition(
         result.error_message = error_message;
         return result;
     }
-    return run_sme2_acquisition_prepared(plan, workspace);
+    return run_sme2_acquisition_prepared(received_iq, plan, workspace);
 }
 
 bool acquisition_sme2_kernel_compiled() {
@@ -467,7 +406,9 @@ bool acquisition_sme2_runtime_supported() {
 
 std::size_t acquisition_sme2_streaming_lanes_f32() {
 #if SATCOMFEC_ACQUISITION_HAS_SME2
-    return acquisition_sme2_runtime_supported() ? streaming_lanes_f32() : 0;
+    return acquisition_sme2_runtime_supported()
+               ? detail::sme2_streaming_lanes_f32()
+               : 0;
 #else
     return 0;
 #endif

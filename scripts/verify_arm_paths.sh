@@ -50,7 +50,7 @@ sme2_acle_supported() {
 
 select_sme2_flag() {
   local flag
-  local flags=(-march=armv9.4-a+sme2 -march=armv9.2-a+sme2)
+  local flags=(-march=armv9.2-a+sme2 -march=armv9.4-a+sme2)
   if [[ "$(uname -s)" == "Darwin" && "${ARCHITECTURE}" == "arm64" ]]; then
     flags=(-mcpu=native+sme2 -march=native+sme2 "${flags[@]}")
   fi

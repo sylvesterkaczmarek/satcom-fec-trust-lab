@@ -3,7 +3,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="${ROOT_DIR}/build/host_replay"
+BUILD_DIR="${SATCOMFEC_BUILD_DIR:-${ROOT_DIR}/build/host_replay}"
+if [[ "${BUILD_DIR}" != /* ]]; then
+  BUILD_DIR="${ROOT_DIR}/${BUILD_DIR}"
+fi
 BIN_PATH="${BUILD_DIR}/replay_demo"
 ALLOW_FAILURE=0
 ACQUISITION="reference"
@@ -113,8 +116,8 @@ if [[ -n "${PREAMBLE_PATH}" ]]; then
   CLI_ARGS+=(--preamble "${PREAMBLE_PATH}")
 fi
 
-mkdir -p "${BUILD_DIR}"
-"${ROOT_DIR}/scripts/build_host_tools.sh" replay_demo
+SATCOMFEC_BUILD_DIR="${BUILD_DIR}" \
+  "${ROOT_DIR}/scripts/build_host_tools.sh" replay_demo
 
 if [[ "${ALLOW_FAILURE}" == "1" ]]; then
   set +e

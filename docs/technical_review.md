@@ -12,11 +12,12 @@ The acquisition implementations are:
 
 - `reference`: scalar float64 correlation oracle in
   `src/acquisition/acquisition_reference.cpp`;
-- `neon`: float32 NEON complex correlation in
+- `neon`: float32 NEON complex correlation over timing tiles in
   `src/acquisition/acquisition_neon.cpp`;
 - `sme2`: float32 ZA VGx4 accumulation in
-  `src/acquisition/acquisition_sme2.cpp`, available only when both compilation
-  and runtime feature checks succeed.
+  `src/acquisition/acquisition_sme2_kernel.cpp`, with runtime checks and generic
+  workspace preparation in `src/acquisition/acquisition_sme2.cpp`. It is
+  available only when both compilation and runtime feature checks succeed.
 
 Requested accelerated acquisition paths report `unavailable` rather than
 executing a scalar fallback under an accelerated name.
@@ -53,9 +54,11 @@ properties, not global compiler flags:
 - NEON target flags and compiled-kernel definitions are limited to NEON source
   files;
 - SME2 target flags are limited to
-  `src/acquisition/acquisition_sme2.cpp` and the historical locally streaming
+  `src/acquisition/acquisition_sme2_kernel.cpp` and the historical locally streaming
   `src/fec/branch_metrics_streaming_vector.cpp` experiment. Only the
-  acquisition source contains the checked ZA VGx4 SME2 mechanism.
+  acquisition kernel source contains the checked ZA VGx4 SME2 mechanism. The
+  runtime guard and optional workspace preparation compile without an SVE/SME
+  target.
 
 Check any configured build with:
 
@@ -91,10 +94,11 @@ On a native SME2 host:
 bash scripts/verify_sme2_acquisition_assembly.sh
 ```
 
-The verifier requires streaming-mode boundaries, ZA transfers, and VGx4
-`FMLA`/`FMLS` instructions. It also checks that the NEON comparison object has
-NEON arithmetic but no checked SVE/SME patterns, and that the scalar reference
-does not contain the SME2 sequence.
+The verifier requires streaming-mode boundaries, ZA transfers, VGx4
+`FMLA`/`FMLS`, and vector IQ load/deinterleave evidence. It also checks that the
+NEON comparison and generic SME2 control/workspace objects contain no checked
+SVE/SME patterns, and that the scalar reference does not contain the SME2
+sequence.
 
 With an Android NDK, the Android cross-build supplies compile and object
 evidence without executing the binary:
@@ -123,12 +127,11 @@ CI benchmark invocations are smoke tests only. Tracked reports under
 `benchmarks/results/` are local measurements whose hardware and build metadata
 must be read from each report. No CI timing is publication evidence.
 
-The sole checked result set is `benchmarks/results/a83cd53/`: five clean-tree
-runs on Apple M5 Pro (`Mac17,9`) with Apple Clang 21.0.0. Correctness passed
-before timing. SME2 latency was below NEON for all recorded workload/mode
-combinations, with SME2-versus-NEON ranges from 1.015-1.050x for small
-setup-inclusive to 4.162-4.350x for medium steady-state. This is not evidence
-for another device, workload, thermal condition, or energy result.
+`benchmarks/results/a83cd53/` is retained unchanged as historical evidence for
+an earlier packed SME2 input path and earlier NEON baseline. Its results remain
+valid for the recorded source commit, host, and compiler, but they are not
+current-kernel performance evidence. Read each result directory's metadata
+before using any timing value.
 
 ## Not claimed
 
@@ -140,4 +143,7 @@ for another device, workload, thermal condition, or energy result.
   streaming SVE-style branch-metric preparation, not genuine SME2-specific
   acceleration;
 - no general NEON or SME2 speedup, thermal, energy, or cross-device result; the
-  checked Apple M5 Pro timing is explicitly local.
+  tracked Apple measurements are explicitly local;
+- no claim that direct correlation is optimal for long windows, long preambles,
+  or dense CFO grids; FFT/filter-bank and hierarchical searches are not
+  implemented here.

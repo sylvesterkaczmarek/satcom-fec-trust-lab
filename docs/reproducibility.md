@@ -92,9 +92,12 @@ The benchmark fixes workload definitions in source, correctness-gates every
 implementation, randomizes timed implementation order with a reported seed,
 retains raw timing samples, and records host/compiler/build metadata.
 
-The only tracked timing evidence is `benchmarks/results/a83cd53/`: five
-independent clean-tree processes on Apple M5 Pro (`Mac17,9`) at source commit
-`a83cd53ffe153fa69329194174f735d0a972380d`. The raw JSON is authoritative.
+Tracked timing evidence is versioned by benchmarked source commit under
+`benchmarks/results/`. `benchmarks/results/a83cd53/` contains five independent
+clean-tree processes for source commit
+`a83cd53ffe153fa69329194174f735d0a972380d`; it describes the earlier packed
+SME2 input path and earlier NEON baseline only. The raw JSON is authoritative
+for that source commit.
 
 A local smoke measurement can be generated with:
 
@@ -108,7 +111,7 @@ bash scripts/benchmark_acquisition.sh \
 ```
 
 New local output describes only the current host. It does not reproduce the
-checked Apple M5 Pro values unless hardware, source commit, compiler, flags,
+tracked Apple host values unless hardware, source commit, compiler, flags,
 and runtime conditions match.
 
 ## CI evidence

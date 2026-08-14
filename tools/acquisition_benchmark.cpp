@@ -489,14 +489,14 @@ ImplementationMemory implementation_memory(
                 common_plan_bytes + storage_bytes(weight_count, sizeof(ComplexF));
             break;
         case ImplementationId::kSme2: {
-            const std::size_t packed_sample_count =
-                timing_count * workload.plan.preamble_length;
             const std::size_t correlation_count =
                 timing_count * frequency_count;
             memory.reusable_plan_payload_bytes =
                 common_plan_bytes + 2 * storage_bytes(weight_count, sizeof(float));
             memory.per_capture_workspace_payload_bytes =
-                2 * storage_bytes(packed_sample_count, sizeof(float));
+                storage_bytes(
+                    workload.sme2_workspace.received_by_sample_and_timing.size(),
+                    sizeof(ComplexF));
             memory.correlation_output_payload_bytes =
                 2 * storage_bytes(correlation_count, sizeof(float));
             memory.total_temporary_workspace_payload_bytes =
@@ -505,12 +505,8 @@ ImplementationMemory implementation_memory(
             memory.total_temporary_workspace_capacity_bytes =
                 storage_bytes(
                     workload.sme2_workspace
-                        .received_real_by_sample_and_timing.capacity(),
-                    sizeof(float)) +
-                storage_bytes(
-                    workload.sme2_workspace
-                        .received_imag_by_sample_and_timing.capacity(),
-                    sizeof(float)) +
+                        .received_by_sample_and_timing.capacity(),
+                    sizeof(ComplexF)) +
                 storage_bytes(
                     workload.sme2_workspace
                         .correlation_real_by_frequency_and_timing.capacity(),
@@ -520,7 +516,8 @@ ImplementationMemory implementation_memory(
                         .correlation_imag_by_frequency_and_timing.capacity(),
                     sizeof(float));
             memory.workspace_capacity_measured =
-                !workload.sme2_workspace.received_real_by_sample_and_timing.empty();
+                !workload.sme2_workspace
+                     .correlation_real_by_frequency_and_timing.empty();
             break;
         }
     }
@@ -845,7 +842,7 @@ AcquisitionResult execute_checked(
                 return failure;
             }
             return acquisition::run_sme2_acquisition_prepared(
-                workload.plan, workload.sme2_workspace);
+                received_iq, workload.plan, workload.sme2_workspace);
     }
     AcquisitionResult failure;
     failure.implementation = "unavailable";
@@ -867,10 +864,10 @@ AcquisitionResult execute_per_capture(
             return acquisition::run_neon_acquisition_steady_state(
                 received_iq, workload.plan);
         case ImplementationId::kSme2:
-            acquisition::pack_sme2_acquisition_capture_steady_state(
+            acquisition::prepare_sme2_acquisition_capture_steady_state(
                 received_iq, workload.plan, workload.sme2_workspace);
             return acquisition::run_sme2_acquisition_steady_state(
-                workload.plan, workload.sme2_workspace);
+                received_iq, workload.plan, workload.sme2_workspace);
     }
     AcquisitionResult failure;
     failure.implementation = "unavailable";
@@ -890,7 +887,7 @@ AcquisitionResult execute_steady_state(
                 workload.received_iq, workload.plan);
         case ImplementationId::kSme2:
             return acquisition::run_sme2_acquisition_steady_state(
-                workload.plan, workload.sme2_workspace);
+                workload.received_iq, workload.plan, workload.sme2_workspace);
     }
     AcquisitionResult failure;
     failure.implementation = "unavailable";
@@ -1077,7 +1074,7 @@ ImplementationResult make_implementation_result(ImplementationId id) {
         case ImplementationId::kNeon:
             implementation.available = acquisition::acquisition_neon_kernel_compiled();
             implementation.implementation_class = "neon-intrinsics";
-            implementation.mechanism = "neon-float32-complex-multiply-accumulate";
+            implementation.mechanism = acquisition::acquisition_neon_mechanism();
             if (!implementation.available) {
                 implementation.unavailable_reason =
                     "NEON acquisition kernel is not compiled for this target";
@@ -1534,7 +1531,7 @@ void write_mode_json(std::ostream& output, const ModeResult& mode, bool trailing
 std::string serialize_json(const BenchmarkReport& report) {
     std::ostringstream output;
     output << "{\n";
-    output << "  \"schema_version\": 3,\n";
+    output << "  \"schema_version\": 4,\n";
     output << "  \"ok\": " << (report.ok ? "true" : "false") << ",\n";
     output << "  \"benchmark\": {\n";
     output << "    \"name\": \"acquisition-workload-sweep\",\n";
@@ -1563,18 +1560,18 @@ std::string serialize_json(const BenchmarkReport& report) {
     output << "    \"percentile_method\": \"nearest-rank\",\n";
     output << "    \"standard_deviation\": \"sample standard deviation (N-1)\",\n";
     output << "    \"steady_state_definition\": \"Prevalidated input, precomputed "
-              "CFO weights, and preallocated SME2 workspace; complete "
+              "CFO weights, and preallocated implementation workspace; complete "
               "correlation, magnitude-squared scoring, and top-two reduction "
               "are timed.\",\n";
     output << "    \"per_capture_definition\": \"The acquisition plan and "
               "allocations are reused while prevalidated IQ windows are "
-              "cycled. Reference and NEON read each interleaved window "
-              "directly; SME2 sample-major packing for every supplied window "
-              "is timed before correlation and top-two reduction.\",\n";
+              "cycled. Every implementation reads contiguous timing grids "
+              "directly from interleaved IQ; SME2 packing is timed only when a "
+              "non-contiguous timing grid requires it.\",\n";
     output << "    \"setup_inclusive_definition\": \"Includes acquisition-plan "
               "allocation/CFO-table generation and checked execution; SME2 "
-              "additionally includes workspace allocation, packing, and "
-              "release.\",\n";
+              "additionally includes output-workspace allocation and any "
+              "input packing required by the timing grid.\",\n";
     output << "    \"fairness_contract\": {\n";
     output << "      \"candidate_set\": \"One shared timing/CFO hypothesis plan "
               "is used by every implementation.\",\n";
@@ -1678,13 +1675,17 @@ std::string serialize_json(const BenchmarkReport& report) {
            << tools::escape_json(SATCOMFEC_BENCHMARK_REFERENCE_FLAGS) << "\",\n";
     output << "      \"neon\": \""
            << tools::escape_json(SATCOMFEC_BENCHMARK_NEON_FLAGS) << "\",\n";
-    output << "      \"sme2\": \""
+    output << "      \"sme2_control\": \"generic common flags; no SVE/SME "
+              "target\",\n";
+    output << "      \"sme2_kernel\": \""
            << tools::escape_json(SATCOMFEC_BENCHMARK_SME2_FLAGS) << "\"\n";
     output << "    },\n";
     output << "    \"source_files\": {\n";
     output << "      \"reference\": \"src/acquisition/acquisition_reference.cpp\",\n";
     output << "      \"neon\": \"src/acquisition/acquisition_neon.cpp\",\n";
-    output << "      \"sme2\": \"src/acquisition/acquisition_sme2.cpp\"\n";
+    output << "      \"sme2_control\": \"src/acquisition/acquisition_sme2.cpp\",\n";
+    output << "      \"sme2_kernel\": "
+              "\"src/acquisition/acquisition_sme2_kernel.cpp\"\n";
     output << "    }\n";
     output << "  },\n";
     output << "  \"runtime_cpu_features\": {\n";
@@ -1780,6 +1781,10 @@ std::string serialize_json(const BenchmarkReport& report) {
         output << "      },\n";
         output << "      \"fairness_checks\": {\n";
         output << "        \"shared_candidate_plan\": true,\n";
+        output << "        \"timing_grid_contiguous\": "
+               << (workload.plan.timing_offsets_contiguous ? "true" : "false")
+               << ",\n";
+        output << "        \"timing_layout_precomputed_in_plan\": true,\n";
         output << "        \"accelerated_weight_tables_bitwise_equal\": "
                << (workload_result.accelerated_weight_tables_match
                        ? "true"
@@ -1792,7 +1797,17 @@ std::string serialize_json(const BenchmarkReport& report) {
                        : "false")
                << ",\n";
         output << "        \"timed_execution_order_randomized\": true,\n";
-        output << "        \"sme2_per_capture_packing_timed\": true\n";
+        output << "        \"sme2_input_layout\": \""
+               << (workload.sme2_workspace.packed_input_required
+                       ? "sample-major-packed-noncontiguous-timing"
+                       : "direct-interleaved-contiguous-timing")
+               << "\",\n";
+        output << "        \"sme2_per_capture_preparation_timed\": true,\n";
+        output << "        \"sme2_per_capture_packing_required\": "
+               << (workload.sme2_workspace.packed_input_required
+                       ? "true"
+                       : "false")
+               << "\n";
         output << "      },\n";
         output << "      \"reference_result\": {\n";
         output << "        \"valid\": "
@@ -1892,9 +1907,9 @@ std::string serialize_json(const BenchmarkReport& report) {
               "mission-derived waveform standards.\",\n";
     output << "    \"Steady-state timing includes score calculation and top-two "
               "selection; it is not an instruction-only microbenchmark.\",\n";
-    output << "    \"Per-capture timing reuses the plan and allocations but "
-              "includes SME2 sample-major packing for every supplied IQ "
-              "window.\",\n";
+    output << "    \"Per-capture timing reuses the plan and allocations. SME2 "
+              "reads contiguous timing grids directly and includes packing "
+              "only for non-contiguous timing grids.\",\n";
     output << "    \"The setup-inclusive mode includes implementation-specific "
               "setup costs and is not expected to rank paths identically to "
               "steady state.\",\n";

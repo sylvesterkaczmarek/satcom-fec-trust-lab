@@ -15,6 +15,7 @@ AcquisitionResult run_neon_acquisition_steady_state(
     const AcquisitionPlan& plan);
 
 bool acquisition_neon_kernel_compiled();
+const char* acquisition_neon_mechanism();
 
 }  // namespace satcomfec::acquisition
 

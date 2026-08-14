@@ -16,11 +16,15 @@ namespace {
 constexpr double kPi = 3.141592653589793238462643383279502884;
 constexpr double kSampleRateHz = 48000.0;
 constexpr double kCfoHz = 750.0;
-constexpr double kToleranceSafetyFactor = 32.0;
+// Four rounded operations per complex component per sample, plus margin for
+// float32 weight conversion and different legal FMA contraction orders.
+constexpr double kToleranceSafetyFactor = 8.0;
 
 struct KernelCase {
     const char* name;
     std::size_t preamble_length;
+    std::size_t timing_count;
+    std::size_t timing_step;
     float signal_amplitude;
     float noise_amplitude;
 };
@@ -34,6 +38,7 @@ struct CaseResult {
     double score_tolerance = 0.0;
     double score_difference = 0.0;
     bool candidate_identity_match = false;
+    bool second_best_candidate_identity_match = false;
     bool within_tolerance = false;
 };
 
@@ -65,11 +70,13 @@ std::vector<satcomfec::ComplexF> make_preamble(
 
 std::vector<satcomfec::ComplexF> make_received(
     const std::vector<satcomfec::ComplexF>& preamble,
-    std::size_t timing_offset,
+    const std::vector<std::size_t>& timings,
     float signal_amplitude,
     float noise_amplitude,
     DeterministicGenerator& generator) {
-    std::vector<satcomfec::ComplexF> received(timing_offset + preamble.size() + 5);
+    const std::size_t timing_offset = timings[2 * timings.size() / 3];
+    std::vector<satcomfec::ComplexF> received(
+        timings.back() + preamble.size() + 5);
     for (satcomfec::ComplexF& sample : received) {
         sample = {
             noise_amplitude * generator.signed_unit(),
@@ -91,6 +98,15 @@ std::vector<satcomfec::ComplexF> make_received(
     return received;
 }
 
+std::vector<std::size_t> make_timings(std::size_t count, std::size_t step) {
+    std::vector<std::size_t> timings;
+    timings.reserve(count);
+    for (std::size_t index = 0; index < count; ++index) {
+        timings.push_back(3 + index * step);
+    }
+    return timings;
+}
+
 double correlation_component_tolerance(
     const std::vector<satcomfec::ComplexF>& received,
     std::size_t timing_offset,
@@ -108,21 +124,22 @@ double correlation_component_tolerance(
 }
 
 CaseResult run_case(const KernelCase& definition, std::uint32_t seed) {
-    constexpr std::size_t kTimingOffset = 3;
     DeterministicGenerator generator(seed);
     const std::vector<satcomfec::ComplexF> preamble =
         make_preamble(definition.preamble_length, generator);
+    const std::vector<std::size_t> timings =
+        make_timings(definition.timing_count, definition.timing_step);
     const std::vector<satcomfec::ComplexF> received = make_received(
         preamble,
-        kTimingOffset,
+        timings,
         definition.signal_amplitude,
         definition.noise_amplitude,
         generator);
 
     satcomfec::acquisition::AcquisitionConfig config;
     config.sample_rate_hz = kSampleRateHz;
-    config.timing_offsets = {kTimingOffset};
-    config.frequency_offsets_hz = {kCfoHz};
+    config.timing_offsets = timings;
+    config.frequency_offsets_hz = {-kCfoHz, 0.0, kCfoHz};
 
     satcomfec::acquisition::AcquisitionPlan plan;
     std::string error_message;
@@ -147,12 +164,32 @@ CaseResult run_case(const KernelCase& definition, std::uint32_t seed) {
         reference.best.hypothesis.timing_offset == neon.best.hypothesis.timing_offset &&
         reference.best.hypothesis.frequency_offset_hz ==
             neon.best.hypothesis.frequency_offset_hz;
+    case_result.second_best_candidate_identity_match =
+        reference.second_best.valid == neon.second_best.valid &&
+        (!reference.second_best.valid ||
+         (reference.second_best.hypothesis.timing_offset ==
+              neon.second_best.hypothesis.timing_offset &&
+          reference.second_best.hypothesis.frequency_offset_hz ==
+              neon.second_best.hypothesis.frequency_offset_hz));
     case_result.correlation_real_difference = std::abs(
         reference.best.correlation.real() - neon.best.correlation.real());
     case_result.correlation_imag_difference = std::abs(
         reference.best.correlation.imag() - neon.best.correlation.imag());
+    const auto best_frequency = std::find_if(
+        plan.frequency_hypotheses.begin(),
+        plan.frequency_hypotheses.end(),
+        [&reference](
+            const satcomfec::acquisition::PreparedFrequencyHypothesis& frequency) {
+            return frequency.frequency_offset_hz ==
+                   reference.best.hypothesis.frequency_offset_hz;
+        });
+    if (best_frequency == plan.frequency_hypotheses.end()) {
+        return case_result;
+    }
     case_result.correlation_component_tolerance = correlation_component_tolerance(
-        received, kTimingOffset, plan.frequency_hypotheses.front());
+        received,
+        reference.best.hypothesis.timing_offset,
+        *best_frequency);
 
     const double correlation_vector_tolerance =
         std::sqrt(2.0) * case_result.correlation_component_tolerance;
@@ -162,6 +199,7 @@ CaseResult run_case(const KernelCase& definition, std::uint32_t seed) {
     case_result.score_difference = std::abs(reference.best.score - neon.best.score);
     case_result.within_tolerance =
         case_result.candidate_identity_match &&
+        case_result.second_best_candidate_identity_match &&
         case_result.correlation_real_difference <=
             case_result.correlation_component_tolerance &&
         case_result.correlation_imag_difference <=
@@ -203,16 +241,21 @@ int main(int argc, char** argv) {
     }
 
     const std::vector<KernelCase> definitions = {
-        {"single_sample", 1, 1.0F, 0.01F},
-        {"short_odd", 3, 0.8F, 0.02F},
-        {"one_vector", 4, 1.2F, 0.01F},
-        {"vector_plus_tail", 5, 0.9F, 0.03F},
-        {"multiple_vectors_plus_tail", 17, 1.0F, 0.02F},
-        {"long_even", 256, 0.7F, 0.05F},
-        {"long_odd_tail", 257, 0.7F, 0.05F},
-        {"very_long_odd", 1023, 0.5F, 0.08F},
-        {"very_weak", 33, 1.0e-7F, 1.0e-8F},
-        {"high_amplitude", 129, 1.0e4F, 10.0F},
+        {"single_sample", 1, 1, 1, 1.0F, 0.01F},
+        {"short_odd", 3, 3, 1, 0.8F, 0.02F},
+        {"one_timing_vector", 4, 4, 1, 1.2F, 0.01F},
+        {"timing_vector_tail", 5, 5, 1, 0.9F, 0.03F},
+        {"two_timing_vectors", 17, 8, 1, 1.0F, 0.02F},
+        {"four_timing_vectors", 33, 16, 1, 0.8F, 0.03F},
+        {"four_vector_tail", 65, 19, 1, 0.7F, 0.04F},
+        {"eight_timing_vectors", 65, 32, 1, 0.8F, 0.03F},
+        {"eight_vector_tail", 129, 35, 1, 0.7F, 0.04F},
+        {"irregular_timing_grid", 129, 17, 2, 0.7F, 0.05F},
+        {"long_even", 256, 16, 1, 0.7F, 0.05F},
+        {"long_odd_tail", 257, 17, 1, 0.7F, 0.05F},
+        {"very_long_odd", 1023, 19, 1, 0.5F, 0.08F},
+        {"very_weak", 33, 16, 1, 1.0e-7F, 1.0e-8F},
+        {"high_amplitude", 129, 17, 1, 1.0e4F, 10.0F},
     };
 
     std::vector<CaseResult> results;
@@ -228,7 +271,7 @@ int main(int argc, char** argv) {
     std::cout << "  \"neon_kernel_compiled\": true,\n";
     std::cout << "  \"neon_executed\": true,\n";
     std::cout << "  \"implementation\": \"neon\",\n";
-    std::cout << "  \"tolerance_model\": \"component tolerance = 32 * "
+    std::cout << "  \"tolerance_model\": \"component tolerance = 8 * "
                  "float_epsilon * preamble_length * sum(abs(x)*abs(w)); "
                  "score tolerance is propagated from the complex-correlation bound\",\n";
     std::cout << "  \"cases\": [\n";
@@ -240,6 +283,9 @@ int main(int argc, char** argv) {
         std::cout << "      \"preamble_length\": " << result.preamble_length << ",\n";
         std::cout << "      \"candidate_identity_match\": "
                   << (result.candidate_identity_match ? "true" : "false") << ",\n";
+        std::cout << "      \"second_best_candidate_identity_match\": "
+                  << (result.second_best_candidate_identity_match ? "true" : "false")
+                  << ",\n";
         std::cout << "      \"correlation_component_tolerance\": "
                   << satcomfec::tools::format_float(
                          result.correlation_component_tolerance, 12)

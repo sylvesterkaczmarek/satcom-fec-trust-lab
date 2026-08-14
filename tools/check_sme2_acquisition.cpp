@@ -14,13 +14,16 @@ namespace {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
 constexpr double kSampleRateHz = 48000.0;
-constexpr double kToleranceSafetyFactor = 32.0;
+// Four rounded operations per complex component per sample, plus margin for
+// float32 weight conversion and different legal FMA contraction orders.
+constexpr double kToleranceSafetyFactor = 8.0;
 
 struct KernelCase {
     std::string name;
     std::size_t preamble_length;
     std::size_t timing_count;
     std::size_t frequency_count;
+    std::size_t timing_step;
 };
 
 struct CaseResult {
@@ -29,6 +32,7 @@ struct CaseResult {
     std::size_t timing_count = 0;
     std::size_t frequency_count = 0;
     std::size_t candidate_count = 0;
+    std::string input_layout;
     double maximum_component_difference = 0.0;
     double maximum_component_tolerance = 0.0;
     double maximum_score_difference = 0.0;
@@ -79,11 +83,13 @@ std::vector<double> make_frequency_hypotheses(std::size_t count) {
     return frequencies;
 }
 
-std::vector<std::size_t> make_timing_hypotheses(std::size_t count) {
+std::vector<std::size_t> make_timing_hypotheses(
+    std::size_t count,
+    std::size_t step) {
     std::vector<std::size_t> timings;
     timings.reserve(count);
     for (std::size_t index = 0; index < count; ++index) {
-        timings.push_back(3 + 2 * index);
+        timings.push_back(3 + step * index);
     }
     return timings;
 }
@@ -165,7 +171,7 @@ CaseResult run_case(const KernelCase& definition, std::uint32_t seed) {
     const std::vector<satcomfec::ComplexF> preamble =
         make_preamble(definition.preamble_length, generator);
     const std::vector<std::size_t> timings =
-        make_timing_hypotheses(definition.timing_count);
+        make_timing_hypotheses(definition.timing_count, definition.timing_step);
     const std::vector<double> frequencies =
         make_frequency_hypotheses(definition.frequency_count);
     const double injected_frequency = frequencies.back();
@@ -196,11 +202,15 @@ CaseResult run_case(const KernelCase& definition, std::uint32_t seed) {
             received, plan, workspace, error_message)) {
         return case_result;
     }
+    case_result.input_layout = workspace.packed_input_required
+                                   ? "sample-major-packed-noncontiguous-timing"
+                                   : "direct-interleaved-contiguous-timing";
 
     const satcomfec::acquisition::AcquisitionResult reference =
         satcomfec::acquisition::run_reference_acquisition(received, plan);
     const satcomfec::acquisition::AcquisitionResult sme2 =
-        satcomfec::acquisition::run_sme2_acquisition_prepared(plan, workspace);
+        satcomfec::acquisition::run_sme2_acquisition_prepared(
+            received, plan, workspace);
     if (!reference.ok || !sme2.ok || reference.implementation != "reference" ||
         sme2.implementation != "sme2") {
         return case_result;
@@ -324,13 +334,14 @@ int main(int argc, char** argv) {
     const std::size_t lanes =
         satcomfec::acquisition::acquisition_sme2_streaming_lanes_f32();
     const std::vector<KernelCase> definitions = {
-        {"single_candidate", 1, 1, 1},
-        {"short_odd", 3, 3, 2},
-        {"vector_tail", 5, lanes + 1, 3},
-        {"four_vector_exact", 17, 4 * lanes, 4},
-        {"four_vector_tail", 33, 4 * lanes + 3, 5},
-        {"many_frequency_hypotheses", 65, 11, 7},
-        {"long_odd_preamble", 257, 7, 9},
+        {"single_candidate", 1, 1, 1, 1},
+        {"short_odd", 3, 3, 2, 1},
+        {"vector_tail", 5, lanes + 1, 3, 1},
+        {"four_vector_exact", 17, 4 * lanes, 4, 1},
+        {"four_vector_tail", 33, 4 * lanes + 3, 5, 1},
+        {"many_frequency_hypotheses", 65, 11, 7, 1},
+        {"irregular_timing_grid", 129, 13, 5, 2},
+        {"long_odd_preamble", 257, 7, 9, 3},
     };
 
     std::vector<CaseResult> results;
@@ -352,7 +363,7 @@ int main(int argc, char** argv) {
               << "\",\n";
     std::cout << "  \"streaming_lanes_f32\": " << lanes << ",\n";
     std::cout << "  \"timing_batch_width\": " << 4 * lanes << ",\n";
-    std::cout << "  \"tolerance_model\": \"component tolerance = 32 * "
+    std::cout << "  \"tolerance_model\": \"component tolerance = 8 * "
                  "float_epsilon * preamble_length * sum(abs(x)*abs(w)); "
                  "score tolerance is propagated from the complex-correlation bound\",\n";
     std::cout << "  \"cases\": [\n";
@@ -368,6 +379,9 @@ int main(int argc, char** argv) {
                   << result.frequency_count << ",\n";
         std::cout << "      \"candidate_count\": "
                   << result.candidate_count << ",\n";
+        std::cout << "      \"input_layout\": \""
+                  << satcomfec::tools::escape_json(result.input_layout)
+                  << "\",\n";
         std::cout << "      \"maximum_component_difference\": "
                   << satcomfec::tools::format_float(
                          result.maximum_component_difference, 12)

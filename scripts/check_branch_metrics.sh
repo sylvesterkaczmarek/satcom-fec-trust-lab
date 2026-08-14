@@ -3,7 +3,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="${ROOT_DIR}/build/host_replay"
+BUILD_DIR="${SATCOMFEC_BUILD_DIR:-${ROOT_DIR}/build/host_replay}"
+if [[ "${BUILD_DIR}" != /* ]]; then
+  BUILD_DIR="${ROOT_DIR}/${BUILD_DIR}"
+fi
 BIN_PATH="${BUILD_DIR}/check_branch_metrics"
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
@@ -23,7 +26,8 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-"${ROOT_DIR}/scripts/build_host_tools.sh" check_branch_metrics
+SATCOMFEC_BUILD_DIR="${BUILD_DIR}" \
+  "${ROOT_DIR}/scripts/build_host_tools.sh" check_branch_metrics
 OUTPUT="$("${BIN_PATH}")"
 
 echo "${OUTPUT}"

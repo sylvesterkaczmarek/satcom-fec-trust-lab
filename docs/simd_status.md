@@ -5,8 +5,8 @@ IQ-domain acquisition is the supported architecture-optimization workload.
 | Path | Status | Implementation |
 | --- | --- | --- |
 | Acquisition reference | real scalar oracle | float64 correlation over the complete timing/CFO grid |
-| Acquisition NEON | real when compiled and runtime-supported | float32 NEON complex multiply-accumulate with explicit tail handling |
-| Acquisition SME2 | real when compiled and runtime-supported | float32 SME2 VGx4 `FMLA`/`FMLS` into ZA across timing-hypothesis tiles |
+| Acquisition NEON | real when compiled for an AArch64 Advanced SIMD target | float32 NEON complex multiply-accumulate over up to 32 consecutive timing hypotheses, with explicit smaller-tile and tail handling |
+| Acquisition SME2 | real when compiled and runtime-supported | float32 SME2 VGx4 `FMLA`/`FMLS` into ZA across timing tiles; direct interleaved-IQ loads for consecutive grids and explicit packing for arbitrary grids |
 | `viterbi-reference` | real scalar decoder; replay default | scalar branch metrics, add-compare-select, and traceback |
 | `viterbi-neon` | partial or reported fallback | NEON branch metrics when available; scalar recurrence and traceback |
 | `viterbi-streaming-vector` | historical partial experiment or reported fallback | locally streaming SVE-style branch metrics; no ZA or SME2-specific multi-vector operation; scalar recurrence and traceback |
@@ -16,10 +16,10 @@ Accelerated acquisition requests report `unavailable` rather than executing a
 fallback under an accelerated name. Acquisition SME2 is a genuine ZA-backed
 kernel; the historical Viterbi streaming-vector experiment is not.
 
-The checked Apple M5 Pro result set in `benchmarks/results/a83cd53/` executed
-all three acquisition paths and reports SME2 below NEON latency for every fixed
-workload and timing mode. That is local evidence for the recorded host and
-compiler, not a portable speedup claim. No Android timing artifact is included.
+`benchmarks/results/a83cd53/` is historical evidence for an earlier packed SME2
+input path and an earlier NEON baseline. Its JSON remains authoritative for
+that source commit, but its timing and workspace values do not describe the
+current kernels. No Android timing artifact is included.
 
 `benchmark_acquisition` is the supported benchmark. It verifies candidate
 identity and score tolerances before reporting steady-state, per-capture, and

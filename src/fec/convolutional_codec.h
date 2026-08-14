@@ -19,12 +19,11 @@ enum class ImplementationClass {
     kPartial,
     kFallback,
     kSimplified,
-    kPlaceholder,
 };
 
 struct ImplementationInfo {
     const char* path_name = "";
-    ImplementationClass implementation_class = ImplementationClass::kPlaceholder;
+    ImplementationClass implementation_class = ImplementationClass::kFallback;
     const char* summary = "";
 };
 

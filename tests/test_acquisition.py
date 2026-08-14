@@ -1,6 +1,9 @@
+import cmath
 import csv
 import json
+import math
 import os
+import struct
 import subprocess
 import tempfile
 import unittest
@@ -62,6 +65,19 @@ def assert_subset(test_case: unittest.TestCase, actual: dict, expected: dict) ->
         test_case.assertEqual(actual[key], expected_value)
 
 
+def quantize_complex_f32(value: complex) -> complex:
+    real, imag = struct.unpack("<ff", struct.pack("<ff", value.real, value.imag))
+    return complex(real, imag)
+
+
+def write_complex_f32(path: Path, values: list[complex]) -> list[complex]:
+    quantized = [quantize_complex_f32(value) for value in values]
+    path.write_bytes(
+        b"".join(struct.pack("<ff", value.real, value.imag) for value in quantized)
+    )
+    return quantized
+
+
 class AcquisitionReferenceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -89,6 +105,129 @@ class AcquisitionReferenceTests(unittest.TestCase):
         self.assertGreater(result["best_score"], result["second_best_score"])
         self.assertGreater(result["peak_ratio"], 1.0)
         self.assertGreater(result["normalized_peak_separation"], 0.0)
+
+    def test_independent_matched_filter_oracle_checks_sign_timing_and_score(self) -> None:
+        sample_rate_hz = 8000.0
+        true_timing = 3
+        true_cfo_hz = 1000.0
+        injected_phase = 0.41
+        preamble_values = [
+            complex(0.60, -0.20),
+            complex(-0.35, 0.80),
+            complex(0.90, 0.10),
+            complex(-0.70, -0.45),
+            complex(0.15, 0.95),
+        ]
+        received_values = [
+            complex(0.01 * (index - 2), -0.007 * (index + 1))
+            for index in range(8)
+        ]
+        for sample_index, preamble_sample in enumerate(preamble_values):
+            carrier = cmath.exp(
+                1j
+                * (
+                    injected_phase
+                    + 2.0
+                    * math.pi
+                    * true_cfo_hz
+                    * sample_index
+                    / sample_rate_hz
+                )
+            )
+            received_values[true_timing + sample_index] += (
+                0.8 * preamble_sample * carrier
+            )
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            directory = Path(temporary_directory)
+            preamble_path = directory / "oracle_preamble.iq"
+            received_path = directory / "oracle_capture.iq"
+            metadata_path = directory / "oracle_capture.json"
+            preamble = write_complex_f32(preamble_path, preamble_values)
+            received = write_complex_f32(received_path, received_values)
+            frequencies = [-1000.0, 0.0, 1000.0]
+            timings = list(range(4))
+            metadata_path.write_text(
+                json.dumps(
+                    {
+                        "scenario": "independent_oracle",
+                        "preamble_file": preamble_path.name,
+                        "sample_count": len(received),
+                        "preamble_length": len(preamble),
+                        "sample_rate_hz": sample_rate_hz,
+                        "timing_search_start": timings[0],
+                        "timing_search_stop_inclusive": timings[-1],
+                        "timing_search_step": 1,
+                        "cfo_hypotheses_hz": frequencies,
+                        "true_timing_offset": true_timing,
+                        "true_cfo_hz": true_cfo_hz,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            candidates: list[tuple[float, float, int, complex]] = []
+            for frequency_hz in frequencies:
+                for timing_offset in timings:
+                    correlation = sum(
+                        received[timing_offset + sample_index]
+                        * preamble_sample.conjugate()
+                        * cmath.exp(
+                            -1j
+                            * 2.0
+                            * math.pi
+                            * frequency_hz
+                            * sample_index
+                            / sample_rate_hz
+                        )
+                        for sample_index, preamble_sample in enumerate(preamble)
+                    )
+                    candidates.append(
+                        (
+                            abs(correlation) ** 2,
+                            frequency_hz,
+                            timing_offset,
+                            correlation,
+                        )
+                    )
+            expected_best, expected_second = sorted(
+                candidates, key=lambda candidate: candidate[0], reverse=True
+            )[:2]
+
+            completed = subprocess.run(
+                (
+                    str(ACQUISITION_BINARY),
+                    "--iq",
+                    str(received_path),
+                    "--metadata",
+                    str(metadata_path),
+                    "--implementation",
+                    "reference",
+                ),
+                cwd=ROOT_DIR,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            result = json.loads(completed.stdout)
+
+        self.assertEqual(result["detected_timing_offset"], expected_best[2])
+        self.assertEqual(result["detected_cfo_hz"], expected_best[1])
+        self.assertEqual(result["second_best_timing_offset"], expected_second[2])
+        self.assertEqual(result["second_best_cfo_hz"], expected_second[1])
+        self.assertEqual(result["evaluated_candidate_count"], len(candidates))
+        self.assertAlmostEqual(
+            result["best_correlation_real"], expected_best[3].real, delta=1.0e-8
+        )
+        self.assertAlmostEqual(
+            result["best_correlation_imag"], expected_best[3].imag, delta=1.0e-8
+        )
+        self.assertAlmostEqual(result["best_score"], expected_best[0], delta=1.0e-6)
+        self.assertAlmostEqual(
+            result["second_best_score"], expected_second[0], delta=1.0e-6
+        )
+        self.assertEqual(expected_best[1], true_cfo_hz)
+        self.assertEqual(expected_best[2], true_timing)
 
     def test_all_impaired_fixtures_recover_ground_truth(self) -> None:
         for fixture_name in FIXTURE_NAMES[1:]:
@@ -210,6 +349,9 @@ class AcquisitionReferenceTests(unittest.TestCase):
                 self.assertEqual(neon["requested_implementation"], "neon")
                 self.assertEqual(neon["implementation"], "neon")
                 self.assertEqual(
+                    neon["neon_mechanism"], "neon-eight-vector-timing-tile"
+                )
+                self.assertEqual(
                     neon["detected_timing_offset"],
                     reference["detected_timing_offset"],
                 )
@@ -267,6 +409,7 @@ class AcquisitionReferenceTests(unittest.TestCase):
             self.assertGreaterEqual(len(report["cases"]), 10)
             for case in report["cases"]:
                 self.assertTrue(case["candidate_identity_match"])
+                self.assertTrue(case["second_best_candidate_identity_match"])
                 self.assertTrue(case["within_tolerance"])
                 self.assertLessEqual(
                     case["correlation_real_difference"],
@@ -425,7 +568,7 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
             repeated_report = json.loads(repeated.stdout)
 
         self.assertTrue(report["ok"])
-        self.assertEqual(report["schema_version"], 3)
+        self.assertEqual(report["schema_version"], 4)
         self.assertEqual(report["benchmark"]["name"], "acquisition-workload-sweep")
         self.assertEqual(report["benchmark"]["timed_sample_count"], 3)
         self.assertEqual(report["benchmark"]["minimum_sample_duration_ms"], 1.0)
@@ -443,7 +586,12 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
         )
         self.assertIn("reference", report["build"]["source_compile_flags"])
         self.assertIn("neon", report["build"]["source_compile_flags"])
-        self.assertIn("sme2", report["build"]["source_compile_flags"])
+        self.assertIn("sme2_control", report["build"]["source_compile_flags"])
+        self.assertIn("sme2_kernel", report["build"]["source_compile_flags"])
+        self.assertEqual(
+            report["build"]["source_files"]["sme2_kernel"],
+            "src/acquisition/acquisition_sme2_kernel.cpp",
+        )
         if report["runtime_cpu_features"]["sme2_kernel_compiled"]:
             neon_flags = report["build"]["source_compile_flags"]["neon"]
             self.assertTrue(
@@ -474,6 +622,10 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
         )
         self.assertTrue(workload["reference_result"]["valid"])
         self.assertEqual(workload["fixture"]["per_capture_window_count"], 2)
+        self.assertTrue(workload["fairness_checks"]["timing_grid_contiguous"])
+        self.assertTrue(
+            workload["fairness_checks"]["timing_layout_precomputed_in_plan"]
+        )
         self.assertTrue(
             workload["fairness_checks"][
                 "accelerated_weight_tables_bitwise_equal"
@@ -510,7 +662,7 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
                     implementation["memory_bytes"][
                         "per_capture_workspace_payload"
                     ],
-                    2 * 64 * 1024 * 4,
+                    0,
                 )
                 self.assertEqual(
                     implementation["memory_bytes"]["correlation_output_payload"],
@@ -537,6 +689,21 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
                     implementation["correctness"]["actual_implementation"],
                     implementation["requested_implementation"],
                 )
+                if implementation["requested_implementation"] == "neon":
+                    self.assertEqual(
+                        implementation["mechanism"],
+                        "neon-eight-vector-timing-tile",
+                    )
+                if implementation["requested_implementation"] == "sme2":
+                    self.assertEqual(
+                        workload["fairness_checks"]["sme2_input_layout"],
+                        "direct-interleaved-contiguous-timing",
+                    )
+                    self.assertFalse(
+                        workload["fairness_checks"][
+                            "sme2_per_capture_packing_required"
+                        ]
+                    )
                 for mode in implementation["modes"]:
                     self.assertTrue(mode["valid"])
                     self.assertIsInstance(mode["timing"], dict)
@@ -811,6 +978,13 @@ class AcquisitionSme2Tests(unittest.TestCase):
                 )
             )
             self.assertTrue(any(case["frequency_count"] > 4 for case in report["cases"]))
+            self.assertEqual(
+                {case["input_layout"] for case in report["cases"]},
+                {
+                    "direct-interleaved-contiguous-timing",
+                    "sample-major-packed-noncontiguous-timing",
+                },
+            )
             for case in report["cases"]:
                 self.assertTrue(case["all_correlations_within_tolerance"])
                 self.assertTrue(case["best_candidate_match"])

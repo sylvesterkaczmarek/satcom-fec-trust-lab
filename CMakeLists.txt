@@ -194,7 +194,7 @@ satcomfec_find_supported_flag(
     "-fno-slp-vectorize"
     "-fno-tree-slp-vectorize"
 )
-set(SATCOMFEC_SME2_CANDIDATE_FLAGS "-march=armv9.4-a+sme2" "-march=armv9.2-a+sme2")
+set(SATCOMFEC_SME2_CANDIDATE_FLAGS "-march=armv9.2-a+sme2" "-march=armv9.4-a+sme2")
 
 if(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64)$")
     list(
@@ -214,7 +214,7 @@ if(SATCOMFEC_ENABLE_SME2)
         message(FATAL_ERROR
             "SATCOMFEC_ENABLE_SME2=ON requires a compiler that accepts "
             "an SME2 target flag. On Darwin arm64, native+sme2 is tried first; "
-            "generic fallbacks include -march=armv9.4-a+sme2 and -march=armv9.2-a+sme2."
+            "generic fallbacks include -march=armv9.2-a+sme2 and -march=armv9.4-a+sme2."
         )
     endif()
     satcomfec_check_sme2_flag("${SATCOMFEC_SME2_FLAG}" SATCOMFEC_SME2_ACLE_OK)
@@ -319,6 +319,7 @@ set(
     src/acquisition/acquisition_reference.cpp
     src/acquisition/acquisition_runner.cpp
     src/acquisition/acquisition_sme2.cpp
+    src/acquisition/acquisition_sme2_kernel.cpp
 )
 
 set(SATCOMFEC_CORE_SOURCES ${SATCOMFEC_ACQUISITION_SOURCES})
@@ -388,7 +389,7 @@ endif()
 
 if(SATCOMFEC_SME2_SOURCE_FLAG)
     set_property(
-        SOURCE src/acquisition/acquisition_sme2.cpp
+        SOURCE src/acquisition/acquisition_sme2_kernel.cpp
         APPEND PROPERTY COMPILE_OPTIONS "${SATCOMFEC_SME2_SOURCE_FLAG}"
     )
     if(NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
@@ -403,8 +404,14 @@ if(SATCOMFEC_SME2_SOURCE_FLAG)
         )
     endif()
     set_property(
+        SOURCE src/acquisition/acquisition_sme2_kernel.cpp
+        APPEND PROPERTY COMPILE_DEFINITIONS
+            SATCOMFEC_ACQUISITION_SME2_KERNEL_COMPILED=1
+    )
+    set_property(
         SOURCE src/acquisition/acquisition_sme2.cpp
-        APPEND PROPERTY COMPILE_DEFINITIONS SATCOMFEC_ACQUISITION_SME2_COMPILED=1
+        APPEND PROPERTY COMPILE_DEFINITIONS
+            SATCOMFEC_ACQUISITION_SME2_KERNEL_AVAILABLE=1
     )
 endif()
 

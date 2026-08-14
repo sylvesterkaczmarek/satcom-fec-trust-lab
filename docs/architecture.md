@@ -40,18 +40,20 @@ Acquisition timing is a separate, correctness-gated workload sweep implemented b
 `tools/benchmark_acquisition.cpp` and `tools/acquisition_benchmark.cpp`, exposed
 through `scripts/benchmark_acquisition.sh`. It correctness-gates each available
 implementation before reporting steady-state, per-capture, or setup-inclusive
-timing. Per-capture timing reuses the plan and allocations while charging SME2
-for sample-major packing of each supplied IQ window. The decoder benchmark is
-not used as evidence for acquisition behavior. Checked acquisition timing
-evidence, including its host and build metadata, is documented in
-`benchmarks/results/a83cd53/`.
+timing. Per-capture timing reuses the plan and allocations while charging each
+path for work required by a new IQ window. Consecutive timing grids let SME2
+read interleaved IQ directly; arbitrary timing grids require a reported and
+timed packing step. The decoder benchmark is not used as evidence for
+acquisition behavior. Tracked acquisition reports retain their exact source,
+host, compiler, and build metadata under `benchmarks/results/`.
 
 For Android, `SATCOMFEC_ANDROID_BENCHMARK_ONLY=ON` narrows the CMake graph to
 the acquisition sources and `benchmark_acquisition`. The NDK build keeps
-reference and NEON code at baseline `arm64-v8a`; only the SME2 translation unit
-receives an SME2 target flag. Runtime `AT_HWCAP2` gating prevents entry into the
-SME2 kernel on unsupported devices. The executable runs directly through ADB
-and does not require an APK or JNI bridge.
+reference, NEON, and generic SME2 control code at baseline `arm64-v8a`; only
+`src/acquisition/acquisition_sme2_kernel.cpp` receives an SME2 target flag.
+Runtime `AT_HWCAP2` gating prevents entry into that kernel on unsupported
+devices. The executable runs directly through ADB and does not require an APK
+or JNI bridge.
 
 The replay result reports acquisition implementation and candidate evidence,
 synthetic ground-truth errors when available, front-end/demodulation/framing
@@ -63,9 +65,10 @@ reported after the search and is never used to select a candidate.
 CMake is the authoritative host and NDK build path. Compiler warning and
 sanitizer options are common target options; architecture features are not.
 The scalar acquisition reference has a dedicated translation unit with loop
-and SLP vectorization disabled. NEON and SME2 flags are attached only to their
-respective implementation sources. The FEC scalar core is separate from NEON
-branch metrics and the historical streaming-vector branch metrics.
+and SLP vectorization disabled. NEON flags apply only to the NEON source. SME2
+flags apply only to the SME2 kernel source; runtime dispatch and workspace
+management remain generic. The FEC scalar core is separate from NEON branch
+metrics and the historical streaming-vector branch metrics.
 
 Every configured build exports `compile_commands.json`.
 `scripts/check_compile_commands.py` verifies the boundaries and fails if an

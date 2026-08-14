@@ -3,6 +3,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD_DIR="${SATCOMFEC_BUILD_DIR:-${ROOT_DIR}/build/host_replay}"
+if [[ "${BUILD_DIR}" != /* ]]; then
+  BUILD_DIR="${ROOT_DIR}/${BUILD_DIR}"
+fi
 
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   cat <<'EOF'
@@ -19,13 +23,14 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-"${ROOT_DIR}/scripts/build_host_tools.sh" acquisition_demo
+SATCOMFEC_BUILD_DIR="${BUILD_DIR}" \
+  "${ROOT_DIR}/scripts/build_host_tools.sh" acquisition_demo
 
 for fixture_name in clean noisy frequency_offset ambiguous weak_faded; do
   iq_path="${ROOT_DIR}/data/synthetic/acquisition/${fixture_name}.iq"
   metadata_path="${ROOT_DIR}/data/synthetic/acquisition/${fixture_name}.json"
   output="$(
-    "${ROOT_DIR}/build/host_replay/acquisition_demo" \
+    "${BUILD_DIR}/acquisition_demo" \
       --iq "${iq_path}" \
       --metadata "${metadata_path}"
   )"

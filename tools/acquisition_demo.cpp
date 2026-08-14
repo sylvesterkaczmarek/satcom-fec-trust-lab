@@ -424,6 +424,10 @@ int main(int argc, char** argv) {
                       ? "true"
                       : "false")
               << ",\n";
+    std::cout << "  \"neon_mechanism\": \""
+              << satcomfec::tools::escape_json(
+                     satcomfec::acquisition::acquisition_neon_mechanism())
+              << "\",\n";
     std::cout << "  \"sme2_kernel_compiled\": "
               << (satcomfec::acquisition::acquisition_sme2_kernel_compiled()
                       ? "true"
