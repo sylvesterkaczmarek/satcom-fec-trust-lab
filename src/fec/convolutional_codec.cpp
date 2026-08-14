@@ -3,8 +3,6 @@
 #include <algorithm>
 #include <limits>
 
-#include "branch_metrics_sme2.h"
-
 #include "../util/logging.h"
 
 namespace satcomfec {
@@ -86,7 +84,9 @@ std::vector<uint8_t> convolutional_encode(const std::vector<uint8_t>& input_bits
 bool prepare_branch_metrics_reference(const SoftBitBuffer& soft_in,
                                       BranchMetricTables& tables) {
     if (soft_in.empty() || (soft_in.size() % 2) != 0) {
-        log_error("prepare_branch_metrics_reference: expected an even number of soft bits");
+        log_error(
+            "prepare_branch_metrics_reference: expected an even number of "
+            "soft decisions");
         return false;
     }
 
@@ -94,16 +94,16 @@ bool prepare_branch_metrics_reference(const SoftBitBuffer& soft_in,
     resize_metric_tables(symbol_count, tables);
 
     for (size_t symbol_index = 0; symbol_index < symbol_count; ++symbol_index) {
-        const int llr0 = static_cast<int>(soft_in[2 * symbol_index]);
-        const int llr1 = static_cast<int>(soft_in[2 * symbol_index + 1]);
+        const int soft0 = static_cast<int>(soft_in[2 * symbol_index]);
+        const int soft1 = static_cast<int>(soft_in[2 * symbol_index + 1]);
         tables.metric_by_symbol_type[0][symbol_index] =
-            static_cast<int16_t>(-(llr0 + llr1));
+            static_cast<int16_t>(-(soft0 + soft1));
         tables.metric_by_symbol_type[1][symbol_index] =
-            static_cast<int16_t>(llr1 - llr0);
+            static_cast<int16_t>(soft1 - soft0);
         tables.metric_by_symbol_type[2][symbol_index] =
-            static_cast<int16_t>(llr0 - llr1);
+            static_cast<int16_t>(soft0 - soft1);
         tables.metric_by_symbol_type[3][symbol_index] =
-            static_cast<int16_t>(llr0 + llr1);
+            static_cast<int16_t>(soft0 + soft1);
     }
 
     return true;

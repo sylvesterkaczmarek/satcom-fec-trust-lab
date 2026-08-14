@@ -1,6 +1,6 @@
 {
   "ok": false,
-  "decoder": "viterbi-neon",
+  "decoder": "viterbi-reference",
   "samples_per_symbol": 8,
   "frame_soft_bits": 244,
   "expected_payload_bytes": 14,
@@ -19,10 +19,10 @@
   },
   "trust_assessment": {
     "band": "low-confidence",
-    "weak_soft_bits": true,
+    "weak_soft_decisions": true,
     "ambiguous_acquisition": false,
     "acquisition_rejected": false,
-    "ambiguous_sync": false,
+    "ambiguous_frame_sync": false,
     "demod_clipping": false,
     "crc_not_evaluated": false,
     "crc_failed": true

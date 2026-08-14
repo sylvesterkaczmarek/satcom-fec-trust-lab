@@ -53,8 +53,9 @@ properties, not global compiler flags:
 - NEON target flags and compiled-kernel definitions are limited to NEON source
   files;
 - SME2 target flags are limited to
-  `src/acquisition/acquisition_sme2.cpp` and the legacy
-  `src/fec/branch_metrics_sme2.cpp` experiment.
+  `src/acquisition/acquisition_sme2.cpp` and the historical locally streaming
+  `src/fec/branch_metrics_streaming_vector.cpp` experiment. Only the
+  acquisition source contains the checked ZA VGx4 SME2 mechanism.
 
 Check any configured build with:
 
@@ -128,5 +129,7 @@ must be read from each report. No CI timing is publication evidence.
 - no calibrated detection probability or operational trust threshold;
 - no Android application or end-to-end mobile replay;
 - no SVE acquisition implementation;
-- no full SME2 Viterbi recurrence or traceback;
+- no SME2 Viterbi recurrence or traceback; the historical FEC path is locally
+  streaming SVE-style branch-metric preparation, not genuine SME2-specific
+  acceleration;
 - no general NEON or SME2 speedup, thermal, energy, or cross-device result.

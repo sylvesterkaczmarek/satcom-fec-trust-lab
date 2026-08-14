@@ -1,4 +1,4 @@
-.PHONY: help build replay replay-impaired replay-ambiguous replay-failed replay-no-signal acquisition check check-acquisition check-acquisition-neon verify-acquisition-neon check-acquisition-sme2 verify-acquisition-sme2 compare-trust align check-metrics verify verify-fixtures verify-arm benchmark benchmark-acquisition benchmark-acquisition-repeat benchmark-android-build benchmark-android-verify benchmark-android-run benchmark-decoder-legacy test regenerate
+.PHONY: help build replay replay-impaired replay-ambiguous replay-failed replay-no-signal acquisition check check-acquisition check-acquisition-neon verify-acquisition-neon check-acquisition-sme2 verify-acquisition-sme2 compare-trust align check-metrics verify verify-fixtures verify-arm benchmark benchmark-acquisition benchmark-acquisition-repeat benchmark-android-build benchmark-android-verify benchmark-android-run experiment-viterbi-branch-metrics test regenerate
 
 help:
 	@printf '%s\n' \
@@ -10,25 +10,25 @@ help:
 	  '  make replay-failed   Run the CRC-failing replay fixture' \
 	  '  make replay-no-signal Run the acquisition-rejection fixture' \
 	  '  make acquisition     Run the clean scalar acquisition fixture' \
+	  '  make compare-trust   Compare all replay trust states' \
+	  '  make benchmark-acquisition Run the acquisition workload-size sweep' \
+	  '  make benchmark-acquisition-repeat Run five independent benchmark processes' \
+	  '  make verify          Run clean strict, sanitizer, and public correctness checks' \
 	  '  make check           Verify the baseline replay output' \
 	  '  make check-acquisition Verify all scalar acquisition fixtures' \
 	  '  make check-acquisition-neon Check direct NEON kernel equivalence' \
 	  '  make verify-acquisition-neon Verify NEON execution and instructions' \
 	  '  make check-acquisition-sme2 Check SME2 equivalence or availability' \
 	  '  make verify-acquisition-sme2 Verify SME2 execution and instructions' \
-	  '  make compare-trust   Compare all replay trust states' \
-	  '  make align           Validate decoder-path alignment' \
-	  '  make check-metrics   Validate branch-metric path equivalence' \
-	  '  make verify          Run clean strict, sanitizer, and public correctness checks' \
+	  '  make align           Validate historical decoder-path alignment' \
+	  '  make check-metrics   Validate downstream branch-metric equivalence' \
 	  '  make verify-fixtures Verify tracked fixture seeds and SHA-256 hashes' \
 	  '  make verify-arm      Verify portable and optional Arm build modes' \
 	  '  make benchmark       Run the acquisition workload-size sweep' \
-	  '  make benchmark-acquisition Run the acquisition workload-size sweep' \
-	  '  make benchmark-acquisition-repeat Run five independent benchmark processes' \
 	  '  make benchmark-android-build Build the arm64-v8a ADB benchmark' \
 	  '  make benchmark-android-verify Inspect the Android ELF and SIMD objects' \
 	  '  make benchmark-android-run Build and run it on an authorized ADB device' \
-	  '  make benchmark-decoder-legacy Run the legacy decoder microbenchmark' \
+  '  make experiment-viterbi-branch-metrics Run the historical FEC microbenchmark' \
 	  '  make test            Run the host-side automated tests' \
 	  '  make regenerate      Regenerate the checked-in synthetic fixtures'
 
@@ -107,8 +107,8 @@ benchmark-android-verify:
 benchmark-android-run:
 	bash scripts/run_android_benchmark.sh
 
-benchmark-decoder-legacy:
-	bash scripts/benchmark_decoder_paths.sh
+experiment-viterbi-branch-metrics:
+	bash experiments/viterbi_branch_metrics/run.sh
 
 test:
 	python3 -m unittest discover -s tests -v

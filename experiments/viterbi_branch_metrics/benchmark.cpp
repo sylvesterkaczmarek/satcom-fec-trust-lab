@@ -5,17 +5,17 @@
 #include <string>
 #include <vector>
 
-#include "../src/demo/replay_pipeline.h"
-#include "../src/fec/branch_metrics_sme2.h"
-#include "../src/fec/convolutional_codec.h"
-#include "../src/fec/viterbi_decoder_neon.h"
-#include "../src/fec/viterbi_decoder_reference.h"
-#include "../src/fec/viterbi_decoder_sme2.h"
+#include "demo/replay_pipeline.h"
+#include "fec/branch_metrics_streaming_vector.h"
+#include "fec/convolutional_codec.h"
+#include "fec/viterbi_decoder_neon.h"
+#include "fec/viterbi_decoder_reference.h"
+#include "fec/viterbi_decoder_streaming_vector.h"
 #include "json_output.h"
 
 namespace {
 
-const char* compile_target_label() {
+const char* driver_compile_target_label() {
 #if defined(__ARM_FEATURE_SME2)
     return "arm-sme2-capable";
 #elif defined(__ARM_NEON) || defined(__ARM_NEON__)
@@ -184,7 +184,8 @@ int main(int argc, char** argv) {
         }
         if (arg == "--help") {
             std::cout
-                << "Usage: benchmark_decoders [--iq path] [--warmup N] [--iterations N]\n";
+                << "Usage: viterbi_branch_metric_experiment [--iq path] "
+                   "[--warmup N] [--iterations N]\n";
             return 0;
         }
         std::cerr << "Unknown or incomplete argument: " << arg << "\n";
@@ -198,7 +199,7 @@ int main(int argc, char** argv) {
 
     satcomfec::ReplayConfig config;
     config.iq_path = iq_path;
-    config.decoder = satcomfec::ReplayDecoder::kViterbiNeon;
+    config.decoder = satcomfec::ReplayDecoder::kViterbiReference;
     config.samples_per_symbol = 8;
     config.acquisition.cfo_hypotheses_hz = {
         -500.0, -250.0, 0.0, 250.0, 500.0,
@@ -226,28 +227,30 @@ int main(int argc, char** argv) {
         timed_iterations,
         satcomfec::prepare_branch_metrics_reference,
         satcomfec::viterbi_decode_reference_path);
-    const PathBenchmark sme2 = run_path_benchmark(
+    const PathBenchmark streaming_vector = run_path_benchmark(
         prepared,
-        satcomfec::viterbi_sme2_implementation_info(),
-        satcomfec::branch_metrics_sme2_selected_implementation(),
+        satcomfec::viterbi_streaming_vector_implementation_info(),
+        satcomfec::branch_metrics_streaming_vector_selected_implementation(),
         warmup_iterations,
         timed_iterations,
-        satcomfec::prepare_branch_metrics_sme2,
-        satcomfec::viterbi_decode_sme2);
+        satcomfec::prepare_branch_metrics_streaming_vector,
+        satcomfec::viterbi_decode_streaming_vector);
 
-    if (!neon.ok || !reference.ok || !sme2.ok) {
+    if (!neon.ok || !reference.ok || !streaming_vector.ok) {
         std::cerr << "One of the decoder paths failed during benchmark execution\n";
         return EXIT_FAILURE;
     }
 
-    const bool outputs_match = (neon.decoded_bits == reference.decoded_bits) &&
-                               (sme2.decoded_bits == reference.decoded_bits);
+    const bool outputs_match =
+        (neon.decoded_bits == reference.decoded_bits) &&
+        (streaming_vector.decoded_bits == reference.decoded_bits);
     const bool decoded_bit_count_match =
         (neon.decoded_bit_count == reference.decoded_bit_count) &&
-        (sme2.decoded_bit_count == reference.decoded_bit_count);
+        (streaming_vector.decoded_bit_count == reference.decoded_bit_count);
     const bool decoded_bit_checksum_match =
         (neon.decoded_bit_checksum == reference.decoded_bit_checksum) &&
-        (sme2.decoded_bit_checksum == reference.decoded_bit_checksum);
+        (streaming_vector.decoded_bit_checksum ==
+         reference.decoded_bit_checksum);
     const std::vector<uint8_t> decoded_bytes =
         satcomfec::bits_to_bytes(neon.decoded_bits);
     std::vector<uint8_t> payload_bytes(decoded_bytes.begin(), decoded_bytes.end());
@@ -262,15 +265,24 @@ int main(int argc, char** argv) {
 
     std::cout << "{\n";
     std::cout << "  \"ok\": "
-              << ((neon.ok && reference.ok && sme2.ok) ? "true" : "false") << ",\n";
+              << ((neon.ok && reference.ok && streaming_vector.ok) ? "true"
+                                                                   : "false")
+              << ",\n";
     std::cout << "  \"benchmark\": {\n";
-    std::cout << "    \"kind\": \"decoder-path-local-timing\",\n";
-    std::cout << "    \"scope\": \"Same prepared replay frame and decoder settings; reports branch-metric preparation timing separately from full decode timing. Viterbi add-compare-select and traceback remain scalar in all paths; local timing only.\",\n";
+    std::cout << "    \"kind\": "
+                 "\"legacy-viterbi-branch-metric-experiment\",\n";
+    std::cout << "    \"scope\": \"Historical local timing experiment on "
+                 "one prepared replay frame. The streaming-vector path uses "
+                 "locally streaming SVE-style operations, not ZA or an "
+                 "SME2-specific multi-vector operation. Viterbi "
+                 "add-compare-select and traceback remain scalar in every "
+                 "path.\",\n";
     std::cout << "    \"local_timing_only\": true,\n";
     std::cout << "    \"warmup_iterations\": " << warmup_iterations << ",\n";
     std::cout << "    \"timed_iterations\": " << timed_iterations << ",\n";
     std::cout << "    \"timer\": \"std::chrono::steady_clock\",\n";
-    std::cout << "    \"compile_target\": \"" << compile_target_label() << "\"\n";
+    std::cout << "    \"driver_compile_target\": \""
+              << driver_compile_target_label() << "\"\n";
     std::cout << "  },\n";
     std::cout << "  \"input\": {\n";
     std::cout << "    \"iq_path\": \"" << satcomfec::tools::escape_json(iq_path) << "\",\n";
@@ -308,7 +320,7 @@ int main(int argc, char** argv) {
     std::cout << "  \"paths\": [\n";
     print_path_json(neon, true);
     print_path_json(reference, true);
-    print_path_json(sme2, false);
+    print_path_json(streaming_vector, false);
     std::cout << "  ],\n";
     std::cout << "  \"alignment\": {\n";
     std::cout << "    \"decoded_bit_count_match\": "

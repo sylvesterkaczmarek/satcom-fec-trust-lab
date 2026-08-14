@@ -45,7 +45,9 @@ bool prepare_branch_metrics_neon(const SoftBitBuffer& soft_in,
                                  BranchMetricTables& tables) {
 #if SATCOMFEC_FEC_HAS_NEON
     if (soft_in.empty() || (soft_in.size() % 2) != 0) {
-        log_error("prepare_branch_metrics_neon: expected an even number of soft bits");
+        log_error(
+            "prepare_branch_metrics_neon: expected an even number of soft "
+            "decisions");
         return false;
     }
 
@@ -58,17 +60,17 @@ bool prepare_branch_metrics_neon(const SoftBitBuffer& soft_in,
             reinterpret_cast<const int8_t*>(soft_in.data() + 2 * symbol_index);
         const int8x16x2_t pair = vld2q_s8(interleaved_ptr);
 
-        const int16x8_t llr0_lo = vmovl_s8(vget_low_s8(pair.val[0]));
-        const int16x8_t llr0_hi = vmovl_s8(vget_high_s8(pair.val[0]));
-        const int16x8_t llr1_lo = vmovl_s8(vget_low_s8(pair.val[1]));
-        const int16x8_t llr1_hi = vmovl_s8(vget_high_s8(pair.val[1]));
+        const int16x8_t soft0_lo = vmovl_s8(vget_low_s8(pair.val[0]));
+        const int16x8_t soft0_hi = vmovl_s8(vget_high_s8(pair.val[0]));
+        const int16x8_t soft1_lo = vmovl_s8(vget_low_s8(pair.val[1]));
+        const int16x8_t soft1_hi = vmovl_s8(vget_high_s8(pair.val[1]));
 
-        const int16x8_t sum_lo = vaddq_s16(llr0_lo, llr1_lo);
-        const int16x8_t sum_hi = vaddq_s16(llr0_hi, llr1_hi);
-        const int16x8_t diff_lo = vsubq_s16(llr0_lo, llr1_lo);
-        const int16x8_t diff_hi = vsubq_s16(llr0_hi, llr1_hi);
-        const int16x8_t inverse_diff_lo = vsubq_s16(llr1_lo, llr0_lo);
-        const int16x8_t inverse_diff_hi = vsubq_s16(llr1_hi, llr0_hi);
+        const int16x8_t sum_lo = vaddq_s16(soft0_lo, soft1_lo);
+        const int16x8_t sum_hi = vaddq_s16(soft0_hi, soft1_hi);
+        const int16x8_t diff_lo = vsubq_s16(soft0_lo, soft1_lo);
+        const int16x8_t diff_hi = vsubq_s16(soft0_hi, soft1_hi);
+        const int16x8_t inverse_diff_lo = vsubq_s16(soft1_lo, soft0_lo);
+        const int16x8_t inverse_diff_hi = vsubq_s16(soft1_hi, soft0_hi);
 
         vst1q_s16(
             tables.metric_by_symbol_type[0].data() + symbol_index,
@@ -97,16 +99,16 @@ bool prepare_branch_metrics_neon(const SoftBitBuffer& soft_in,
     }
 
     for (; symbol_index < symbol_count; ++symbol_index) {
-        const int llr0 = static_cast<int>(soft_in[2 * symbol_index]);
-        const int llr1 = static_cast<int>(soft_in[2 * symbol_index + 1]);
+        const int soft0 = static_cast<int>(soft_in[2 * symbol_index]);
+        const int soft1 = static_cast<int>(soft_in[2 * symbol_index + 1]);
         tables.metric_by_symbol_type[0][symbol_index] =
-            static_cast<int16_t>(-(llr0 + llr1));
+            static_cast<int16_t>(-(soft0 + soft1));
         tables.metric_by_symbol_type[1][symbol_index] =
-            static_cast<int16_t>(llr1 - llr0);
+            static_cast<int16_t>(soft1 - soft0);
         tables.metric_by_symbol_type[2][symbol_index] =
-            static_cast<int16_t>(llr0 - llr1);
+            static_cast<int16_t>(soft0 - soft1);
         tables.metric_by_symbol_type[3][symbol_index] =
-            static_cast<int16_t>(llr0 + llr1);
+            static_cast<int16_t>(soft0 + soft1);
     }
     return true;
 #else

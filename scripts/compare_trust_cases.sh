@@ -52,8 +52,8 @@ jq -n \
       crc_ok,
       trust_score,
       trust_band: .trust_assessment.band,
-      weak_llr_fraction: .trust_features.weak_llr_fraction,
-      mean_abs_llr: .trust_features.mean_abs_llr,
+      weak_soft_decision_fraction: .trust_features.weak_soft_decision_fraction,
+      mean_abs_soft_decision: .trust_features.mean_abs_soft_decision,
       acquisition_confidence: .acquisition.confidence,
       acquisition_peak_separation: .acquisition.normalized_peak_separation,
       decoded_text
@@ -64,8 +64,8 @@ jq -n \
       crc_ok,
       trust_score,
       trust_band: .trust_assessment.band,
-      weak_llr_fraction: .trust_features.weak_llr_fraction,
-      mean_abs_llr: .trust_features.mean_abs_llr,
+      weak_soft_decision_fraction: .trust_features.weak_soft_decision_fraction,
+      mean_abs_soft_decision: .trust_features.mean_abs_soft_decision,
       acquisition_confidence: .acquisition.confidence,
       acquisition_peak_separation: .acquisition.normalized_peak_separation,
       decoded_text
@@ -87,8 +87,8 @@ jq -n \
       crc_ok,
       trust_score,
       trust_band: .trust_assessment.band,
-      weak_llr_fraction: .trust_features.weak_llr_fraction,
-      mean_abs_llr: .trust_features.mean_abs_llr,
+      weak_soft_decision_fraction: .trust_features.weak_soft_decision_fraction,
+      mean_abs_soft_decision: .trust_features.mean_abs_soft_decision,
       acquisition_success: .acquisition.acquisition_success,
       crc_failed: .trust_assessment.crc_failed,
       error
@@ -120,11 +120,12 @@ jq -n \
       impaired_score_delta: ($healthy[0].trust_score - $impaired[0].trust_score),
       ambiguous_score_delta: ($healthy[0].trust_score - $ambiguous[0].trust_score),
       failed_score_delta: ($healthy[0].trust_score - $failed[0].trust_score),
-      impaired_has_more_weak_bits:
-        ($impaired[0].trust_features.weak_llr_fraction >
-         $healthy[0].trust_features.weak_llr_fraction),
-      impaired_has_lower_llr_strength:
-        ($impaired[0].trust_features.mean_abs_llr < $healthy[0].trust_features.mean_abs_llr),
+      impaired_has_more_weak_soft_decisions:
+        ($impaired[0].trust_features.weak_soft_decision_fraction >
+         $healthy[0].trust_features.weak_soft_decision_fraction),
+      impaired_has_lower_soft_decision_strength:
+        ($impaired[0].trust_features.mean_abs_soft_decision <
+         $healthy[0].trust_features.mean_abs_soft_decision),
       failed_crc_rejected:
         ($failed[0].crc_ok == false and $failed[0].trust_assessment.crc_failed == true),
       ambiguous_peak_detected:

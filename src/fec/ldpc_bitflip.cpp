@@ -38,7 +38,7 @@ bool parity_satisfied(const std::array<uint8_t, kLdpcBlockLength>& bits,
 bool ldpc_decode_reference(const SoftBitBuffer& soft_in,
                            std::vector<uint8_t>& hard_out) {
     if (soft_in.empty() || (soft_in.size() % kLdpcBlockLength) != 0) {
-        log_error("ldpc_decode_reference: expected blocks of 12 soft bits");
+        log_error("ldpc_decode_reference: expected blocks of 12 soft decisions");
         return false;
     }
 

@@ -1,6 +1,6 @@
 {
   "ok": false,
-  "decoder": "viterbi-neon",
+  "decoder": "viterbi-reference",
   "frame_soft_bits": 0,
   "decoded_payload_bytes": 0,
   "decoded_text": "",

@@ -149,9 +149,10 @@ comparison.
 
 ## Legacy decoder experiment
 
-`scripts/benchmark_decoder_paths.sh` remains available as a narrow Viterbi
+`experiments/viterbi_branch_metrics/run.sh` preserves a narrow historical
 experiment over one 244-bit replay frame. It reports branch-metric preparation
-separately from full decode and verifies decoded-bit alignment. The NEON and
-SME2 decoder paths accelerate branch-metric preparation only; add-compare-select
-and traceback remain scalar. This decoder experiment is not evidence for
-acquisition performance or end-to-end SME2 Viterbi acceleration.
+separately from full decode and verifies decoded-bit alignment. Its third path
+uses locally streaming SVE-style operations, not ZA or an SME2-specific
+multi-vector operation. Add-compare-select and traceback remain scalar. This
+experiment is not evidence for acquisition performance, genuine SME2 Viterbi
+acceleration, or end-to-end FEC acceleration.

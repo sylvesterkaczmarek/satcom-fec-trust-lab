@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "decoder": "viterbi-neon",
+  "decoder": "viterbi-reference",
   "frame_soft_bits": 244,
   "decoded_text": "SATCOM DEMO OK",
   "crc_ok": true,
@@ -17,7 +17,7 @@
   },
   "trust_assessment": {
     "band": "guarded",
-    "weak_soft_bits": false,
+    "weak_soft_decisions": false,
     "ambiguous_acquisition": true,
     "acquisition_rejected": false,
     "crc_not_evaluated": false,

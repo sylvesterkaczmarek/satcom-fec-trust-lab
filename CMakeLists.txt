@@ -329,12 +329,12 @@ if(NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
         src/dsp/front_end_dsp.cpp
         src/dsp/framing.cpp
         src/dsp/soft_demod.cpp
-        src/fec/branch_metrics_sme2.cpp
+        src/fec/branch_metrics_streaming_vector.cpp
         src/fec/convolutional_codec.cpp
         src/fec/ldpc_bitflip.cpp
         src/fec/viterbi_decoder_neon.cpp
         src/fec/viterbi_decoder_reference.cpp
-        src/fec/viterbi_decoder_sme2.cpp
+        src/fec/viterbi_decoder_streaming_vector.cpp
         src/trust/trust_features.cpp
         src/trust/trust_score.cpp
         src/util/iq_reader.cpp
@@ -393,8 +393,13 @@ if(SATCOMFEC_SME2_SOURCE_FLAG)
     )
     if(NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
         set_property(
-            SOURCE src/fec/branch_metrics_sme2.cpp
+            SOURCE src/fec/branch_metrics_streaming_vector.cpp
             APPEND PROPERTY COMPILE_OPTIONS "${SATCOMFEC_SME2_SOURCE_FLAG}"
+        )
+        set_property(
+            SOURCE src/fec/branch_metrics_streaming_vector.cpp
+            APPEND PROPERTY COMPILE_DEFINITIONS
+                SATCOMFEC_FEC_STREAMING_VECTOR_COMPILED=1
         )
     endif()
     set_property(
@@ -422,9 +427,17 @@ if(NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
         PRIVATE satcom_replay_core satcomfec_project_options
     )
 
-    add_executable(benchmark_decoders tools/benchmark_decoders.cpp)
+    add_executable(
+        viterbi_branch_metric_experiment
+        EXCLUDE_FROM_ALL
+        experiments/viterbi_branch_metrics/benchmark.cpp
+    )
+    target_include_directories(
+        viterbi_branch_metric_experiment
+        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tools"
+    )
     target_link_libraries(
-        benchmark_decoders
+        viterbi_branch_metric_experiment
         PRIVATE satcom_replay_core satcomfec_project_options
     )
 endif()

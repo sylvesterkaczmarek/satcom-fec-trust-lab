@@ -9,7 +9,7 @@ Publicly supported workflow:
 2. Run and verify the scalar acquisition fixtures.
 3. Run the baseline replay fixture, including IQ acquisition and alignment.
 4. Run impaired, ambiguous, CRC-failed, and no-signal fixtures.
-5. Verify the replay output, trust comparison, and decoder-path alignment.
+5. Verify the replay output, trust comparison, and downstream FEC alignment.
 
 Exact commands:
 
@@ -36,7 +36,6 @@ make replay-impaired
 make replay-failed
 make check
 make compare-trust
-make align
 make check-metrics
 make verify-arm
 make benchmark
@@ -59,7 +58,6 @@ bash scripts/run_replay_demo.sh --allow-failure data/synthetic/canned_replay/dem
 bash scripts/run_replay_demo.sh --allow-failure data/synthetic/canned_replay/demo_conv_bpsk_no_signal.iq
 bash scripts/check_replay_demo.sh
 bash scripts/compare_trust_cases.sh
-bash scripts/validate_decoder_alignment.sh
 bash scripts/check_branch_metrics.sh
 bash scripts/verify_arm_paths.sh
 bash scripts/benchmark_acquisition.sh --json build/acquisition-benchmark.json
@@ -105,7 +103,7 @@ then updates the manifest.
 What CI verifies:
 
 - portable x86/Linux compilation, strict warnings, CTests, replay, trust,
-  acquisition, legacy FEC checks, fixture regeneration, and Python tests
+  acquisition, downstream FEC checks, fixture regeneration, and Python tests
 - portable x86 ASan/UBSan compilation and CTest execution
 - source-specific compile flags through the exported compile-command database
 - native Arm64/Linux reference/NEON execution, numerical equivalence, and NEON
@@ -130,10 +128,10 @@ What CI verifies:
   including preservation of each raw report
 - deterministic byte-for-byte acquisition fixture regeneration
 - healthy, impaired, ambiguous, CRC-failed, and no-signal trust behavior
-- reference versus partial-NEON versus SME2-or-fallback path alignment on the
-  same prepared replay frame
-- reference, NEON-or-fallback, and SME2-or-fallback branch-metric equivalence on
-  deterministic short and full-frame-sized inputs
+- reference versus partial-NEON versus historical streaming-vector-or-fallback
+  path alignment on the same prepared replay frame
+- reference, NEON-or-fallback, and streaming-vector-or-fallback branch-metric
+  equivalence on deterministic short and full-frame-sized inputs
 - Python host-side regression tests
 - golden structured-output subsets for replay, trust comparison, and the
   legacy decoder report

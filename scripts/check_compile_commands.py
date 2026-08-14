@@ -14,7 +14,7 @@ REFERENCE_SOURCE = "src/acquisition/acquisition_reference.cpp"
 NEON_SOURCE = "src/acquisition/acquisition_neon.cpp"
 SME2_SOURCE = "src/acquisition/acquisition_sme2.cpp"
 FEC_NEON_SOURCE = "src/fec/viterbi_decoder_neon.cpp"
-FEC_SME2_SOURCE = "src/fec/branch_metrics_sme2.cpp"
+FEC_STREAMING_VECTOR_SOURCE = "src/fec/branch_metrics_streaming_vector.cpp"
 GENERIC_FEC_SOURCE = "src/fec/convolutional_codec.cpp"
 
 
@@ -136,7 +136,7 @@ def main() -> int:
         for source, tokens in commands.items()
         if any(is_sme2_target_flag(token) for token in architecture_flags(tokens))
     }
-    allowed_sme2_sources = {SME2_SOURCE, FEC_SME2_SOURCE}
+    allowed_sme2_sources = {SME2_SOURCE, FEC_STREAMING_VECTOR_SOURCE}
     unexpected_sme2_sources = sorted(sme2_target_sources - allowed_sme2_sources)
     if unexpected_sme2_sources:
         fail(
@@ -150,6 +150,11 @@ def main() -> int:
             fail("SME2 acquisition source has no compiled-kernel definition")
         if SME2_SOURCE not in sme2_target_sources:
             fail("SME2 acquisition source was not identified as SME2-targeted")
+        streaming_tokens = commands.get(FEC_STREAMING_VECTOR_SOURCE, [])
+        if streaming_tokens and not has_definition(
+            streaming_tokens, "SATCOMFEC_FEC_STREAMING_VECTOR_COMPILED"
+        ):
+            fail("legacy streaming-vector FEC source has no compiled-kernel definition")
         if not has_definition(neon_tokens, "SATCOMFEC_ACQUISITION_NEON_COMPILED"):
             fail("SME2 comparison build did not compile the NEON acquisition kernel")
         neon_arch = architecture_flags(neon_tokens)
@@ -179,7 +184,7 @@ def main() -> int:
         NEON_SOURCE,
         SME2_SOURCE,
         FEC_NEON_SOURCE,
-        FEC_SME2_SOURCE,
+        FEC_STREAMING_VECTOR_SOURCE,
         GENERIC_FEC_SOURCE,
     ):
         if source not in commands:
@@ -192,6 +197,9 @@ def main() -> int:
             ) or has_definition(tokens, "SATCOMFEC_FEC_NEON_COMPILED"),
             "sme2_kernel_definition": has_definition(
                 tokens, "SATCOMFEC_ACQUISITION_SME2_COMPILED"
+            ),
+            "streaming_vector_definition": has_definition(
+                tokens, "SATCOMFEC_FEC_STREAMING_VECTOR_COMPILED"
             ),
         }
 

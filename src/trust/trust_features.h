@@ -12,11 +12,11 @@ struct FrameDescriptor;
 struct ReplayAcquisitionDiagnostics;
 
 struct TrustFeatures {
-    float mean_abs_llr = 0.0f;
-    float normalized_mean_abs_llr = 0.0f;
-    float weak_llr_fraction = 0.0f;
-    float normalized_sync_score = 0.0f;
-    float normalized_sync_margin = 0.0f;
+    float mean_abs_soft_decision = 0.0f;
+    float normalized_mean_abs_soft_decision = 0.0f;
+    float weak_soft_decision_fraction = 0.0f;
+    float normalized_frame_sync_score = 0.0f;
+    float normalized_frame_sync_margin = 0.0f;
     float normalized_acquisition_peak = 0.0f;
     float acquisition_peak_separation = 0.0f;
     float timing_ambiguity = 1.0f;

@@ -6,11 +6,9 @@
 #include "../dsp/framing.h"
 #include "../dsp/front_end_dsp.h"
 #include "../dsp/soft_demod.h"
-#include "../fec/branch_metrics_sme2.h"
 #include "../fec/convolutional_codec.h"
 #include "../fec/viterbi_decoder_neon.h"
 #include "../fec/viterbi_decoder_reference.h"
-#include "../fec/viterbi_decoder_sme2.h"
 #include "../trust/trust_score.h"
 #include "../util/iq_reader.h"
 #include "../util/logging.h"
@@ -32,8 +30,6 @@ const ImplementationInfo& decoder_info(ReplayDecoder decoder) {
     switch (decoder) {
         case ReplayDecoder::kViterbiNeon:
             return viterbi_neon_implementation_info();
-        case ReplayDecoder::kViterbiSme2:
-            return viterbi_sme2_implementation_info();
         case ReplayDecoder::kViterbiReference:
             return viterbi_reference_implementation_info();
     }
@@ -45,8 +41,6 @@ const char* selected_branch_metric_implementation(ReplayDecoder decoder) {
     switch (decoder) {
         case ReplayDecoder::kViterbiNeon:
             return branch_metrics_neon_selected_implementation();
-        case ReplayDecoder::kViterbiSme2:
-            return branch_metrics_sme2_selected_implementation();
         case ReplayDecoder::kViterbiReference:
             return "reference";
     }
@@ -60,8 +54,6 @@ bool dispatch_decoder(ReplayDecoder decoder,
     switch (decoder) {
         case ReplayDecoder::kViterbiNeon:
             return viterbi_decode_neon(frame_soft_bits, decoded_bits);
-        case ReplayDecoder::kViterbiSme2:
-            return viterbi_decode_sme2(frame_soft_bits, decoded_bits);
         case ReplayDecoder::kViterbiReference:
             return viterbi_decode_reference_path(frame_soft_bits, decoded_bits);
     }

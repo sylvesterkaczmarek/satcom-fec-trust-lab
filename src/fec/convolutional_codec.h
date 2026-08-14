@@ -46,7 +46,7 @@ bool viterbi_decode_from_metrics(const BranchMetricTables& tables,
                                  std::vector<uint8_t>& hard_out);
 
 const ImplementationInfo& viterbi_neon_implementation_info();
-const ImplementationInfo& viterbi_sme2_implementation_info();
+const ImplementationInfo& viterbi_streaming_vector_implementation_info();
 const ImplementationInfo& viterbi_reference_implementation_info();
 const char* implementation_class_label(ImplementationClass value);
 

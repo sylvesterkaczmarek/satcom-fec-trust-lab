@@ -46,12 +46,10 @@ def assert_decoder_reporting(test_case: unittest.TestCase, result: dict) -> None
     valid_selections = {
         "viterbi-reference": {"reference"},
         "viterbi-neon": {"neon", "fallback"},
-        "viterbi-sme2": {"sme2", "fallback"},
     }
     expected_classes = {
         "reference": "real",
         "neon": "partial",
-        "sme2": "partial",
         "fallback": "fallback",
     }
     decoder = result["decoder"]
@@ -113,7 +111,9 @@ class HostReplayTests(unittest.TestCase):
             result["acquisition"]["ground_truth"]["cfo_hypothesis_error_hz"], 0
         )
         self.assertGreater(result["acquisition"]["normalized_peak"], 0.9)
-        self.assertGreater(result["trust_features"]["mean_abs_llr"], 0.0)
+        self.assertGreater(
+            result["trust_features"]["mean_abs_soft_decision"], 0.0
+        )
         self.assertGreaterEqual(result["trust_score"], 0.0)
         self.assertLessEqual(result["trust_score"], 1.0)
         self.assertEqual(result["trust_assessment"]["band"], "high-confidence")
@@ -126,7 +126,7 @@ class HostReplayTests(unittest.TestCase):
     def test_decoder_entrypoints_align_on_same_prepared_frame(self) -> None:
         result = run_json_command(
             "bash",
-            "scripts/benchmark_decoder_paths.sh",
+            "experiments/viterbi_branch_metrics/run.sh",
             "data/synthetic/canned_replay/demo_conv_bpsk.iq",
             "1",
             "5",
@@ -166,12 +166,12 @@ class HostReplayTests(unittest.TestCase):
         )
         self.assertEqual(paths["viterbi-reference"]["implementation_class"], "real")
         self.assertIn(
-            paths["viterbi-sme2"]["implementation_class"],
+            paths["viterbi-streaming-vector"]["implementation_class"],
             {"partial", "fallback"},
         )
         self.assertTrue(paths["viterbi-neon"]["decode_ok"])
         self.assertTrue(paths["viterbi-reference"]["decode_ok"])
-        self.assertTrue(paths["viterbi-sme2"]["decode_ok"])
+        self.assertTrue(paths["viterbi-streaming-vector"]["decode_ok"])
         self.assertIn(
             paths["viterbi-neon"]["branch_metric"]["selected_implementation"],
             {"neon", "fallback"},
@@ -181,8 +181,9 @@ class HostReplayTests(unittest.TestCase):
             "reference",
         )
         self.assertIn(
-            paths["viterbi-sme2"]["branch_metric"]["selected_implementation"],
-            {"sme2", "fallback"},
+            paths["viterbi-streaming-vector"]["branch_metric"]
+            ["selected_implementation"],
+            {"streaming-sve", "fallback"},
         )
         for path in paths.values():
             self.assertGreaterEqual(path["branch_metric"]["elapsed_ms"], 0.0)
@@ -195,7 +196,7 @@ class HostReplayTests(unittest.TestCase):
             paths["viterbi-reference"]["decoded_bit_count"],
         )
         self.assertEqual(
-            paths["viterbi-sme2"]["decoded_bit_count"],
+            paths["viterbi-streaming-vector"]["decoded_bit_count"],
             paths["viterbi-reference"]["decoded_bit_count"],
         )
         self.assertEqual(
@@ -203,7 +204,7 @@ class HostReplayTests(unittest.TestCase):
             paths["viterbi-reference"]["decoded_bit_checksum"],
         )
         self.assertEqual(
-            paths["viterbi-sme2"]["decoded_bit_checksum"],
+            paths["viterbi-streaming-vector"]["decoded_bit_checksum"],
             paths["viterbi-reference"]["decoded_bit_checksum"],
         )
 
@@ -241,11 +242,14 @@ class HostReplayTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["implementations"]["reference"]["selected"], "reference")
         self.assertIn(result["implementations"]["neon"]["selected"], {"neon", "fallback"})
-        self.assertIn(result["implementations"]["sme2"]["selected"], {"sme2", "fallback"})
+        self.assertIn(
+            result["implementations"]["streaming_vector"]["selected"],
+            {"streaming-sve", "fallback"},
+        )
         self.assertGreaterEqual(len(result["cases"]), 10)
         for case in result["cases"]:
             self.assertTrue(case["neon_matches_reference"])
-            self.assertTrue(case["sme2_matches_reference"])
+            self.assertTrue(case["streaming_vector_matches_reference"])
 
     def test_impaired_replay_scores_lower_than_healthy(self) -> None:
         healthy = run_json_command(
@@ -267,7 +271,7 @@ class HostReplayTests(unittest.TestCase):
             impaired["samples_per_symbol"], self.impaired_metadata["samples_per_symbol"]
         )
         self.assertEqual(impaired["trust_assessment"]["band"], "guarded")
-        self.assertTrue(impaired["trust_assessment"]["weak_soft_bits"])
+        self.assertTrue(impaired["trust_assessment"]["weak_soft_decisions"])
         self.assertTrue(impaired["acquisition"]["acquisition_success"])
         self.assertEqual(
             impaired["acquisition"]["detected_timing_offset"],
@@ -283,12 +287,12 @@ class HostReplayTests(unittest.TestCase):
         )
         self.assertLess(impaired["trust_score"], healthy["trust_score"])
         self.assertLess(
-            impaired["trust_features"]["mean_abs_llr"],
-            healthy["trust_features"]["mean_abs_llr"],
+            impaired["trust_features"]["mean_abs_soft_decision"],
+            healthy["trust_features"]["mean_abs_soft_decision"],
         )
         self.assertGreater(
-            impaired["trust_features"]["weak_llr_fraction"],
-            healthy["trust_features"]["weak_llr_fraction"],
+            impaired["trust_features"]["weak_soft_decision_fraction"],
+            healthy["trust_features"]["weak_soft_decision_fraction"],
         )
 
     def test_ambiguous_replay_decodes_with_competing_acquisition_peak(self) -> None:

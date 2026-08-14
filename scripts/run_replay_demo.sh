@@ -48,9 +48,8 @@ Usage: scripts/run_replay_demo.sh [--allow-failure]
        [--preamble path] [iq_path] [decoder]
 
 Supported decoders:
-  viterbi-neon
-  viterbi-sme2
   viterbi-reference
+  viterbi-neon
 
 The portable default uses reference IQ acquisition. Requested NEON or SME2
 acquisition fails explicitly when that implementation is unavailable.
@@ -65,7 +64,7 @@ EOF
 done
 
 IQ_PATH="${POSITIONAL_ARGS[0]:-${ROOT_DIR}/data/synthetic/canned_replay/demo_conv_bpsk.iq}"
-DECODER="${POSITIONAL_ARGS[1]:-viterbi-neon}"
+DECODER="${POSITIONAL_ARGS[1]:-viterbi-reference}"
 
 if [[ ! -f "${IQ_PATH}" ]]; then
   echo "error: IQ file not found: ${IQ_PATH}" >&2
@@ -78,7 +77,7 @@ if [[ -n "${PREAMBLE_PATH}" && ! -f "${PREAMBLE_PATH}" ]]; then
 fi
 
 case "${DECODER}" in
-  viterbi-neon|viterbi-sme2|viterbi-reference)
+  viterbi-reference|viterbi-neon)
     ;;
   *)
     echo "error: unsupported decoder '${DECODER}'" >&2

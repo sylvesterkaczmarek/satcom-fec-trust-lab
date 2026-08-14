@@ -20,13 +20,10 @@ struct FixtureMetadata {
 };
 
 satcomfec::ReplayDecoder parse_decoder(const std::string& value) {
-    if (value == "viterbi-sme2") {
-        return satcomfec::ReplayDecoder::kViterbiSme2;
+    if (value == "viterbi-neon") {
+        return satcomfec::ReplayDecoder::kViterbiNeon;
     }
-    if (value == "viterbi-reference") {
-        return satcomfec::ReplayDecoder::kViterbiReference;
-    }
-    return satcomfec::ReplayDecoder::kViterbiNeon;
+    return satcomfec::ReplayDecoder::kViterbiReference;
 }
 
 satcomfec::acquisition::AcquisitionImplementation parse_acquisition(
@@ -254,7 +251,7 @@ int main(int argc, char** argv) {
     std::string iq_path = "data/synthetic/canned_replay/demo_conv_bpsk.iq";
     std::string metadata_path;
     std::string preamble_path;
-    std::string decoder_name = "viterbi-neon";
+    std::string decoder_name = "viterbi-reference";
     std::string acquisition_name = "reference";
     bool metadata_explicit = false;
 
@@ -285,15 +282,15 @@ int main(int argc, char** argv) {
             std::cout
                 << "Usage: replay_demo [--iq path] [--metadata path] "
                    "[--preamble path] [--acquisition reference|neon|sme2] "
-                   "[--decoder viterbi-neon|viterbi-sme2|viterbi-reference]\n";
+                   "[--decoder viterbi-reference|viterbi-neon]\n";
             return 0;
         }
         std::cerr << "Unknown or incomplete argument: " << arg << "\n";
         return EXIT_FAILURE;
     }
 
-    if (decoder_name != "viterbi-neon" && decoder_name != "viterbi-sme2" &&
-        decoder_name != "viterbi-reference") {
+    if (decoder_name != "viterbi-reference" &&
+        decoder_name != "viterbi-neon") {
         std::cerr << "Unsupported decoder: " << decoder_name << "\n";
         return EXIT_FAILURE;
     }
@@ -494,15 +491,17 @@ int main(int argc, char** argv) {
     std::cout << "    \"second_best_sync_score\": "
               << result.frame.second_best_correlation_score << "\n  },\n";
     std::cout << "  \"trust_features\": {\n";
-    std::cout << "    \"mean_abs_llr\": "
-              << satcomfec::tools::format_float(result.trust_features.mean_abs_llr, 3)
-              << ",\n";
-    std::cout << "    \"normalized_mean_abs_llr\": "
+    std::cout << "    \"mean_abs_soft_decision\": "
               << satcomfec::tools::format_float(
-                     result.trust_features.normalized_mean_abs_llr)
+                     result.trust_features.mean_abs_soft_decision, 3)
               << ",\n";
-    std::cout << "    \"weak_llr_fraction\": "
-              << satcomfec::tools::format_float(result.trust_features.weak_llr_fraction)
+    std::cout << "    \"normalized_mean_abs_soft_decision\": "
+              << satcomfec::tools::format_float(
+                     result.trust_features.normalized_mean_abs_soft_decision)
+              << ",\n";
+    std::cout << "    \"weak_soft_decision_fraction\": "
+              << satcomfec::tools::format_float(
+                     result.trust_features.weak_soft_decision_fraction)
               << ",\n";
     std::cout << "    \"normalized_acquisition_peak\": "
               << satcomfec::tools::format_float(
@@ -522,13 +521,13 @@ int main(int argc, char** argv) {
     std::cout << "    \"acquisition_accepted\": "
               << satcomfec::tools::format_float(result.trust_features.acquisition_accepted)
               << ",\n";
-    std::cout << "    \"normalized_sync_score\": "
+    std::cout << "    \"normalized_frame_sync_score\": "
               << satcomfec::tools::format_float(
-                     result.trust_features.normalized_sync_score)
+                     result.trust_features.normalized_frame_sync_score)
               << ",\n";
-    std::cout << "    \"normalized_sync_margin\": "
+    std::cout << "    \"normalized_frame_sync_margin\": "
               << satcomfec::tools::format_float(
-                     result.trust_features.normalized_sync_margin)
+                     result.trust_features.normalized_frame_sync_margin)
               << ",\n";
     std::cout << "    \"clipped_symbol_fraction\": "
               << satcomfec::tools::format_float(
@@ -541,11 +540,13 @@ int main(int argc, char** argv) {
               << satcomfec::tools::format_float(result.trust_features.crc_pass)
               << "\n  },\n";
     std::cout << "  \"trust_breakdown\": {\n";
-    std::cout << "    \"llr_strength\": "
-              << satcomfec::tools::format_float(result.trust_breakdown.llr_strength)
+    std::cout << "    \"soft_decision_strength\": "
+              << satcomfec::tools::format_float(
+                     result.trust_breakdown.soft_decision_strength)
               << ",\n";
-    std::cout << "    \"llr_consistency\": "
-              << satcomfec::tools::format_float(result.trust_breakdown.llr_consistency)
+    std::cout << "    \"soft_decision_consistency\": "
+              << satcomfec::tools::format_float(
+                     result.trust_breakdown.soft_decision_consistency)
               << ",\n";
     std::cout << "    \"acquisition_strength\": "
               << satcomfec::tools::format_float(
@@ -559,12 +560,13 @@ int main(int argc, char** argv) {
               << satcomfec::tools::format_float(
                      result.trust_breakdown.acquisition_certainty)
               << ",\n";
-    std::cout << "    \"sync_quality\": "
-              << satcomfec::tools::format_float(result.trust_breakdown.sync_quality)
-              << ",\n";
-    std::cout << "    \"sync_margin_quality\": "
+    std::cout << "    \"frame_sync_quality\": "
               << satcomfec::tools::format_float(
-                     result.trust_breakdown.sync_margin_quality)
+                     result.trust_breakdown.frame_sync_quality)
+              << ",\n";
+    std::cout << "    \"frame_sync_margin_quality\": "
+              << satcomfec::tools::format_float(
+                     result.trust_breakdown.frame_sync_margin_quality)
               << ",\n";
     std::cout << "    \"demod_quality\": "
               << satcomfec::tools::format_float(result.trust_breakdown.demod_quality)
@@ -586,16 +588,18 @@ int main(int argc, char** argv) {
     std::cout << "  \"trust_assessment\": {\n";
     std::cout << "    \"band\": \""
               << satcomfec::tools::escape_json(result.trust_assessment.band) << "\",\n";
-    std::cout << "    \"weak_soft_bits\": "
-              << (result.trust_assessment.weak_soft_bits ? "true" : "false") << ",\n";
+    std::cout << "    \"weak_soft_decisions\": "
+              << (result.trust_assessment.weak_soft_decisions ? "true" : "false")
+              << ",\n";
     std::cout << "    \"ambiguous_acquisition\": "
               << (result.trust_assessment.ambiguous_acquisition ? "true" : "false")
               << ",\n";
     std::cout << "    \"acquisition_rejected\": "
               << (result.trust_assessment.acquisition_rejected ? "true" : "false")
               << ",\n";
-    std::cout << "    \"ambiguous_sync\": "
-              << (result.trust_assessment.ambiguous_sync ? "true" : "false") << ",\n";
+    std::cout << "    \"ambiguous_frame_sync\": "
+              << (result.trust_assessment.ambiguous_frame_sync ? "true" : "false")
+              << ",\n";
     std::cout << "    \"demod_clipping\": "
               << (result.trust_assessment.demod_clipping ? "true" : "false") << ",\n";
     std::cout << "    \"crc_not_evaluated\": "

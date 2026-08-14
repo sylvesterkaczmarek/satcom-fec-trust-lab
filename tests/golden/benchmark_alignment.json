@@ -1,7 +1,7 @@
 {
   "ok": true,
   "benchmark": {
-    "kind": "decoder-path-local-timing",
+    "kind": "legacy-viterbi-branch-metric-experiment",
     "local_timing_only": true,
     "timer": "std::chrono::steady_clock"
   },

@@ -1,44 +1,26 @@
-# SIMD Path Status
+# SIMD path status
 
-The repository distinguishes implementation maturity explicitly and keeps the
-public benchmark scope narrow.
+IQ-domain acquisition is the supported architecture-optimization workload.
 
-| Path | Status | Benchmarked in public repo | What is implemented |
-| --- | --- | --- | --- |
-| Acquisition reference | real scalar oracle | yes | scalar double-precision correlation across the complete timing/CFO grid |
-| Acquisition NEON | real target-specific kernel | yes when compiled | float32 NEON complex multiply-accumulate with explicit tail handling |
-| Acquisition SME2 | real when explicitly compiled and runtime-supported | yes when executable | float32 SME2 VGx4 `FMLA`/`FMLS` into ZA across four scalable vectors of timing hypotheses; setup, scoring, and ranking remain scalar |
-| `viterbi-neon` | partial when NEON is compiled; reported fallback otherwise | yes | Neon branch-metric preparation in `src/fec/viterbi_decoder_neon.cpp`, followed by the shared scalar add-compare-select and traceback core; non-NEON builds use scalar branch metrics and report `fallback` |
-| `viterbi-sme2` | partial decoder path; real branch-metric kernel when compiled for SME2, fallback otherwise | yes | SME2/SME streaming-mode branch-metric preparation gated by `__ARM_FEATURE_SME2`; non-SME2 builds use scalar branch metrics |
-| `viterbi-reference` | real scalar reference | yes | scalar branch-metric preparation plus shared scalar add-compare-select and traceback core |
-| LDPC bit-flip reference | real simplified algorithm | no | small reference bit-flip decoder; no public NEON or SME2 LDPC path |
+| Path | Status | Implementation |
+| --- | --- | --- |
+| Acquisition reference | real scalar oracle | float64 correlation over the complete timing/CFO grid |
+| Acquisition NEON | real when compiled and runtime-supported | float32 NEON complex multiply-accumulate with explicit tail handling |
+| Acquisition SME2 | real when compiled and runtime-supported | float32 SME2 VGx4 `FMLA`/`FMLS` into ZA across timing-hypothesis tiles |
+| `viterbi-reference` | real scalar decoder; replay default | scalar branch metrics, add-compare-select, and traceback |
+| `viterbi-neon` | partial or reported fallback | NEON branch metrics when available; scalar recurrence and traceback |
+| `viterbi-streaming-vector` | historical partial experiment or reported fallback | locally streaming SVE-style branch metrics; no ZA or SME2-specific multi-vector operation; scalar recurrence and traceback |
+| LDPC bit-flip reference | simplified reference utility | scalar bit-flip algorithm; no public NEON or SME2 path |
 
-Unavailable acquisition paths report `unavailable` rather than running a
-scalar fallback under an accelerated label. `benchmark_acquisition` verifies
-candidate identity and score tolerances before timing, then reports local
-steady-state, per-capture, and setup-inclusive measurements plus workspace
-bytes without embedding a speedup conclusion.
+Accelerated acquisition requests report `unavailable` rather than executing a
+fallback under an accelerated name. Acquisition SME2 is a genuine ZA-backed
+kernel; the historical Viterbi streaming-vector experiment is not.
 
-The legacy decoder harness compares `viterbi-reference`, `viterbi-neon`, and
-`viterbi-sme2` on the same prepared frame window. It reports branch-metric
-preparation timing separately from full decode timing. Full decode timing still
-includes the shared scalar add-compare-select and traceback core, so it is not
-evidence of end-to-end SME2 Viterbi acceleration.
+`benchmark_acquisition` is the supported benchmark. It verifies candidate
+identity and score tolerances before reporting steady-state, per-capture, and
+setup-inclusive local timings and memory costs.
 
-`scripts/check_branch_metrics.sh` reports which branch-metric implementation was
-selected: reference, NEON, SME2, or fallback.
-
-Publication-safe wording for this repo:
-
-- `viterbi-neon` is a partial Neon implementation limited to branch-metric
-  preparation when compiled for NEON; otherwise its implementation class and
-  selected branch-metric implementation are both reported as fallback.
-- `viterbi-sme2` is a partial decoder path with a real SME2 branch-metric
-  implementation only in builds where `__ARM_FEATURE_SME2` is available;
-  otherwise it is a reported fallback.
-- `viterbi-reference` is the scalar reference Viterbi path.
-- Viterbi add-compare-select and traceback remain scalar in every public path.
-- The decoder benchmark is a like-for-like local timing comparison over one
-  prepared replay frame, not a general performance claim.
-- Small replay frames can make SME2 branch-metric preparation slower when
-  setup and streaming-mode overhead dominate.
+The historical FEC timing harness is isolated in
+`experiments/viterbi_branch_metrics/`. It compares identical prepared soft
+decisions and preserves correctness evidence, but it is not used to support an
+SME2 performance claim or an end-to-end FEC acceleration claim.

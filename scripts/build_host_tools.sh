@@ -11,8 +11,9 @@ usage() {
 Usage: scripts/build_host_tools.sh TARGET
 
 Targets:
-  replay_demo, benchmark_decoders, benchmark_acquisition, check_branch_metrics,
-  acquisition_demo, check_acquisition_kernels, check_sme2_acquisition, all
+  replay_demo, benchmark_acquisition, check_branch_metrics, acquisition_demo,
+  check_acquisition_kernels, check_sme2_acquisition,
+  viterbi_branch_metric_experiment, all
 
 Environment:
   CXX=clang++                         Select the C++ compiler.
@@ -32,8 +33,9 @@ if [[ "${TARGET}" == "--help" || "${TARGET}" == "-h" ]]; then
 fi
 
 case "${TARGET}" in
-  replay_demo|benchmark_decoders|benchmark_acquisition|check_branch_metrics|\
-  acquisition_demo|check_acquisition_kernels|check_sme2_acquisition|all)
+  replay_demo|benchmark_acquisition|check_branch_metrics|acquisition_demo|\
+  check_acquisition_kernels|check_sme2_acquisition|\
+  viterbi_branch_metric_experiment|all)
     ;;
   *)
     echo "error: unsupported build target '${TARGET}'" >&2

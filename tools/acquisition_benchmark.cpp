@@ -1903,8 +1903,8 @@ std::string serialize_json(const BenchmarkReport& report) {
               "correctness-gated against the oracle.\",\n";
     output << "    \"Reported memory is payload/capacity accounting, not process "
               "resident-set size or allocator overhead.\",\n";
-    output << "    \"The legacy Viterbi decoder benchmark is independent and is "
-              "not evidence for acquisition performance.\"\n";
+    output << "    \"The historical Viterbi branch-metric experiment is "
+              "independent and is not evidence for acquisition performance.\"\n";
     output << "  ]\n";
     output << "}\n";
     return output.str();

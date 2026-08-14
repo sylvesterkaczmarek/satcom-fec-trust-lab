@@ -16,7 +16,6 @@ namespace satcomfec {
 
 enum class ReplayDecoder {
     kViterbiNeon,
-    kViterbiSme2,
     kViterbiReference,
 };
 
@@ -24,7 +23,7 @@ struct ReplayConfig {
     std::string iq_path;
     std::string preamble_iq_path =
         "data/synthetic/canned_replay/preamble_qpsk_256.iq";
-    ReplayDecoder decoder = ReplayDecoder::kViterbiNeon;
+    ReplayDecoder decoder = ReplayDecoder::kViterbiReference;
     size_t samples_per_symbol = 8;
     ReplayAcquisitionConfig acquisition;
     ReplayAcquisitionGroundTruth ground_truth;

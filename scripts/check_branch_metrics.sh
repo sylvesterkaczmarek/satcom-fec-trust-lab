@@ -33,6 +33,6 @@ echo "${OUTPUT}" | jq -e '.implementations.reference.selected == "reference"' >/
 echo "${OUTPUT}" |
   jq -e '.implementations.neon.selected == "neon" or .implementations.neon.selected == "fallback"' >/dev/null
 echo "${OUTPUT}" |
-  jq -e '.implementations.sme2.selected == "sme2" or .implementations.sme2.selected == "fallback"' >/dev/null
+  jq -e '.implementations.streaming_vector.selected == "streaming-sve" or .implementations.streaming_vector.selected == "fallback"' >/dev/null
 echo "${OUTPUT}" |
-  jq -e 'all(.cases[]; .neon_matches_reference == true and .sme2_matches_reference == true)' >/dev/null
+  jq -e 'all(.cases[]; .neon_matches_reference == true and .streaming_vector_matches_reference == true)' >/dev/null

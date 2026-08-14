@@ -28,6 +28,9 @@ OUTPUT="$(bash "${ROOT_DIR}/scripts/run_replay_demo.sh")"
 echo "${OUTPUT}"
 
 echo "${OUTPUT}" | jq -e '.ok == true' >/dev/null
+echo "${OUTPUT}" | jq -e '.decoder == "viterbi-reference"' >/dev/null
+echo "${OUTPUT}" | jq -e '.implementation_class == "real"' >/dev/null
+echo "${OUTPUT}" | jq -e '.branch_metric_implementation == "reference"' >/dev/null
 echo "${OUTPUT}" | jq -e '.decoded_text == "SATCOM DEMO OK"' >/dev/null
 echo "${OUTPUT}" | jq -e '.crc_ok == true' >/dev/null
 echo "${OUTPUT}" | jq -e '.acquisition.selected_implementation == "reference"' >/dev/null

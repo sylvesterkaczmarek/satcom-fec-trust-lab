@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "../src/fec/branch_metrics_sme2.h"
+#include "../src/fec/branch_metrics_streaming_vector.h"
 #include "../src/fec/convolutional_codec.h"
 
 namespace {
@@ -27,7 +27,7 @@ bool same_tables(const satcomfec::BranchMetricTables& lhs,
 struct MetricCheck {
     size_t symbol_count = 0;
     bool neon_matches_reference = false;
-    bool sme2_matches_reference = false;
+    bool streaming_vector_matches_reference = false;
 };
 
 }  // namespace
@@ -45,23 +45,26 @@ int main() {
         const satcomfec::SoftBitBuffer soft_bits = make_soft_bits(symbol_count);
         satcomfec::BranchMetricTables reference;
         satcomfec::BranchMetricTables neon;
-        satcomfec::BranchMetricTables sme2;
+        satcomfec::BranchMetricTables streaming_vector;
 
         const bool reference_ok =
             satcomfec::prepare_branch_metrics_reference(soft_bits, reference);
         const bool neon_ok =
             satcomfec::prepare_branch_metrics_neon(soft_bits, neon);
-        const bool sme2_ok =
-            satcomfec::prepare_branch_metrics_sme2(soft_bits, sme2);
+        const bool streaming_vector_ok =
+            satcomfec::prepare_branch_metrics_streaming_vector(
+                soft_bits, streaming_vector);
 
         MetricCheck check;
         check.symbol_count = symbol_count;
         check.neon_matches_reference =
             reference_ok && neon_ok && same_tables(reference, neon);
-        check.sme2_matches_reference =
-            reference_ok && sme2_ok && same_tables(reference, sme2);
+        check.streaming_vector_matches_reference =
+            reference_ok && streaming_vector_ok &&
+            same_tables(reference, streaming_vector);
         checks.push_back(check);
-        ok = ok && check.neon_matches_reference && check.sme2_matches_reference;
+        ok = ok && check.neon_matches_reference &&
+             check.streaming_vector_matches_reference;
     }
 
     std::cout << "{\n";
@@ -78,11 +81,14 @@ int main() {
               << (satcomfec::branch_metrics_neon_kernel_compiled() ? "true" : "false")
               << "\n";
     std::cout << "    },\n";
-    std::cout << "    \"sme2\": {\n";
+    std::cout << "    \"streaming_vector\": {\n";
     std::cout << "      \"selected\": \""
-              << satcomfec::branch_metrics_sme2_selected_implementation() << "\",\n";
+              << satcomfec::branch_metrics_streaming_vector_selected_implementation()
+              << "\",\n";
     std::cout << "      \"kernel_compiled\": "
-              << (satcomfec::branch_metrics_sme2_kernel_compiled() ? "true" : "false")
+              << (satcomfec::branch_metrics_streaming_vector_kernel_compiled()
+                      ? "true"
+                      : "false")
               << "\n";
     std::cout << "    }\n";
     std::cout << "  },\n";
@@ -93,8 +99,9 @@ int main() {
         std::cout << "      \"symbols\": " << check.symbol_count << ",\n";
         std::cout << "      \"neon_matches_reference\": "
                   << (check.neon_matches_reference ? "true" : "false") << ",\n";
-        std::cout << "      \"sme2_matches_reference\": "
-                  << (check.sme2_matches_reference ? "true" : "false") << "\n";
+        std::cout << "      \"streaming_vector_matches_reference\": "
+                  << (check.streaming_vector_matches_reference ? "true" : "false")
+                  << "\n";
         std::cout << "    }" << ((i + 1) == checks.size() ? "\n" : ",\n");
     }
     std::cout << "  ]\n";

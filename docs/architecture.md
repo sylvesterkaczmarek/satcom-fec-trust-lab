@@ -19,22 +19,21 @@ The replay workflow is:
 6. `find_frames` checks that the legacy 16-bit soft sync is at offset zero and
    slices the coded bits. It is a secondary consistency check, not the primary
    acquisition mechanism.
-7. `viterbi_decode_reference_path`, `viterbi_decode_neon`, or
-   `viterbi_decode_sme2` decodes the convolutionally coded frame. The Neon path
-   uses checked-in Neon branch-metric preparation when `__ARM_NEON` or
-   `__ARM_NEON__` is available. The SME2 path uses SME2/SME streaming-mode
-   branch-metric preparation only when built for a suitable Armv9 SME2 target
-   with `__ARM_FEATURE_SME2`. The Viterbi trellis recurrence and traceback
-   remain scalar in all paths.
+7. `viterbi_decode_reference_path` decodes the convolutionally coded frame by
+   default. The optional `viterbi-neon` path uses NEON branch-metric
+   preparation when available, followed by the shared scalar recurrence and
+   traceback. A historical locally streaming SVE-style branch-metric path is
+   retained under `experiments/viterbi_branch_metrics/`; it does not use ZA or
+   an SME2-specific multi-vector operation.
 8. The decoded bytes are checked with CRC-8.
 9. `compute_trust_features` and `compute_trust_score` summarize normalized
-   acquisition strength, peak separation, residual uncertainty, soft-bit
-   evidence, secondary sync, demod clipping, and CRC state.
+   acquisition strength, peak separation, residual uncertainty, soft-decision
+   evidence, secondary frame sync, demod clipping, and CRC state.
 
 The host-side entrypoint for this flow is `tools/replay_demo.cpp`, built and
-run by `scripts/run_replay_demo.sh`. Decoder alignment and local timing are
-handled by `scripts/validate_decoder_alignment.sh` and
-`scripts/benchmark_decoder_paths.sh`.
+run by `scripts/run_replay_demo.sh`. Decoder alignment remains a functional FEC
+check in `scripts/validate_decoder_alignment.sh`; the timing harness is isolated
+under `experiments/viterbi_branch_metrics/`.
 
 Acquisition timing is a separate workload sweep implemented by
 `tools/benchmark_acquisition.cpp` and `tools/acquisition_benchmark.cpp`, exposed
@@ -62,8 +61,8 @@ CMake is the authoritative host and NDK build path. Compiler warning and
 sanitizer options are common target options; architecture features are not.
 The scalar acquisition reference has a dedicated translation unit with loop
 and SLP vectorization disabled. NEON and SME2 flags are attached only to their
-respective implementation sources. The legacy FEC scalar core is similarly
-separate from NEON branch metrics and SME2 branch metrics.
+respective implementation sources. The FEC scalar core is separate from NEON
+branch metrics and the historical streaming-vector branch metrics.
 
 Every configured build exports `compile_commands.json`.
 `scripts/check_compile_commands.py` verifies the boundaries and fails if an
