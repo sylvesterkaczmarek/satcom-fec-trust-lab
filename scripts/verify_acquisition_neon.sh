@@ -3,7 +3,10 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="${ROOT_DIR}/build/host_replay"
+BUILD_DIR="${SATCOMFEC_BUILD_DIR:-${ROOT_DIR}/build/verify_acquisition_neon}"
+if [[ "${BUILD_DIR}" != /* ]]; then
+  BUILD_DIR="${ROOT_DIR}/${BUILD_DIR}"
+fi
 CXX_BIN="${CXX:-c++}"
 ARCHITECTURE="$(uname -m)"
 
@@ -16,20 +19,22 @@ case "${ARCHITECTURE}" in
   arm64|aarch64)
     echo
     echo "Building explicit AArch64 NEON path:"
-    SATCOMFEC_ENABLE_NEON=ON \
+    SATCOMFEC_BUILD_DIR="${BUILD_DIR}" SATCOMFEC_ENABLE_NEON=ON \
       bash "${ROOT_DIR}/scripts/build_host_tools.sh" all
 
     echo
     echo "Running NEON kernel equivalence with execution required:"
-    bash "${ROOT_DIR}/scripts/check_acquisition_neon.sh" --require-neon
+    SATCOMFEC_BUILD_DIR="${BUILD_DIR}" \
+      bash "${ROOT_DIR}/scripts/check_acquisition_neon.sh" --require-neon
     ;;
   *)
     echo
     echo "Native NEON execution is unavailable on ${ARCHITECTURE}."
     echo "Building the portable path and checking explicit unavailable reporting:"
-    SATCOMFEC_ENABLE_NEON=OFF \
+    SATCOMFEC_BUILD_DIR="${BUILD_DIR}" SATCOMFEC_ENABLE_NEON=OFF \
       bash "${ROOT_DIR}/scripts/build_host_tools.sh" all
-    bash "${ROOT_DIR}/scripts/check_acquisition_neon.sh"
+    SATCOMFEC_BUILD_DIR="${BUILD_DIR}" \
+      bash "${ROOT_DIR}/scripts/check_acquisition_neon.sh"
     exit 0
     ;;
 esac

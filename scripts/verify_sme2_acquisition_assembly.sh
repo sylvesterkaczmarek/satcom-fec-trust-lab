@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD_DIR="${SATCOMFEC_BUILD_DIR:-${ROOT_DIR}/build/host_replay}"
+BUILD_DIR="${SATCOMFEC_BUILD_DIR:-${ROOT_DIR}/build/verify_acquisition_sme2}"
 if [[ "${BUILD_DIR}" != /* ]]; then
   BUILD_DIR="${ROOT_DIR}/${BUILD_DIR}"
 fi
@@ -19,14 +19,14 @@ case "${ARCHITECTURE}" in
   arm64|aarch64)
     echo
     echo "Building the explicit SME2 path:"
-    SATCOMFEC_ENABLE_SME2=ON \
+    SATCOMFEC_BUILD_DIR="${BUILD_DIR}" SATCOMFEC_ENABLE_SME2=ON \
       bash "${ROOT_DIR}/scripts/build_host_tools.sh" all
     ;;
   *)
     echo
     echo "Native SME2 execution is unavailable on ${ARCHITECTURE}."
     echo "Checking portable unavailable reporting instead."
-    SATCOMFEC_ENABLE_SME2=OFF \
+    SATCOMFEC_BUILD_DIR="${BUILD_DIR}" SATCOMFEC_ENABLE_SME2=OFF \
       bash "${ROOT_DIR}/scripts/build_host_tools.sh" check_sme2_acquisition
     "${BUILD_DIR}/check_sme2_acquisition"
     exit 0

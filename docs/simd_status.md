@@ -16,6 +16,11 @@ Accelerated acquisition requests report `unavailable` rather than executing a
 fallback under an accelerated name. Acquisition SME2 is a genuine ZA-backed
 kernel; the historical Viterbi streaming-vector experiment is not.
 
+The checked Apple M5 Pro result set in `benchmarks/results/a83cd53/` executed
+all three acquisition paths and reports SME2 below NEON latency for every fixed
+workload and timing mode. That is local evidence for the recorded host and
+compiler, not a portable speedup claim. No Android timing artifact is included.
+
 `benchmark_acquisition` is the supported benchmark. It verifies candidate
 identity and score tolerances before reporting steady-state, per-capture, and
 setup-inclusive local timings and memory costs.

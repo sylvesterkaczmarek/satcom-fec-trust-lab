@@ -22,14 +22,24 @@ elif [[ $# -gt 0 ]]; then
 fi
 
 if [[ "${REQUIRE_SME2}" == "1" ]]; then
-  SATCOMFEC_ENABLE_SME2=ON \
+  BUILD_DIR="${SATCOMFEC_BUILD_DIR:-${ROOT_DIR}/build/acquisition_sme2}"
+else
+  BUILD_DIR="${SATCOMFEC_BUILD_DIR:-${ROOT_DIR}/build/host_replay}"
+fi
+if [[ "${BUILD_DIR}" != /* ]]; then
+  BUILD_DIR="${ROOT_DIR}/${BUILD_DIR}"
+fi
+
+if [[ "${REQUIRE_SME2}" == "1" ]]; then
+  SATCOMFEC_BUILD_DIR="${BUILD_DIR}" SATCOMFEC_ENABLE_SME2=ON \
     "${ROOT_DIR}/scripts/build_host_tools.sh" check_sme2_acquisition
 else
-  "${ROOT_DIR}/scripts/build_host_tools.sh" check_sme2_acquisition
+  SATCOMFEC_BUILD_DIR="${BUILD_DIR}" \
+    "${ROOT_DIR}/scripts/build_host_tools.sh" check_sme2_acquisition
 fi
 
 arguments=()
 if [[ "${REQUIRE_SME2}" == "1" ]]; then
   arguments+=(--require-sme2)
 fi
-"${ROOT_DIR}/build/host_replay/check_sme2_acquisition" "${arguments[@]}"
+"${BUILD_DIR}/check_sme2_acquisition" "${arguments[@]}"

@@ -21,10 +21,25 @@ elif [[ $# -gt 0 ]]; then
   exit 1
 fi
 
-"${ROOT_DIR}/scripts/build_host_tools.sh" check_acquisition_kernels
+if [[ "${REQUIRE_NEON}" == "1" ]]; then
+  BUILD_DIR="${SATCOMFEC_BUILD_DIR:-${ROOT_DIR}/build/acquisition_neon}"
+else
+  BUILD_DIR="${SATCOMFEC_BUILD_DIR:-${ROOT_DIR}/build/host_replay}"
+fi
+if [[ "${BUILD_DIR}" != /* ]]; then
+  BUILD_DIR="${ROOT_DIR}/${BUILD_DIR}"
+fi
+
+if [[ "${REQUIRE_NEON}" == "1" ]]; then
+  SATCOMFEC_BUILD_DIR="${BUILD_DIR}" SATCOMFEC_ENABLE_NEON=ON \
+    "${ROOT_DIR}/scripts/build_host_tools.sh" check_acquisition_kernels
+else
+  SATCOMFEC_BUILD_DIR="${BUILD_DIR}" \
+    "${ROOT_DIR}/scripts/build_host_tools.sh" check_acquisition_kernels
+fi
 
 arguments=()
 if [[ "${REQUIRE_NEON}" == "1" ]]; then
   arguments+=(--require-neon)
 fi
-"${ROOT_DIR}/build/host_replay/check_acquisition_kernels" "${arguments[@]}"
+"${BUILD_DIR}/check_acquisition_kernels" "${arguments[@]}"

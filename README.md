@@ -1,42 +1,16 @@
-# Satcom FEC Trust Lab
+# Pocket Satcom Acquisition and Trust Lab
 
-Host-side C++17 replay and acquisition tools for a deterministic synthetic
-satellite-link experiment. The supported replay path performs IQ front-end
-normalization, timing/CFO acquisition, aligned BPSK demodulation, convolutional
-decode, CRC-8 validation, and explainable trust diagnostics.
+A host-side C++17 lab for finding a known satellite-signal preamble in complex
+IQ, estimating timing and carrier-frequency offset (CFO), aligning a synthetic
+frame, decoding it, and reporting inspectable trust diagnostics.
 
-IQ-domain acquisition is the architecture-optimization workload. It has a
-scalar correctness oracle, a genuine Arm NEON kernel, and an opt-in genuine
-SME2 kernel using ZA VGx4 accumulation. Requested accelerated paths report
-`unavailable` when they cannot execute; they never run scalar code under an
-accelerated label.
+The primary engineering workload is a bank of matched-filter correlations over
+many timing offsets and CFO hypotheses. The repository provides a scalar
+correctness oracle, an Arm NEON implementation, and an opt-in Arm SME2
+implementation that accumulates four scalable vectors in ZA.
 
-This is not a live receiver, an Android application, or a full accelerated FEC
-stack. All checked-in captures are deterministic synthetic fixtures.
-
-## Status
-
-Implemented and supported:
-
-- end-to-end host replay from checked-in complex float32 IQ to payload and CRC;
-- IQ preamble acquisition over timing and CFO hypothesis grids;
-- scalar, NEON, and SME2 acquisition implementations with equivalence checks;
-- healthy, impaired, ambiguous, CRC-failed, and no-signal replay cases;
-- structured JSON trust diagnostics;
-- fixed acquisition workloads and three benchmark timing contracts;
-- CMake builds, CTests, Python regressions, strict warnings, and sanitizers;
-- a native Android NDK acquisition benchmark executable for ADB, without an
-  APK or UI.
-
-Intentionally limited:
-
-- the waveform and thresholds are demo-specific, not mission-derived;
-- acquisition is a finite preamble search, not a tracking loop;
-- trust scores are deterministic engineering heuristics, not calibrated
-  probabilities;
-- Viterbi add-compare-select and traceback remain scalar;
-- no public NEON or SME2 LDPC implementation exists;
-- local benchmark reports are device observations, not portable speedup claims.
+All public captures are deterministic synthetic fixtures. This is not a live
+receiver or an operational satellite waveform implementation.
 
 ## Quick start
 
@@ -47,218 +21,246 @@ make build
 make replay
 make compare-trust
 make check-acquisition
-make benchmark-acquisition
+make test
 ```
 
-Run the complete clean-checkout correctness workflow:
+`make replay` runs checked-in float32 IQ through acquisition, CFO/phase
+correction, BPSK demodulation, frame sync, scalar Viterbi decode, CRC-8, and
+trust scoring. The expected payload is `SATCOM DEMO OK`.
+
+For the complete clean-checkout correctness workflow:
 
 ```sh
 make verify
 ```
 
-`make verify` checks fixture hashes, strict compile warnings, per-source target
-flag isolation, CTests, replay/acquisition/trust/FEC validation, Python tests,
-and portable ASan/UBSan tests. Architecture-specific execution is attempted
-only when the host and compiler support it.
+## Problem and scope
 
-## Replay examples
+For received IQ `r`, known preamble `p`, timing hypothesis `tau`, CFO
+hypothesis `f`, sample rate `Fs`, and preamble length `L`, acquisition computes:
 
-Baseline IQ-to-payload replay:
-
-```sh
-bash scripts/run_replay_demo.sh
+```text
+C(tau, f) = sum(n=0..L-1) r[tau+n] * conj(p[n]) * exp(-j 2 pi f n / Fs)
+S(tau, f) = |C(tau, f)|^2
 ```
 
-The JSON includes the actual acquisition and decoder implementations, timing
-and CFO estimates, top-two acquisition scores, downstream frame-sync evidence,
-CRC state, trust components, and synthetic ground truth. A successful baseline
-contains:
+The highest score selects timing and CFO. The second-highest score provides an
+explicit ambiguity signal. The replay rejects weak or insufficiently separated
+peaks before demodulation.
 
-```json
-{
-  "ok": true,
-  "decoder": "viterbi-reference",
-  "decoded_text": "SATCOM DEMO OK",
-  "crc_ok": true,
-  "acquisition": {
-    "selected_implementation": "reference",
-    "detected_timing_offset": 192,
-    "detected_cfo_hz": 250.0,
-    "acquisition_success": true
-  },
-  "trust_assessment": {
-    "band": "high-confidence",
-    "weak_soft_decisions": false,
-    "ambiguous_acquisition": false,
-    "ambiguous_frame_sync": false
-  }
-}
+Implemented acquisition paths:
+
+| Path | Implementation | Availability behavior |
+| --- | --- | --- |
+| `reference` | Scalar float64 correlation oracle | Portable |
+| `neon` | Float32 NEON complex multiply-accumulate | Runs only when the NEON kernel is compiled |
+| `sme2` | Float32 ZA VGx4 `FMLA`/`FMLS` across timing tiles | Runs only when SME2 compilation and runtime checks pass |
+
+An unavailable accelerated path reports `unavailable`; it never executes
+scalar code under an accelerated label. Reference, NEON, and SME2 use the same
+candidate grid. Accelerated results must pass candidate-identity and numerical
+tolerance checks against the scalar oracle before benchmark timing is valid.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    IQ["Complex IQ window"] --> FE["DC removal and RMS normalization"]
+    FE --> ACQ["Preamble correlation over timing and CFO"]
+    ACQ --> EST["Timing, CFO, phase, peak separation"]
+    EST --> DEMOD["Aligned BPSK soft decisions"]
+    DEMOD --> SYNC["Secondary frame-sync check"]
+    SYNC --> FEC["Scalar Viterbi recurrence and traceback"]
+    FEC --> CRC["CRC-8"]
+    ACQ --> TRUST["Trust diagnostics"]
+    DEMOD --> TRUST
+    SYNC --> TRUST
+    CRC --> TRUST
 ```
 
-Compare deterministic trust states:
+IQ acquisition is the primary synchronization mechanism. The later 16-bit
+frame-sync check confirms alignment after demodulation; it is not labeled as
+IQ acquisition.
+
+The replay defaults to the scalar Viterbi decoder. An optional NEON path
+accelerates branch-metric preparation only; add-compare-select and traceback
+remain scalar. No accelerated LDPC implementation is claimed.
+
+## Reproduce by platform
+
+### Ordinary desktop
+
+Portable builds execute scalar acquisition and the complete replay. On non-Arm
+hosts, NEON and SME2 checks report unavailable without failing the portable
+workflow.
 
 ```sh
-bash scripts/compare_trust_cases.sh
+make verify
 ```
 
-The command verifies the expected ordering across healthy, impaired,
-ambiguous, CRC-failed, and no-signal inputs. The no-signal case is rejected at
-acquisition before demodulation; the failed case acquires a frame but rejects
-it after CRC.
+This checks fixture hashes, strict warnings, source-specific compile flags,
+CTest, Python regressions, replay/trust/FEC validation, and ASan/UBSan.
 
-## Acquisition paths
-
-All acquisition implementations evaluate the same known complex preamble over
-the same timing/CFO candidate grid and rank candidates by correlation magnitude
-squared.
-
-- `reference`: scalar float64 correctness oracle in
-  `src/acquisition/acquisition_reference.cpp`.
-- `neon`: float32 complex multiply-accumulate in
-  `src/acquisition/acquisition_neon.cpp`, built with source-specific NEON flags.
-- `sme2`: float32 ZA-backed VGx4 `FMLA`/`FMLS` accumulation in
-  `src/acquisition/acquisition_sme2.cpp`, built only with SME2 ACLE support and
-  entered only after runtime feature detection.
-
-Run a fixture explicitly:
+### Arm64 with NEON
 
 ```sh
-bash scripts/run_acquisition_demo.sh \
-  data/synthetic/acquisition/clean.iq \
-  data/synthetic/acquisition/clean.json \
-  reference
+bash scripts/check_acquisition_neon.sh --require-neon
+bash scripts/verify_acquisition_neon.sh
 ```
 
-On a supported native SME2 machine:
+These commands require native Arm64 NEON execution. The verifier also inspects
+the NEON object for vector load/deinterleave and floating-point arithmetic, and
+checks that the scalar oracle does not contain the equivalent vector kernel.
+
+### SME2-capable Arm device
 
 ```sh
-SATCOMFEC_ENABLE_SME2=ON bash scripts/build_host_tools.sh all
 bash scripts/check_sme2_acquisition.sh --require-sme2
 bash scripts/verify_sme2_acquisition_assembly.sh
 ```
 
-The assembly verifier requires streaming boundaries, ZA transfers, and SME2
-VGx4 multiply-accumulate instructions. Macro detection alone is not accepted.
-See `docs/sme2_acquisition.md` for the kernel design.
+The first command requires real SME2 execution. The second requires emitted
+streaming-mode boundaries, ZA transfers, and VGx4 ZA `FMLA`/`FMLS`; a feature
+macro alone is insufficient.
 
-## FEC paths
+### Android target
 
-The replay defaults to `viterbi-reference`: scalar branch-metric preparation,
-add-compare-select, and traceback. `viterbi-neon` is an optional partial path
-that accelerates branch-metric preparation only.
-
-A historical locally streaming SVE-style branch-metric experiment is preserved
-under `experiments/viterbi_branch_metrics/`. It is gated by an SME2-capable
-build because that is how the original experiment enters streaming mode, but
-it does not use ZA or an SME2-specific multi-vector operation. Its explicit
-`viterbi-streaming-vector` experiment executable is excluded from the default
-build target and the path is not exposed by the supported replay CLI. It is not
-evidence of SME2 Viterbi acceleration.
-
-```sh
-bash scripts/check_branch_metrics.sh
-bash experiments/viterbi_branch_metrics/run.sh
-```
-
-The convolutional decoder remains a functional downstream replay component.
-The small bit-flip LDPC decoder is a simplified reference utility; no
-accelerated LDPC path is claimed.
-
-## Benchmarking
-
-The supported performance workload is IQ-domain acquisition:
-
-```sh
-bash scripts/benchmark_acquisition.sh \
-  --json build/acquisition-benchmark.json \
-  --csv build/acquisition-benchmark.csv
-```
-
-The fixed `small`, `medium`, `large`, and `very-large` workloads are defined in
-source before timing. Every available implementation is correctness-gated.
-Reports include raw samples, execution order, source-specific compile flags,
-host/runtime metadata, workspace bytes, and results for:
-
-- `steady-state`: precomputed plan and prepared implementation workspace;
-- `per-capture`: reusable plan, with work required for each new IQ window;
-- `setup-inclusive`: plan generation, allocation, and execution.
-
-Five independent process reports can be retained with:
-
-```sh
-python3 scripts/repeat_acquisition_benchmark.py \
-  --output-dir build/acquisition-repeatability
-```
-
-Tracked local reports are under `benchmarks/results/`. Read hardware, compiler,
-commit, dirty-tree state, and raw timing from each JSON report. The repository
-does not claim a general NEON or SME2 speedup, thermal result, energy result, or
-cross-device result. See `docs/benchmarking.md` for the fairness contract.
-
-## Build isolation
-
-CMake is authoritative. Reference, NEON, and SME2 acquisition code lives in
-separate translation units. Architecture flags and compiled-kernel definitions
-are source-specific; the scalar reference is also built with loop and SLP
-auto-vectorization disabled where supported.
-
-```sh
-cmake -S . -B build/portable
-cmake --build build/portable
-ctest --test-dir build/portable --output-on-failure
-python3 scripts/check_compile_commands.py \
-  --build-dir build/portable --expect portable
-```
-
-For Arm-specific checks:
-
-```sh
-bash scripts/verify_arm_paths.sh
-bash scripts/verify_acquisition_neon.sh
-```
-
-An explicit unsupported accelerated build fails with a clear configuration or
-availability message; the portable x86 build does not require Arm hardware.
-
-## Android ADB benchmark
-
-The Android surface is a command-line acquisition benchmark only. It uses the
-NDK CMake toolchain, pushes one executable with ADB, runtime-gates SME2 through
-Linux/Android capability bits, and emits the same benchmark JSON schema. It
-does not include an APK, JNI bridge, Kotlin, Compose, or replay UI.
+The Android surface is an `arm64-v8a` command-line acquisition benchmark for
+`adb shell`, not an APK or Android application. Without a phone, the NDK build
+and object evidence can be checked with:
 
 ```sh
 bash scripts/verify_android_benchmark_build.sh --sme2 auto
-bash scripts/run_android_benchmark.sh --sme2 auto -- --workload small
 ```
 
-An actual device is required for runtime measurements. See
-`docs/android_benchmark.md` for prerequisites and safety details.
+Device execution additionally requires an authorized Arm64 phone visible to
+ADB. The exact build, push, runtime-gating, and result-retrieval procedure is in
+[docs/android_benchmark.md](docs/android_benchmark.md). No Android performance
+result is checked into this repository.
+
+## Replay and trust cases
+
+The checked replay fixtures exercise distinct outcomes:
+
+| Case | Acquisition | Decode/CRC | Trust outcome |
+| --- | --- | --- | --- |
+| healthy | correct, separated peak | expected payload, CRC pass | high-confidence |
+| impaired | correct, weaker evidence | expected payload, CRC pass | guarded |
+| ambiguous | correct, competing peak | expected payload, CRC pass | guarded |
+| failed | accepted | corrupted frame, CRC failure | low-confidence |
+| no-signal | rejected | demodulation not attempted | low-confidence |
+
+Trust inputs include normalized acquisition peak, best-to-second-best
+separation, residual uncertainty, bounded soft-decision strength, secondary
+frame-sync evidence, demodulation clipping, and CRC state. The score and bands
+are deterministic demo heuristics, not calibrated probabilities or operational
+assurance levels. See [docs/trust_monitors.md](docs/trust_monitors.md).
+
+## Checked performance evidence
+
+The repository contains one tracked performance result set:
+[benchmarks/results/a83cd53](benchmarks/results/a83cd53/README.md). It contains
+five independent clean-tree process runs from source commit
+`a83cd53ffe153fa69329194174f735d0a972380d`.
+
+Recorded platform and build:
+
+- Apple M5 Pro, device model `Mac17,9`, Darwin 25.6.0 arm64;
+- Apple Clang 21.0.0 (`clang-2100.1.1.101`);
+- common flags `-O3 -DNDEBUG -std=c++17`;
+- reference flags `-fno-vectorize -fno-slp-vectorize`;
+- NEON flags `-mcpu=native+nosve+nosve2+nosme+nosme2`;
+- SME2 flags `-mcpu=native+sme2`, with runtime SME2 and 512-bit streaming
+  vector length reported by the host.
+
+The table below reports **per-capture median latency**, using the median of the
+five process-level medians. Per-capture timing reuses the preamble/CFO plan but
+includes SME2 packing for each new IQ window. The comparison baseline is NEON.
+
+| Workload | Correlations | Reference ms | NEON ms | SME2 ms | NEON latency / SME2 latency across runs | SME2 temporary bytes |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| small | 5,120 | 0.232264 | 0.063225 | 0.051513 | 1.166-1.247x | 565,248 |
+| medium | 36,864 | 3.295987 | 0.855379 | 0.375940 | 2.202-2.290x | 4,489,216 |
+| large | 278,528 | 49.491479 | 12.590271 | 10.323333 | 1.215-1.261x | 35,782,656 |
+| very-large | 819,200 | 291.876208 | 75.972875 | 62.420666 | 1.200-1.217x | 140,771,328 |
+
+In this checked result set, SME2 had lower median latency than NEON in all
+twelve workload/mode combinations. The result does not show a crossover where
+SME2 loses, but it does show strong sensitivity to workload and timing
+contract: small setup-inclusive speedup was only 1.015-1.050x, while medium
+per-capture was 2.202-2.290x. The sample-major SME2 workspace is a significant
+cost and reaches 140,771,328 temporary bytes for `very-large`.
+
+These are local measurements from one computer. CPU affinity, frequency, and
+thermal state were not controlled; energy was not measured. They do not prove
+speedup on another processor, Android phone, capture distribution, or waveform.
+Raw samples, correctness records, execution order, and all three timing modes
+are preserved in the result directory.
+
+Run a non-authoritative local smoke benchmark with:
+
+```sh
+bash scripts/benchmark_acquisition.sh \
+  --workload small \
+  --warmup-rounds 1 \
+  --samples 3 \
+  --min-sample-ms 5 \
+  --json build/acquisition-smoke.json
+```
+
+See [docs/benchmarking.md](docs/benchmarking.md) for the fixed workload and
+fairness contract. CI timing is used only as a smoke check.
+
+## What this project proves
+
+- A deterministic synthetic IQ frame can be acquired over timing and CFO,
+  aligned, demodulated, convolutionally decoded, and CRC checked end to end.
+- Scalar, NEON, and genuine ZA-backed SME2 acquisition kernels can be checked
+  for candidate identity and bounded numerical agreement.
+- Accelerated translation units can be isolated and verified at object-code
+  level without relabeling fallback code.
+- Healthy, impaired, ambiguous, CRC-failed, and no-signal inputs produce
+  inspectable and reproducible trust diagnostics.
+- On the single checked Apple M5 Pro result set, SME2 acquisition latency was
+  lower than NEON for the fixed synthetic workloads and timing contracts shown
+  above.
+
+## What it does not prove
+
+- Live RF reception, tracking loops, or compatibility with a deployed air
+  interface.
+- Mission-specific or PhiSat-2 operational behavior.
+- Calibrated acquisition probability, trust probability, or security/anomaly
+  detection performance.
+- Full Viterbi, full FEC, or LDPC acceleration with SME2.
+- Android application support or Android performance.
+- General NEON/SME2 speedup, thermal behavior, power, energy, or performance on
+  hardware other than the checked result host.
 
 ## Repository map
 
-- `src/acquisition/`: reference, NEON, SME2, planning, and dispatch code
-- `src/demo/`: supported replay orchestration and acquisition integration
+- `src/acquisition/`: acquisition plan, scalar oracle, NEON, SME2, and dispatch
+- `src/demo/`: IQ-to-payload replay orchestration
 - `src/dsp/`: normalization, BPSK soft decisions, and secondary frame sync
-- `src/fec/`: convolutional/FEC functionality used by replay
-- `src/trust/`: inspectable trust features, score, and status flags
+- `src/fec/`: scalar convolutional decoder and supporting FEC utilities
+- `src/trust/`: trust features, score breakdown, and status flags
 - `tools/`: supported host CLIs and correctness executables
-- `experiments/`: retained non-primary experiments with explicit scope
-- `data/synthetic/`: deterministic IQ fixtures and ground-truth sidecars
+- `experiments/viterbi_branch_metrics/`: historical non-primary FEC experiment
+- `data/synthetic/`: deterministic IQ fixtures and ground-truth metadata
+- `benchmarks/results/`: tracked local acquisition timing evidence
 - `tests/`: Python regressions and structured golden-output subsets
-- `benchmarks/results/`: tracked local acquisition benchmark reports
-- `docs/`: design, methodology, reproducibility, and review guides
 
-## Documentation
+## Technical documentation
 
-- `docs/acquisition_design.md`: acquisition mathematics and fixture criteria
-- `docs/sme2_acquisition.md`: genuine SME2 data blocking and ZA mechanism
-- `docs/benchmarking.md`: fixed workloads, timing contracts, and limitations
-- `docs/trust_monitors.md`: trust inputs, weights, and non-calibration limits
-- `docs/reproducibility.md`: complete validation workflow and fixture hashes
-- `docs/technical_review.md`: equivalence, assembly, and build-isolation checks
-- `docs/architecture.md`: end-to-end pipeline and build boundaries
-- `docs/simd_status.md`: exact implementation maturity by path
+- [Acquisition design](docs/acquisition_design.md)
+- [SME2 kernel design](docs/sme2_acquisition.md)
+- [Benchmark methodology](docs/benchmarking.md)
+- [Reproducibility](docs/reproducibility.md)
+- [Architecture](docs/architecture.md)
+- [Implementation status](docs/simd_status.md)
+- [Technical review guide](docs/technical_review.md)
+- [Android native benchmark](docs/android_benchmark.md)
+- [Data sources and licensing](docs/data_sources_and_licensing.md)
 
 ## License
 

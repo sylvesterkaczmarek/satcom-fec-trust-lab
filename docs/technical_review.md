@@ -88,7 +88,6 @@ reported when runtime support is absent.
 On a native SME2 host:
 
 ```bash
-SATCOMFEC_ENABLE_SME2=ON bash scripts/build_host_tools.sh all
 bash scripts/verify_sme2_acquisition_assembly.sh
 ```
 
@@ -97,14 +96,15 @@ The verifier requires streaming-mode boundaries, ZA transfers, and VGx4
 NEON arithmetic but no checked SVE/SME patterns, and that the scalar reference
 does not contain the SME2 sequence.
 
-Without SME2 hardware, the Android NDK cross-build supplies compile and object
+With an Android NDK, the Android cross-build supplies compile and object
 evidence without executing the binary:
 
 ```bash
-bash scripts/verify_android_benchmark_build.sh --sme2 on
+bash scripts/verify_android_benchmark_build.sh --sme2 auto
 ```
 
-Macro presence alone is not accepted as instruction evidence.
+Use `--sme2 on` when SME2 compilation is a required property of the installed
+NDK. Macro presence alone is not accepted as instruction evidence.
 
 ## Benchmarking
 
@@ -123,6 +123,13 @@ CI benchmark invocations are smoke tests only. Tracked reports under
 `benchmarks/results/` are local measurements whose hardware and build metadata
 must be read from each report. No CI timing is publication evidence.
 
+The sole checked result set is `benchmarks/results/a83cd53/`: five clean-tree
+runs on Apple M5 Pro (`Mac17,9`) with Apple Clang 21.0.0. Correctness passed
+before timing. SME2 latency was below NEON for all recorded workload/mode
+combinations, with SME2-versus-NEON ranges from 1.015-1.050x for small
+setup-inclusive to 4.162-4.350x for medium steady-state. This is not evidence
+for another device, workload, thermal condition, or energy result.
+
 ## Not claimed
 
 - no live RF or mission-derived capture support;
@@ -132,4 +139,5 @@ must be read from each report. No CI timing is publication evidence.
 - no SME2 Viterbi recurrence or traceback; the historical FEC path is locally
   streaming SVE-style branch-metric preparation, not genuine SME2-specific
   acceleration;
-- no general NEON or SME2 speedup, thermal, energy, or cross-device result.
+- no general NEON or SME2 speedup, thermal, energy, or cross-device result; the
+  checked Apple M5 Pro timing is explicitly local.

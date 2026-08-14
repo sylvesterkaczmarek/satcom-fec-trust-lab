@@ -29,6 +29,33 @@ SATCOMFEC_ENABLE_SME2=ON python3 scripts/repeat_acquisition_benchmark.py \
 An unavailable accelerated implementation is recorded as unavailable and is
 not timed. No scalar fallback is reported as NEON or SME2.
 
+## Tracked result
+
+`benchmarks/results/a83cd53/` is the only checked performance result set. It
+contains five independent clean-tree runs of source commit
+`a83cd53ffe153fa69329194174f735d0a972380d` on an Apple M5 Pro (`Mac17,9`),
+Darwin 25.6.0 arm64, using Apple Clang 21.0.0. The report records 128-bit NEON,
+runtime SME2 support, and a 512-bit streaming vector length.
+
+For the operational `per-capture` contract, median-of-run-median latency was:
+
+| Workload | Reference ms | NEON ms | SME2 ms | NEON latency / SME2 latency range |
+| --- | ---: | ---: | ---: | ---: |
+| small | 0.232264 | 0.063225 | 0.051513 | 1.166-1.247x |
+| medium | 3.295987 | 0.855379 | 0.375940 | 2.202-2.290x |
+| large | 49.491479 | 12.590271 | 10.323333 | 1.215-1.261x |
+| very-large | 291.876208 | 75.972875 | 62.420666 | 1.200-1.217x |
+
+SME2 had lower latency than NEON in every recorded workload/mode combination
+on that host. The margin was not uniform: small setup-inclusive timing was
+1.015-1.050x, while medium per-capture timing was 2.202-2.290x. This result set
+does not show a crossover to an SME2 loss within the four fixed workloads.
+
+The result also records a substantial sample-major workspace: total temporary
+SME2 payload ranges from 565,248 bytes for `small` to 140,771,328 bytes for
+`very-large`. See the result directory for raw samples, setup-inclusive and
+steady-state values, execution order, and correctness records.
+
 ## Fixed workloads
 
 These definitions are checked into `tools/acquisition_benchmark.cpp`; they are
@@ -135,15 +162,16 @@ summary does not replace them.
 
 Tracked local reports live under `benchmarks/results/`. Hardware identity,
 commit, dirty-tree state, compiler, flags, raw samples, and correctness status
-must be read from each report rather than inferred from prose.
+in those JSON files are authoritative.
 
 ## Interpretation limits
 
 This is local process timing. It does not control CPU affinity, frequency,
 thermal state, or competing system activity, and it does not measure energy.
-Results from one device are not a general architecture claim. Steady-state,
-per-capture, and setup-inclusive rankings may differ. Independent process runs
-do not control thermal state or frequency. The benchmark contains no SVE
+Results from one device are not a general architecture claim. The checked
+Apple M5 Pro result supports only the host/workload statements above.
+Steady-state, per-capture, and setup-inclusive rankings may differ. Independent
+process runs do not control thermal state or frequency. The benchmark contains no SVE
 acquisition path, so it does not label streaming SVE as SME2 or provide an SVE
 comparison.
 

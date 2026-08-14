@@ -73,7 +73,15 @@ candidate selection remain scalar and are outside the SME2 correlation kernel.
 The fixture CLI is an end-to-end functional demo and therefore includes setup.
 The separate benchmark measures prepared steady-state execution, per-capture
 execution with sample-major packing included, and setup-inclusive execution.
-It reports workspace bytes and does not publish a general speedup conclusion.
+It reports workspace bytes.
+
+The one checked Apple M5 Pro result set under
+`benchmarks/results/a83cd53/` reports lower SME2 latency than NEON for all four
+fixed workloads and all three timing contracts. This is a result for that
+recorded host, compiler, source commit, and synthetic workload only. The
+per-capture SME2 workspace reaches 140,771,328 temporary bytes for the
+`very-large` workload; no general speedup, energy, or thermal conclusion is
+drawn.
 
 The SME2 translation unit is enabled only with `SATCOMFEC_ENABLE_SME2=ON`, a
 compiler defining `__ARM_FEATURE_SME2`, and ACLE support for ZA VGx4

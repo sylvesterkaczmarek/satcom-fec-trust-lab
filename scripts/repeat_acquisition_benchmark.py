@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import statistics
 import subprocess
 import sys
@@ -15,7 +16,18 @@ from typing import Any
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-BENCHMARK_BINARY = ROOT_DIR / "build/host_replay/benchmark_acquisition"
+
+
+def benchmark_build_directory() -> Path:
+    configured = os.environ.get("SATCOMFEC_BUILD_DIR")
+    if configured:
+        path = Path(configured)
+        return path if path.is_absolute() else ROOT_DIR / path
+    if os.environ.get("SATCOMFEC_ENABLE_SME2") == "ON":
+        return ROOT_DIR / "build/benchmark/sme2"
+    if os.environ.get("SATCOMFEC_ENABLE_NEON") == "ON":
+        return ROOT_DIR / "build/benchmark/neon"
+    return ROOT_DIR / "build/host_replay"
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -49,9 +61,11 @@ def parse_arguments() -> argparse.Namespace:
     return arguments
 
 
-def benchmark_arguments(arguments: argparse.Namespace) -> list[str]:
+def benchmark_arguments(
+    arguments: argparse.Namespace, benchmark_binary: Path
+) -> list[str]:
     command = [
-        str(BENCHMARK_BINARY),
+        str(benchmark_binary),
         "--warmup-rounds",
         str(arguments.warmup_rounds),
         "--samples",
@@ -231,10 +245,15 @@ def print_compact_summary(summary: dict[str, Any]) -> None:
 
 def main() -> int:
     arguments = parse_arguments()
+    build_directory = benchmark_build_directory()
+    benchmark_binary = build_directory / "benchmark_acquisition"
     if not arguments.skip_build:
+        build_environment = os.environ.copy()
+        build_environment["SATCOMFEC_BUILD_DIR"] = str(build_directory)
         subprocess.run(
             ("bash", "scripts/build_host_tools.sh", "benchmark_acquisition"),
             cwd=ROOT_DIR,
+            env=build_environment,
             check=True,
         )
 
@@ -244,7 +263,7 @@ def main() -> int:
         else ROOT_DIR / arguments.output_dir
     )
     output_directory.mkdir(parents=True, exist_ok=True)
-    command = benchmark_arguments(arguments)
+    command = benchmark_arguments(arguments, benchmark_binary)
     reports: list[dict[str, Any]] = []
     run_entries: list[dict[str, Any]] = []
 
@@ -286,10 +305,11 @@ def main() -> int:
         print(f"completed independent process run {run_index}/{arguments.runs}")
 
     summary = summarize_reports(reports)
-    summary["benchmark_command"] = [
-        "build/host_replay/benchmark_acquisition",
-        *command[1:],
-    ]
+    try:
+        reported_binary = str(benchmark_binary.relative_to(ROOT_DIR))
+    except ValueError:
+        reported_binary = str(benchmark_binary)
+    summary["benchmark_command"] = [reported_binary, *command[1:]]
     summary["runs"] = run_entries
     summary_path = output_directory / "summary.json"
     summary_path.write_text(

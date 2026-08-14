@@ -9,5 +9,6 @@ summary. The raw reports are authoritative.
   `a83cd53ffe153fa69329194174f735d0a972380d` on the host identified in the
   reports as Apple M5 Pro (`Mac17,9`)
 
-These files describe the recorded host and build only. They are not a general
-NEON or SME2 performance claim.
+On this recorded host, SME2 latency was lower than NEON for every fixed
+workload and timing mode. These files do not establish that result for another
+processor, operating system, compiler, capture distribution, or waveform.

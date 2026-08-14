@@ -1,10 +1,11 @@
-# Architecture
+# Pocket Satcom architecture
 
-The repository has one end-to-end replay workflow and one acquisition benchmark
-harness. Both use the same reference, Arm NEON, and Arm SME2 matched-filter
-implementations described in `docs/acquisition_design.md`. The standalone
-`acquisition_demo` remains a focused correctness tool; acquisition is no longer
-isolated from replay.
+The supported path is a synthetic-IQ receiver replay with IQ-domain acquisition
+as its primary synchronization and architecture-optimization workload. The
+end-to-end replay and acquisition benchmark use the same reference, Arm NEON,
+and Arm SME2 matched-filter implementations described in
+`docs/acquisition_design.md`. The standalone `acquisition_demo` remains a
+focused correctness tool; acquisition is not isolated from replay.
 
 The replay workflow is:
 
@@ -35,13 +36,15 @@ run by `scripts/run_replay_demo.sh`. Decoder alignment remains a functional FEC
 check in `scripts/validate_decoder_alignment.sh`; the timing harness is isolated
 under `experiments/viterbi_branch_metrics/`.
 
-Acquisition timing is a separate workload sweep implemented by
+Acquisition timing is a separate, correctness-gated workload sweep implemented by
 `tools/benchmark_acquisition.cpp` and `tools/acquisition_benchmark.cpp`, exposed
 through `scripts/benchmark_acquisition.sh`. It correctness-gates each available
 implementation before reporting steady-state, per-capture, or setup-inclusive
 timing. Per-capture timing reuses the plan and allocations while charging SME2
 for sample-major packing of each supplied IQ window. The decoder benchmark is
-not used as evidence for acquisition behavior.
+not used as evidence for acquisition behavior. Checked acquisition timing
+evidence, including its host and build metadata, is documented in
+`benchmarks/results/a83cd53/`.
 
 For Android, `SATCOMFEC_ANDROID_BENCHMARK_ONLY=ON` narrows the CMake graph to
 the acquisition sources and `benchmark_acquisition`. The NDK build keeps

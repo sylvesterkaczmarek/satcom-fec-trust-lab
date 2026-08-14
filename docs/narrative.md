@@ -1,6 +1,6 @@
-# Demo Summary
+# Pocket Satcom acquisition and trust summary
 
-The repository is centered on one small replay story:
+The repository is centered on one synthetic replay story:
 
 - load a checked-in IQ file
 - acquire a known IQ preamble across timing and CFO hypotheses
@@ -10,6 +10,6 @@ The repository is centered on one small replay story:
 - confirm the payload with CRC
 - report a trust score alongside the decoded text
 
-That scope is intentionally narrow. The public demo favors a runnable, inspectable
-path over broader claims about hardware acceleration, live RF capture, or
-mission-specific replay.
+That scope is intentionally narrow. The public demo favors a runnable,
+inspectable path over broader claims about hardware acceleration, live RF
+capture, or mission-specific replay.

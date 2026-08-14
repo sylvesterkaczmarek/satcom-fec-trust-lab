@@ -17,17 +17,10 @@ Set `ANDROID_NDK_HOME`, or install the NDK below `ANDROID_SDK_ROOT/ndk` or
 `ANDROID_HOME/ndk`. The scripts default to API 28 and static libc++, so no
 separate C++ runtime library needs to be pushed.
 
-## Build only
+## Build and inspect without a phone
 
-```bash
-# Try SME2 ACLE first; retain an honest reference/NEON build if unsupported.
-bash scripts/build_android_benchmark.sh --sme2 auto
-
-# Require the real SME2 translation unit to compile.
-bash scripts/build_android_benchmark.sh --sme2 on
-
-# Build a baseline reference/NEON executable.
-bash scripts/build_android_benchmark.sh --sme2 off
+```sh
+bash scripts/verify_android_benchmark_build.sh --sme2 auto
 ```
 
 The output is `build/android/arm64-v8a/benchmark_acquisition`. The
@@ -39,28 +32,15 @@ the SME2 target flag.
 `--sme2 auto` prints whether the resulting binary contains the SME2 kernel.
 Use `--sme2 on` when compilation of that kernel is a test requirement.
 
-Build-only inspection is available without a phone:
-
-```bash
-bash scripts/verify_android_benchmark_build.sh --sme2 on
-```
-
 This verifies the AArch64 PIE, static libc++ linkage, NEON instruction evidence,
 scalar-reference isolation, and SME2 streaming/ZA instructions when compiled.
 
 ## Run through ADB
 
-```bash
+```sh
 bash scripts/run_android_benchmark.sh \
   --sme2 auto \
   --output build/android-results/device-small.json
-
-# Forward benchmark options after --.
-bash scripts/run_android_benchmark.sh --skip-build -- \
-  --workload medium \
-  --warmup-rounds 2 \
-  --samples 15 \
-  --min-sample-ms 50
 ```
 
 Use `--serial SERIAL` when more than one device is connected. The default

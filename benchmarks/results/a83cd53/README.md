@@ -17,12 +17,9 @@ JSON passed reference/NEON/SME2 correctness gating before timing.
 - SME2 flags: `-mcpu=native+sme2`
 - SME streaming vector width: 512 bits
 
-Command:
-
-```bash
-SATCOMFEC_ENABLE_SME2=ON python3 scripts/repeat_acquisition_benchmark.py \
-  --output-dir benchmarks/results/a83cd53
-```
+The exact executable arguments and benchmark settings are retained in each raw
+report and in `summary.json`. The directory is immutable historical evidence;
+new runs should use a new output directory rather than overwrite these files.
 
 ## Timing summary
 
@@ -30,7 +27,7 @@ Latency values are the median of the five process-level medians. The final
 column gives the range of SME2-versus-NEON speedups retained from the five raw
 runs.
 
-| Workload | Mode | Reference ms | NEON ms | SME2 ms | SME2 / NEON range |
+| Workload | Mode | Reference ms | NEON ms | SME2 ms | NEON latency / SME2 latency range |
 | --- | --- | ---: | ---: | ---: | ---: |
 | small | steady-state | 0.232290 | 0.063281 | 0.017260 | 3.513654-3.689661 |
 | small | per-capture | 0.232264 | 0.063225 | 0.051513 | 1.166421-1.247423 |
