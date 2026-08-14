@@ -50,6 +50,8 @@ bash scripts/validate_decoder_alignment.sh
 bash scripts/check_branch_metrics.sh
 bash scripts/verify_arm_paths.sh
 bash scripts/benchmark_acquisition.sh --json build/acquisition-benchmark.json
+python3 scripts/repeat_acquisition_benchmark.py \
+  --output-dir build/acquisition-repeatability
 python3 -m unittest discover -s tests -v
 ```
 
@@ -81,9 +83,11 @@ What CI verifies:
   high-amplitude cases
 - local SME2 kernel equivalence over preamble, timing-grid, CFO-grid, and
   scalable-vector tail cases when SME2 execution is available
-- acquisition benchmark correctness gating and JSON/CSV schema coherence on a
-  small fixed workload; x86 CI validates the portable path and native Arm64 CI
-  executes NEON
+- acquisition benchmark correctness gating, per-capture contract, workspace
+  accounting, and JSON/CSV schema coherence on a small fixed workload; x86 CI
+  validates the portable path and native Arm64 CI executes NEON
+- five-process repeatability helper behavior on the small fixed workload,
+  including preservation of each raw report
 - deterministic byte-for-byte acquisition fixture regeneration
 - healthy versus impaired versus failed trust comparison
 - reference versus partial-NEON versus SME2-or-fallback path alignment on the
@@ -99,6 +103,7 @@ What reproducibility does not mean here:
 - no claim of device-level performance reproducibility
 - no claim that local acquisition timing establishes a general NEON or SME2
   speedup
+- no claim that independent process runs control CPU frequency or thermal state
 - no claim of end-to-end SME2 Viterbi acceleration
 - no live RF capture path
 - no mission-derived waveform fidelity claim

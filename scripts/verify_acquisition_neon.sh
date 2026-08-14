@@ -75,30 +75,6 @@ else
   exit 1
 fi
 
-if grep -Eiq 'ld2[^[:cntrl:]]*\.4s|fmul[^[:cntrl:]]*\.4s|fmla[^[:cntrl:]]*\.4s|fmls[^[:cntrl:]]*\.4s' \
-  "${reference_assembly_file}"; then
-  echo "error: scalar reference object contains acquisition-style NEON vector instructions" >&2
-  exit 1
-fi
-
-if ! grep -Eiq 'ld2[^[:cntrl:]]*\.4s|ld2[^[:cntrl:]]*\{[^}]*v[0-9]+' "${assembly_file}"; then
-  echo "error: expected NEON deinterleaving load instruction was not found" >&2
-  exit 1
-fi
-if ! grep -Eiq 'fmul[^[:cntrl:]]*\.4s|fmul[^[:cntrl:]]*v[0-9]+' "${assembly_file}"; then
-  echo "error: expected vector floating-point multiply instruction was not found" >&2
-  exit 1
-fi
-if ! grep -Eiq 'fmla[^[:cntrl:]]*\.4s|fmls[^[:cntrl:]]*\.4s|fmla[^[:cntrl:]]*v[0-9]+|fmls[^[:cntrl:]]*v[0-9]+' "${assembly_file}"; then
-  echo "error: expected vector floating-point multiply-accumulate instruction was not found" >&2
-  exit 1
-fi
-
 echo
-echo "Verified NEON instruction evidence:"
-grep -m 12 -Ei \
-  'ld2[^[:cntrl:]]*(\.4s|\{[^}]*v[0-9]+)|fmul[^[:cntrl:]]*(\.4s|v[0-9]+)|fmla[^[:cntrl:]]*(\.4s|v[0-9]+)|fmls[^[:cntrl:]]*(\.4s|v[0-9]+)' \
-  "${assembly_file}"
-
-echo
-echo "Scalar reference object contains none of the checked vector instruction patterns."
+bash "${ROOT_DIR}/scripts/check_neon_disassembly.sh" \
+  "${assembly_file}" "${reference_assembly_file}"

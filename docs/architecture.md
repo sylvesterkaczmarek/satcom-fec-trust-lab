@@ -38,8 +38,10 @@ handled by `scripts/validate_decoder_alignment.sh` and
 Acquisition timing is a separate workload sweep implemented by
 `tools/benchmark_acquisition.cpp` and `tools/acquisition_benchmark.cpp`, exposed
 through `scripts/benchmark_acquisition.sh`. It correctness-gates each available
-implementation before reporting steady-state or setup-inclusive timing. The
-decoder benchmark is not used as evidence for acquisition behavior.
+implementation before reporting steady-state, per-capture, or setup-inclusive
+timing. Per-capture timing reuses the plan and allocations while charging SME2
+for sample-major packing of each supplied IQ window. The decoder benchmark is
+not used as evidence for acquisition behavior.
 
 The replay result is intentionally structured. It reports front-end statistics,
 demodulation and framing details, decoder identity, trust features, and the

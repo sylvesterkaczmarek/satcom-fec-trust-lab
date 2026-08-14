@@ -1,4 +1,4 @@
-.PHONY: help build replay replay-impaired replay-failed acquisition check check-acquisition check-acquisition-neon verify-acquisition-neon check-acquisition-sme2 verify-acquisition-sme2 compare-trust align check-metrics verify-arm benchmark benchmark-acquisition benchmark-decoder-legacy test regenerate
+.PHONY: help build replay replay-impaired replay-failed acquisition check check-acquisition check-acquisition-neon verify-acquisition-neon check-acquisition-sme2 verify-acquisition-sme2 compare-trust align check-metrics verify-arm benchmark benchmark-acquisition benchmark-acquisition-repeat benchmark-decoder-legacy test regenerate
 
 help:
 	@printf '%s\n' \
@@ -20,6 +20,7 @@ help:
 	  '  make verify-arm      Verify portable and optional Arm build modes' \
 	  '  make benchmark       Run the acquisition workload-size sweep' \
 	  '  make benchmark-acquisition Run the acquisition workload-size sweep' \
+	  '  make benchmark-acquisition-repeat Run five independent benchmark processes' \
 	  '  make benchmark-decoder-legacy Run the legacy decoder microbenchmark' \
 	  '  make test            Run the host-side automated tests' \
 	  '  make regenerate      Regenerate the checked-in synthetic fixtures'
@@ -74,6 +75,9 @@ benchmark:
 
 benchmark-acquisition:
 	bash scripts/benchmark_acquisition.sh
+
+benchmark-acquisition-repeat:
+	python3 scripts/repeat_acquisition_benchmark.py
 
 benchmark-decoder-legacy:
 	bash scripts/benchmark_decoder_paths.sh

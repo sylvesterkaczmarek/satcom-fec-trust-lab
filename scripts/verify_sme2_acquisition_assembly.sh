@@ -36,9 +36,11 @@ echo "Running SME2 equivalence with execution required:"
 
 if command -v cmake >/dev/null 2>&1; then
   object_path="${BUILD_DIR}/CMakeFiles/satcom_replay_core.dir/src/acquisition/acquisition_sme2.cpp.o"
+  neon_object_path="${BUILD_DIR}/CMakeFiles/satcom_replay_core.dir/src/acquisition/acquisition_neon.cpp.o"
   reference_object_path="${BUILD_DIR}/CMakeFiles/satcom_replay_core.dir/src/acquisition/acquisition_reference.cpp.o"
 else
   object_path="${BUILD_DIR}/direct_objects/acquisition_sme2.o"
+  neon_object_path="${BUILD_DIR}/direct_objects/acquisition_neon.o"
   reference_object_path="${BUILD_DIR}/direct_objects/acquisition_reference.o"
 fi
 if [[ ! -f "${object_path}" ]]; then
@@ -47,6 +49,10 @@ if [[ ! -f "${object_path}" ]]; then
 fi
 if [[ ! -f "${reference_object_path}" ]]; then
   echo "error: scalar acquisition reference object was not found" >&2
+  exit 1
+fi
+if [[ ! -f "${neon_object_path}" ]]; then
+  echo "error: NEON acquisition comparison object was not found" >&2
   exit 1
 fi
 
@@ -59,9 +65,12 @@ if command -v nm >/dev/null 2>&1; then
 fi
 
 assembly_file="${BUILD_DIR}/acquisition_sme2.disassembly.txt"
+neon_assembly_file="${BUILD_DIR}/acquisition_neon_sme2_build.disassembly.txt"
 reference_assembly_file="${BUILD_DIR}/acquisition_reference_sme2_check.disassembly.txt"
 if command -v llvm-objdump >/dev/null 2>&1; then
   llvm-objdump --disassemble --no-show-raw-insn "${object_path}" >"${assembly_file}"
+  llvm-objdump --disassemble --no-show-raw-insn \
+    "${neon_object_path}" >"${neon_assembly_file}"
   llvm-objdump --disassemble --no-show-raw-insn \
     "${reference_object_path}" >"${reference_assembly_file}"
 elif command -v xcrun >/dev/null 2>&1 && \
@@ -69,12 +78,16 @@ elif command -v xcrun >/dev/null 2>&1 && \
   xcrun llvm-objdump --disassemble --no-show-raw-insn \
     "${object_path}" >"${assembly_file}"
   xcrun llvm-objdump --disassemble --no-show-raw-insn \
+    "${neon_object_path}" >"${neon_assembly_file}"
+  xcrun llvm-objdump --disassemble --no-show-raw-insn \
     "${reference_object_path}" >"${reference_assembly_file}"
 elif command -v objdump >/dev/null 2>&1; then
   objdump -d "${object_path}" >"${assembly_file}"
+  objdump -d "${neon_object_path}" >"${neon_assembly_file}"
   objdump -d "${reference_object_path}" >"${reference_assembly_file}"
 elif command -v otool >/dev/null 2>&1; then
   otool -tvV "${object_path}" >"${assembly_file}"
+  otool -tvV "${neon_object_path}" >"${neon_assembly_file}"
   otool -tvV "${reference_object_path}" >"${reference_assembly_file}"
 else
   echo "error: llvm-objdump, objdump, or otool is required for instruction verification" >&2
@@ -111,3 +124,15 @@ grep -m 20 -Ei \
 
 echo
 echo "Scalar reference object contains none of the checked SME2 ZA VGx4 patterns."
+
+echo
+bash "${ROOT_DIR}/scripts/check_neon_disassembly.sh" \
+  "${neon_assembly_file}" "${reference_assembly_file}"
+
+if grep -Eiq \
+  'smstart|smstop|(^|[[:space:],{])z[0-9]+[.][bhsd]|(^|[[:space:]])(ptrue|whilel[ot]|ld1[bhwd]|st1[bhwd])[[:space:]]' \
+  "${neon_assembly_file}"; then
+  echo "error: NEON comparison object contains scalable-vector or SME instructions" >&2
+  exit 1
+fi
+echo "NEON comparison object contains no checked SVE/SME instruction patterns."

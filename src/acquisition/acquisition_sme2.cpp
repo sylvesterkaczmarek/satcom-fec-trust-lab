@@ -302,7 +302,6 @@ bool prepare_sme2_acquisition_workspace(
     const AcquisitionPlan& plan,
     Sme2AcquisitionWorkspace& workspace,
     std::string& error_message) {
-    workspace = {};
     error_message.clear();
     if (!validate_plan_and_input(received_iq, plan, error_message)) {
         return false;
@@ -325,8 +324,17 @@ bool prepare_sme2_acquisition_workspace(
     workspace.preamble_length = plan.preamble_length;
     workspace.received_real_by_sample_and_timing.resize(packed_sample_count);
     workspace.received_imag_by_sample_and_timing.resize(packed_sample_count);
-    workspace.correlation_real_by_frequency_and_timing.assign(candidate_count, 0.0F);
-    workspace.correlation_imag_by_frequency_and_timing.assign(candidate_count, 0.0F);
+    workspace.correlation_real_by_frequency_and_timing.resize(candidate_count);
+    workspace.correlation_imag_by_frequency_and_timing.resize(candidate_count);
+
+    pack_sme2_acquisition_capture_steady_state(received_iq, plan, workspace);
+    return true;
+}
+
+void pack_sme2_acquisition_capture_steady_state(
+    const std::vector<ComplexF>& received_iq,
+    const AcquisitionPlan& plan,
+    Sme2AcquisitionWorkspace& workspace) {
 
     // Sample-major packing makes each timing batch contiguous for scalable loads.
     for (std::size_t sample_index = 0;
@@ -344,7 +352,6 @@ bool prepare_sme2_acquisition_workspace(
                 sample.imag();
         }
     }
-    return true;
 }
 
 AcquisitionResult run_sme2_acquisition_prepared(

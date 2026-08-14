@@ -80,6 +80,20 @@ neon_acle_supported() {
     "${CXX_BIN}" -std=c++17 -x c++ -fsyntax-only - >/dev/null 2>&1
 }
 
+neon_only_acle_supported() {
+  local flag="$1"
+  printf '%s\n' \
+    '#if !defined(__ARM_NEON) && !defined(__ARM_NEON__)' \
+    '#error NEON macro not defined' \
+    '#endif' \
+    '#if defined(__ARM_FEATURE_SVE) || defined(__ARM_FEATURE_SME)' \
+    '#error scalable or matrix extensions enabled in NEON-only source' \
+    '#endif' \
+    '#include <arm_neon.h>' \
+    'int main() { float32x4_t v = vdupq_n_f32(1.0F); return (int)vgetq_lane_f32(v, 0); }' |
+    "${CXX_BIN}" -std=c++17 "${flag}" -x c++ -fsyntax-only - >/dev/null 2>&1
+}
+
 select_sme2_flag() {
   local flag
   local flags=(-march=armv9.4-a+sme2 -march=armv9.2-a+sme2)
@@ -140,6 +154,42 @@ build_with_compiler() {
     sme2_source_flag="${sme2_flag}"
     acquisition_sme2_definition="-DSATCOMFEC_ACQUISITION_SME2_COMPILED=1"
     echo "info: SME2 build enabled with ${sme2_flag}" >&2
+    local sme2_base_neon_flag=""
+    case "${sme2_flag}" in
+      -mcpu=native+sme2)
+        sme2_base_neon_flag="-mcpu=native+nosve+nosve2+nosme+nosme2"
+        ;;
+      -march=native+sme2)
+        sme2_base_neon_flag="-march=native+nosve+nosve2+nosme+nosme2"
+        ;;
+      -march=armv9.4-a+sme2)
+        sme2_base_neon_flag="-march=armv9.4-a+nosve+nosve2+nosme+nosme2"
+        ;;
+      -march=armv9.2-a+sme2)
+        sme2_base_neon_flag="-march=armv9.2-a+nosve+nosve2+nosme+nosme2"
+        ;;
+    esac
+    local neon_only_flag=""
+    local candidate_flag
+    for candidate_flag in \
+      "${sme2_base_neon_flag}" \
+      -march=armv8-a+simd \
+      -march=armv8-a; do
+      if [[ -n "${candidate_flag}" ]] &&
+        flag_supported "${candidate_flag}" &&
+        neon_only_acle_supported "${candidate_flag}"; then
+        neon_only_flag="${candidate_flag}"
+        break
+      fi
+    done
+    if [[ -z "${neon_only_flag}" ]]; then
+      echo "error: SME2 benchmarking requires a NEON-only comparison target with SVE/SME disabled" >&2
+      exit 1
+    fi
+    neon_source_flag="${neon_only_flag}"
+    acquisition_neon_flag="${neon_only_flag}"
+    acquisition_neon_definition="-DSATCOMFEC_ACQUISITION_NEON_COMPILED=1"
+    echo "info: NEON comparison target disables SVE/SME: ${neon_only_flag}" >&2
   elif [[ "${SATCOMFEC_ENABLE_NEON:-OFF}" == "ON" ]]; then
     local neon_flag
     if ! neon_flag="$(select_neon_flag)"; then

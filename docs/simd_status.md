@@ -16,7 +16,8 @@ public benchmark scope narrow.
 Unavailable acquisition paths report `unavailable` rather than running a
 scalar fallback under an accelerated label. `benchmark_acquisition` verifies
 candidate identity and score tolerances before timing, then reports local
-measurements without embedding a speedup conclusion.
+steady-state, per-capture, and setup-inclusive measurements plus workspace
+bytes without embedding a speedup conclusion.
 
 The legacy decoder harness compares `viterbi-reference`, `viterbi-neon`, and
 `viterbi-sme2` on the same prepared frame window. It reports branch-metric

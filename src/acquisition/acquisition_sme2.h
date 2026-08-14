@@ -25,6 +25,13 @@ bool prepare_sme2_acquisition_workspace(
     Sme2AcquisitionWorkspace& workspace,
     std::string& error_message);
 
+// Requires a previously validated input/plan pair and a correctly sized
+// workspace. Reuses allocations while packing a newly supplied IQ capture.
+void pack_sme2_acquisition_capture_steady_state(
+    const std::vector<ComplexF>& received_iq,
+    const AcquisitionPlan& plan,
+    Sme2AcquisitionWorkspace& workspace);
+
 AcquisitionResult run_sme2_acquisition_prepared(
     const AcquisitionPlan& plan,
     Sme2AcquisitionWorkspace& workspace);

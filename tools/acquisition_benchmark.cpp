@@ -85,6 +85,7 @@ constexpr double kSampleRateHz = 48000.0;
 constexpr double kCfoSpacingHz = 250.0;
 constexpr double kScoreAbsoluteTolerance = 1.0e-3;
 constexpr double kScoreRelativeTolerance = 2.0e-4;
+constexpr std::size_t kPerCaptureWindowCount = 2;
 
 volatile std::uint64_t g_result_sink = 0;
 
@@ -96,12 +97,29 @@ enum class ImplementationId {
 
 enum class TimingMode {
     kSteadyState,
+    kPerCapture,
     kSetupInclusive,
+};
+
+struct ImplementationMemory {
+    std::uint64_t reusable_plan_payload_bytes = 0;
+    std::uint64_t per_capture_workspace_payload_bytes = 0;
+    std::uint64_t correlation_output_payload_bytes = 0;
+    std::uint64_t total_temporary_workspace_payload_bytes = 0;
+    std::uint64_t total_temporary_workspace_capacity_bytes = 0;
+    bool workspace_capacity_measured = false;
+};
+
+struct WorkloadMemory {
+    std::uint64_t common_input_capture_payload_bytes = 0;
+    std::uint64_t benchmark_capture_bank_payload_bytes = 0;
+    std::uint64_t shared_plan_allocated_capacity_bytes = 0;
 };
 
 struct PreparedWorkload {
     WorkloadDefinition definition;
     std::vector<ComplexF> received_iq;
+    std::vector<std::vector<ComplexF>> per_capture_iq;
     std::vector<ComplexF> preamble;
     acquisition::AcquisitionConfig config;
     AcquisitionPlan plan;
@@ -109,6 +127,7 @@ struct PreparedWorkload {
     std::size_t true_timing_offset = 0;
     double true_cfo_hz = 0.0;
     std::uint64_t fixture_seed = 0;
+    WorkloadMemory memory;
 };
 
 struct CorrectnessResult {
@@ -121,6 +140,8 @@ struct CorrectnessResult {
     bool second_best_candidate_match = false;
     bool best_score_within_tolerance = false;
     bool second_best_score_within_tolerance = false;
+    std::size_t per_capture_case_count = 0;
+    std::size_t per_capture_cases_passed = 0;
     std::string actual_implementation = "unavailable";
     double best_score_difference = 0.0;
     double best_score_tolerance = 0.0;
@@ -174,13 +195,17 @@ struct ImplementationResult {
     bool executed = false;
     std::string unavailable_reason;
     CorrectnessResult correctness;
+    ImplementationMemory memory;
     std::vector<ModeResult> modes;
+    std::size_t next_per_capture_index = 0;
 };
 
 struct WorkloadResult {
     PreparedWorkload workload;
     AcquisitionResult reference_result;
+    std::vector<AcquisitionResult> per_capture_reference_results;
     bool reference_valid = false;
+    bool accelerated_weight_tables_match = false;
     std::vector<ImplementationResult> implementations;
     std::vector<std::vector<std::string>> execution_order_by_sample;
 };
@@ -190,6 +215,8 @@ struct HostMetadata {
     std::string os_release = "unavailable";
     std::string architecture = "unavailable";
     std::string cpu_model = "unavailable";
+    std::string cpu_model_source = "unavailable";
+    std::string device_model = "unavailable";
     bool neon_hardware_supported = false;
     bool sve_hardware_supported = false;
     bool sme_hardware_supported = false;
@@ -249,6 +276,8 @@ const char* timing_mode_name(TimingMode mode) {
     switch (mode) {
         case TimingMode::kSteadyState:
             return "steady-state";
+        case TimingMode::kPerCapture:
+            return "per-capture";
         case TimingMode::kSetupInclusive:
             return "setup-inclusive";
     }
@@ -290,6 +319,140 @@ std::uint64_t checked_complex_mac_count(const WorkloadDefinition& definition) {
 std::uint64_t candidate_count(const WorkloadDefinition& definition) {
     return static_cast<std::uint64_t>(definition.timing_hypothesis_count) *
            static_cast<std::uint64_t>(definition.cfo_hypothesis_count);
+}
+
+std::uint64_t storage_bytes(std::size_t element_count, std::size_t element_size) {
+    if (element_size != 0 &&
+        element_count >
+            std::numeric_limits<std::uint64_t>::max() / element_size) {
+        return 0;
+    }
+    return static_cast<std::uint64_t>(element_count) * element_size;
+}
+
+bool equal_float_bits(float left, float right) {
+    return std::memcmp(&left, &right, sizeof(float)) == 0;
+}
+
+bool accelerated_weight_tables_match(const AcquisitionPlan& plan) {
+    const std::size_t frequency_count = plan.frequency_hypotheses.size();
+    if (frequency_count != 0 &&
+        plan.preamble_length >
+            std::numeric_limits<std::size_t>::max() / frequency_count) {
+        return false;
+    }
+    const std::size_t expected_count = frequency_count * plan.preamble_length;
+    if (plan.matched_filter_weights_real_f32.size() != expected_count ||
+        plan.matched_filter_weights_imag_f32.size() != expected_count) {
+        return false;
+    }
+
+    for (std::size_t frequency_index = 0;
+         frequency_index < frequency_count;
+         ++frequency_index) {
+        const auto& interleaved =
+            plan.frequency_hypotheses[frequency_index].matched_filter_weights_f32;
+        if (interleaved.size() != plan.preamble_length) {
+            return false;
+        }
+        for (std::size_t sample_index = 0;
+             sample_index < plan.preamble_length;
+             ++sample_index) {
+            const std::size_t flattened_index =
+                frequency_index * plan.preamble_length + sample_index;
+            if (!equal_float_bits(
+                    interleaved[sample_index].real(),
+                    plan.matched_filter_weights_real_f32[flattened_index]) ||
+                !equal_float_bits(
+                    interleaved[sample_index].imag(),
+                    plan.matched_filter_weights_imag_f32[flattened_index])) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+std::uint64_t shared_plan_allocated_capacity_bytes(const AcquisitionPlan& plan) {
+    std::uint64_t bytes =
+        storage_bytes(plan.timing_offsets.capacity(), sizeof(std::size_t)) +
+        storage_bytes(
+            plan.frequency_hypotheses.capacity(),
+            sizeof(acquisition::PreparedFrequencyHypothesis)) +
+        storage_bytes(
+            plan.matched_filter_weights_real_f32.capacity(), sizeof(float)) +
+        storage_bytes(
+            plan.matched_filter_weights_imag_f32.capacity(), sizeof(float));
+    for (const auto& frequency : plan.frequency_hypotheses) {
+        bytes += storage_bytes(
+            frequency.matched_filter_weights.capacity(),
+            sizeof(std::complex<double>));
+        bytes += storage_bytes(
+            frequency.matched_filter_weights_f32.capacity(), sizeof(ComplexF));
+    }
+    return bytes;
+}
+
+ImplementationMemory implementation_memory(
+    ImplementationId id,
+    const PreparedWorkload& workload) {
+    ImplementationMemory memory;
+    const std::size_t timing_count = workload.plan.timing_offsets.size();
+    const std::size_t frequency_count =
+        workload.plan.frequency_hypotheses.size();
+    const std::size_t weight_count =
+        frequency_count * workload.plan.preamble_length;
+    const std::uint64_t common_plan_bytes =
+        storage_bytes(timing_count, sizeof(std::size_t)) +
+        storage_bytes(frequency_count, sizeof(double));
+
+    switch (id) {
+        case ImplementationId::kReference:
+            memory.reusable_plan_payload_bytes =
+                common_plan_bytes +
+                storage_bytes(weight_count, sizeof(std::complex<double>));
+            break;
+        case ImplementationId::kNeon:
+            memory.reusable_plan_payload_bytes =
+                common_plan_bytes + storage_bytes(weight_count, sizeof(ComplexF));
+            break;
+        case ImplementationId::kSme2: {
+            const std::size_t packed_sample_count =
+                timing_count * workload.plan.preamble_length;
+            const std::size_t correlation_count =
+                timing_count * frequency_count;
+            memory.reusable_plan_payload_bytes =
+                common_plan_bytes + 2 * storage_bytes(weight_count, sizeof(float));
+            memory.per_capture_workspace_payload_bytes =
+                2 * storage_bytes(packed_sample_count, sizeof(float));
+            memory.correlation_output_payload_bytes =
+                2 * storage_bytes(correlation_count, sizeof(float));
+            memory.total_temporary_workspace_payload_bytes =
+                memory.per_capture_workspace_payload_bytes +
+                memory.correlation_output_payload_bytes;
+            memory.total_temporary_workspace_capacity_bytes =
+                storage_bytes(
+                    workload.sme2_workspace
+                        .received_real_by_sample_and_timing.capacity(),
+                    sizeof(float)) +
+                storage_bytes(
+                    workload.sme2_workspace
+                        .received_imag_by_sample_and_timing.capacity(),
+                    sizeof(float)) +
+                storage_bytes(
+                    workload.sme2_workspace
+                        .correlation_real_by_frequency_and_timing.capacity(),
+                    sizeof(float)) +
+                storage_bytes(
+                    workload.sme2_workspace
+                        .correlation_imag_by_frequency_and_timing.capacity(),
+                    sizeof(float));
+            memory.workspace_capacity_measured =
+                !workload.sme2_workspace.received_real_by_sample_and_timing.empty();
+            break;
+        }
+    }
+    return memory;
 }
 
 std::uint64_t stable_name_hash(const std::string& value) {
@@ -409,14 +572,14 @@ HostMetadata collect_host_metadata() {
 
 #if defined(__APPLE__)
     host.cpu_model = query_sysctl_string("machdep.cpu.brand_string");
-    if (host.cpu_model == "unavailable") {
-        host.cpu_model = query_sysctl_string("hw.model");
-    }
+    host.cpu_model_source = "sysctl machdep.cpu.brand_string";
+    host.device_model = query_sysctl_string("hw.model");
     host.neon_hardware_supported = query_sysctl_int("hw.optional.neon");
     host.sme_hardware_supported = query_sysctl_int("hw.optional.arm.FEAT_SME");
     host.sme2_hardware_supported = query_sysctl_int("hw.optional.arm.FEAT_SME2");
 #elif defined(__linux__)
     host.cpu_model = linux_cpu_model();
+    host.cpu_model_source = "/proc/cpuinfo";
 #if defined(__aarch64__)
     host.neon_hardware_supported = true;
 #endif
@@ -521,27 +684,54 @@ bool prepare_workload(
             static_cast<float>(signal.imag()));
     }
 
-    return acquisition::prepare_acquisition_plan(
-        workload.config,
-        workload.preamble,
-        workload.plan,
-        error_message);
+    workload.per_capture_iq.reserve(kPerCaptureWindowCount);
+    workload.per_capture_iq.push_back(workload.received_iq);
+    for (std::size_t capture_index = 1;
+         capture_index < kPerCaptureWindowCount;
+         ++capture_index) {
+        std::vector<ComplexF> capture = workload.received_iq;
+        for (ComplexF& sample : capture) {
+            sample += ComplexF(
+                0.003F * generator.signed_unit(),
+                0.003F * generator.signed_unit());
+        }
+        workload.per_capture_iq.push_back(std::move(capture));
+    }
+
+    if (!acquisition::prepare_acquisition_plan(
+            workload.config,
+            workload.preamble,
+            workload.plan,
+            error_message)) {
+        return false;
+    }
+
+    workload.memory.common_input_capture_payload_bytes =
+        storage_bytes(workload.received_iq.size(), sizeof(ComplexF));
+    for (const auto& capture : workload.per_capture_iq) {
+        workload.memory.benchmark_capture_bank_payload_bytes +=
+            storage_bytes(capture.size(), sizeof(ComplexF));
+    }
+    workload.memory.shared_plan_allocated_capacity_bytes =
+        shared_plan_allocated_capacity_bytes(workload.plan);
+    return true;
 }
 
 AcquisitionResult execute_checked(
     ImplementationId id,
+    const std::vector<ComplexF>& received_iq,
     PreparedWorkload& workload,
     std::string& error_message) {
     switch (id) {
         case ImplementationId::kReference:
             return acquisition::run_reference_acquisition(
-                workload.received_iq, workload.plan);
+                received_iq, workload.plan);
         case ImplementationId::kNeon:
             return acquisition::run_neon_acquisition(
-                workload.received_iq, workload.plan);
+                received_iq, workload.plan);
         case ImplementationId::kSme2:
             if (!acquisition::prepare_sme2_acquisition_workspace(
-                    workload.received_iq,
+                    received_iq,
                     workload.plan,
                     workload.sme2_workspace,
                     error_message)) {
@@ -551,6 +741,31 @@ AcquisitionResult execute_checked(
                 return failure;
             }
             return acquisition::run_sme2_acquisition_prepared(
+                workload.plan, workload.sme2_workspace);
+    }
+    AcquisitionResult failure;
+    failure.implementation = "unavailable";
+    failure.error_message = "unknown acquisition implementation";
+    return failure;
+}
+
+AcquisitionResult execute_per_capture(
+    ImplementationId id,
+    PreparedWorkload& workload,
+    std::size_t capture_index) {
+    const std::vector<ComplexF>& received_iq =
+        workload.per_capture_iq[capture_index % workload.per_capture_iq.size()];
+    switch (id) {
+        case ImplementationId::kReference:
+            return acquisition::run_reference_acquisition_steady_state(
+                received_iq, workload.plan);
+        case ImplementationId::kNeon:
+            return acquisition::run_neon_acquisition_steady_state(
+                received_iq, workload.plan);
+        case ImplementationId::kSme2:
+            acquisition::pack_sme2_acquisition_capture_steady_state(
+                received_iq, workload.plan, workload.sme2_workspace);
+            return acquisition::run_sme2_acquisition_steady_state(
                 workload.plan, workload.sme2_workspace);
     }
     AcquisitionResult failure;
@@ -745,9 +960,10 @@ ImplementationResult make_implementation_result(ImplementationId id) {
     ImplementationResult implementation;
     implementation.id = id;
     implementation.name = implementation_name(id);
-    implementation.modes.resize(2);
+    implementation.modes.resize(3);
     implementation.modes[0].mode = TimingMode::kSteadyState;
-    implementation.modes[1].mode = TimingMode::kSetupInclusive;
+    implementation.modes[1].mode = TimingMode::kPerCapture;
+    implementation.modes[2].mode = TimingMode::kSetupInclusive;
     switch (id) {
         case ImplementationId::kReference:
             implementation.available = true;
@@ -790,22 +1006,34 @@ bool prepare_and_verify_workload(
         return false;
     }
 
-    result.reference_result = acquisition::run_reference_acquisition(
-        result.workload.received_iq, result.workload.plan);
-    result.reference_valid =
-        result.reference_result.ok &&
-        result.reference_result.best.hypothesis.timing_offset ==
-            result.workload.true_timing_offset &&
-        result.reference_result.best.hypothesis.frequency_offset_hz ==
-            result.workload.true_cfo_hz &&
-        result.reference_result.evaluated_candidate_count ==
-            candidate_count(definition);
-    if (!result.reference_valid) {
-        error_message = result.reference_result.error_message.empty()
-                            ? "reference acquisition failed benchmark ground truth"
-                            : result.reference_result.error_message;
+    result.accelerated_weight_tables_match =
+        accelerated_weight_tables_match(result.workload.plan);
+    if (!result.accelerated_weight_tables_match) {
+        error_message =
+            "NEON and SME2 float32 acquisition weights are not bitwise aligned";
         return false;
     }
+
+    for (const auto& capture : result.workload.per_capture_iq) {
+        AcquisitionResult reference = acquisition::run_reference_acquisition(
+            capture, result.workload.plan);
+        const bool reference_valid =
+            reference.ok &&
+            reference.best.hypothesis.timing_offset ==
+                result.workload.true_timing_offset &&
+            reference.best.hypothesis.frequency_offset_hz ==
+                result.workload.true_cfo_hz &&
+            reference.evaluated_candidate_count == candidate_count(definition);
+        if (!reference_valid) {
+            error_message = reference.error_message.empty()
+                                ? "reference acquisition failed per-capture ground truth"
+                                : reference.error_message;
+            return false;
+        }
+        result.per_capture_reference_results.push_back(std::move(reference));
+    }
+    result.reference_result = result.per_capture_reference_results.front();
+    result.reference_valid = true;
 
     result.implementations = {
         make_implementation_result(ImplementationId::kReference),
@@ -823,16 +1051,63 @@ bool prepare_and_verify_workload(
         }
         std::string execution_error;
         const AcquisitionResult candidate = execute_checked(
-            implementation.id, result.workload, execution_error);
+            implementation.id,
+            result.workload.per_capture_iq.front(),
+            result.workload,
+            execution_error);
         implementation.executed = true;
         implementation.correctness = verify_correctness(
             implementation.id,
             candidate,
             result.reference_result,
             result.workload);
+        implementation.correctness.per_capture_case_count = 1;
+        implementation.correctness.per_capture_cases_passed =
+            implementation.correctness.passed ? 1 : 0;
         if (!execution_error.empty() &&
             implementation.correctness.error_message.empty()) {
             implementation.correctness.error_message = execution_error;
+        }
+
+        for (std::size_t capture_index = 1;
+             capture_index < result.workload.per_capture_iq.size();
+             ++capture_index) {
+            execution_error.clear();
+            const AcquisitionResult per_capture_candidate = execute_checked(
+                implementation.id,
+                result.workload.per_capture_iq[capture_index],
+                result.workload,
+                execution_error);
+            const CorrectnessResult per_capture_correctness = verify_correctness(
+                implementation.id,
+                per_capture_candidate,
+                result.per_capture_reference_results[capture_index],
+                result.workload);
+            ++implementation.correctness.per_capture_case_count;
+            if (per_capture_correctness.passed) {
+                ++implementation.correctness.per_capture_cases_passed;
+            } else {
+                implementation.correctness.passed = false;
+                if (implementation.correctness.error_message.empty()) {
+                    implementation.correctness.error_message =
+                        "per-capture correctness failed at capture index " +
+                        std::to_string(capture_index) + ": " +
+                        per_capture_correctness.error_message;
+                }
+            }
+        }
+
+        if (implementation.id == ImplementationId::kSme2 &&
+            implementation.correctness.passed) {
+            execution_error.clear();
+            if (!acquisition::prepare_sme2_acquisition_workspace(
+                    result.workload.per_capture_iq.front(),
+                    result.workload.plan,
+                    result.workload.sme2_workspace,
+                    execution_error)) {
+                implementation.correctness.passed = false;
+                implementation.correctness.error_message = execution_error;
+            }
         }
         for (ModeResult& mode : implementation.modes) {
             mode.valid = implementation.correctness.passed;
@@ -841,21 +1116,36 @@ bool prepare_and_verify_workload(
             }
         }
     }
+    for (ImplementationResult& implementation : result.implementations) {
+        implementation.memory =
+            implementation_memory(implementation.id, result.workload);
+    }
     return true;
 }
 
 AcquisitionResult execute_task(
     const BenchmarkTask& task,
     WorkloadResult& workload) {
-    const ImplementationId implementation =
-        workload.implementations[task.implementation_index].id;
+    ImplementationResult& implementation_result =
+        workload.implementations[task.implementation_index];
+    const ImplementationId implementation = implementation_result.id;
     const TimingMode mode =
-        workload.implementations[task.implementation_index]
-            .modes[task.mode_index]
-            .mode;
-    return mode == TimingMode::kSteadyState
-               ? execute_steady_state(implementation, workload.workload)
-               : execute_setup_inclusive(implementation, workload.workload);
+        implementation_result.modes[task.mode_index].mode;
+    switch (mode) {
+        case TimingMode::kSteadyState:
+            return execute_steady_state(implementation, workload.workload);
+        case TimingMode::kPerCapture:
+            return execute_per_capture(
+                implementation,
+                workload.workload,
+                implementation_result.next_per_capture_index++);
+        case TimingMode::kSetupInclusive:
+            return execute_setup_inclusive(implementation, workload.workload);
+    }
+    AcquisitionResult failure;
+    failure.implementation = "unavailable";
+    failure.error_message = "unknown benchmark timing mode";
+    return failure;
 }
 
 std::vector<BenchmarkTask> active_tasks(const WorkloadResult& workload) {
@@ -938,7 +1228,8 @@ void run_timing(
         }
     }
 
-    for (std::size_t mode_index = 0; mode_index < 2; ++mode_index) {
+    const std::size_t mode_count = workload.implementations.front().modes.size();
+    for (std::size_t mode_index = 0; mode_index < mode_count; ++mode_index) {
         const ModeResult& reference =
             workload.implementations[0].modes[mode_index];
         const ModeResult& neon = workload.implementations[1].modes[mode_index];
@@ -1036,8 +1327,33 @@ void write_correctness_json(
     output << "          \"second_best_score_within_tolerance\": "
            << (correctness.second_best_score_within_tolerance ? "true" : "false")
            << ",\n";
+    output << "          \"per_capture_case_count\": "
+           << correctness.per_capture_case_count << ",\n";
+    output << "          \"per_capture_cases_passed\": "
+           << correctness.per_capture_cases_passed << ",\n";
     output << "          \"error\": \""
            << tools::escape_json(correctness.error_message) << "\"\n";
+    output << "        },\n";
+}
+
+void write_memory_json(
+    std::ostream& output,
+    const ImplementationMemory& memory) {
+    output << "        \"memory_bytes\": {\n";
+    output << "          \"reusable_plan_payload\": "
+           << memory.reusable_plan_payload_bytes << ",\n";
+    output << "          \"per_capture_workspace_payload\": "
+           << memory.per_capture_workspace_payload_bytes << ",\n";
+    output << "          \"correlation_output_payload\": "
+           << memory.correlation_output_payload_bytes << ",\n";
+    output << "          \"total_temporary_workspace_payload\": "
+           << memory.total_temporary_workspace_payload_bytes << ",\n";
+    output << "          \"total_temporary_workspace_allocated_capacity\": ";
+    if (memory.workspace_capacity_measured) {
+        output << memory.total_temporary_workspace_capacity_bytes << "\n";
+    } else {
+        output << "null\n";
+    }
     output << "        },\n";
 }
 
@@ -1048,6 +1364,12 @@ void write_mode_json(std::ostream& output, const ModeResult& mode, bool trailing
     output << "            \"valid\": " << (mode.valid ? "true" : "false")
            << ",\n";
     output << "            \"allocations_included\": "
+           << (mode.mode == TimingMode::kSetupInclusive ? "true" : "false")
+           << ",\n";
+    output << "            \"new_capture_preparation_included\": "
+           << (mode.mode == TimingMode::kSteadyState ? "false" : "true")
+           << ",\n";
+    output << "            \"reusable_plan_generation_included\": "
            << (mode.mode == TimingMode::kSetupInclusive ? "true" : "false")
            << ",\n";
     output << "            \"speedup_vs_reference\": ";
@@ -1108,7 +1430,7 @@ void write_mode_json(std::ostream& output, const ModeResult& mode, bool trailing
 std::string serialize_json(const BenchmarkReport& report) {
     std::ostringstream output;
     output << "{\n";
-    output << "  \"schema_version\": 1,\n";
+    output << "  \"schema_version\": 2,\n";
     output << "  \"ok\": " << (report.ok ? "true" : "false") << ",\n";
     output << "  \"benchmark\": {\n";
     output << "    \"name\": \"acquisition-workload-sweep\",\n";
@@ -1140,10 +1462,32 @@ std::string serialize_json(const BenchmarkReport& report) {
               "CFO weights, and preallocated SME2 workspace; complete "
               "correlation, magnitude-squared scoring, and top-two reduction "
               "are timed.\",\n";
+    output << "    \"per_capture_definition\": \"The acquisition plan and "
+              "allocations are reused while prevalidated IQ windows are "
+              "cycled. Reference and NEON read each interleaved window "
+              "directly; SME2 sample-major packing for every supplied window "
+              "is timed before correlation and top-two reduction.\",\n";
     output << "    \"setup_inclusive_definition\": \"Includes acquisition-plan "
               "allocation/CFO-table generation and checked execution; SME2 "
               "additionally includes workspace allocation, packing, and "
-              "release.\"\n";
+              "release.\",\n";
+    output << "    \"fairness_contract\": {\n";
+    output << "      \"candidate_set\": \"One shared timing/CFO hypothesis plan "
+              "is used by every implementation.\",\n";
+    output << "      \"accelerated_precision\": \"NEON and SME2 use bitwise-"
+              "aligned float32 weights and float32 accumulation; the scalar "
+              "oracle uses float64 weights and accumulation.\",\n";
+    output << "      \"scoring_and_selection\": \"Magnitude-squared scoring and "
+              "top-two candidate selection are included for every path.\",\n";
+    output << "      \"fallback_policy\": \"An accelerated path is timed only "
+              "when its reported implementation matches the requested path.\",\n";
+    output << "      \"target_isolation\": \"Reference vectorization controls "
+              "and accelerated target flags are source-specific; an SME2 "
+              "build gives NEON a target with SVE and SME disabled.\",\n";
+    output << "      \"dead_code_control\": \"Every timed block consumes a "
+              "fingerprint of its final acquisition result through a volatile "
+              "sink.\"\n";
+    output << "    }\n";
     output << "  },\n";
     output << "  \"host\": {\n";
     output << "    \"os\": \"" << tools::escape_json(report.host.os_name)
@@ -1153,7 +1497,11 @@ std::string serialize_json(const BenchmarkReport& report) {
     output << "    \"architecture\": \""
            << tools::escape_json(report.host.architecture) << "\",\n";
     output << "    \"cpu_model\": \""
-           << tools::escape_json(report.host.cpu_model) << "\"\n";
+           << tools::escape_json(report.host.cpu_model) << "\",\n";
+    output << "    \"cpu_model_source\": \""
+           << tools::escape_json(report.host.cpu_model_source) << "\",\n";
+    output << "    \"device_model\": \""
+           << tools::escape_json(report.host.device_model) << "\"\n";
     output << "  },\n";
     output << "  \"build\": {\n";
     output << "    \"compiler\": \"" << compiler_name() << "\",\n";
@@ -1232,15 +1580,44 @@ std::string serialize_json(const BenchmarkReport& report) {
         output << "        \"cfo_spacing_hz\": "
                << tools::format_float(kCfoSpacingHz, 1) << "\n";
         output << "      },\n";
+        output << "      \"memory_accounting\": {\n";
+        output << "        \"scope\": \"Logical payload bytes unless the field "
+                  "explicitly names allocated capacity; allocator bookkeeping "
+                  "and stack objects are excluded.\",\n";
+        output << "        \"common_input_capture_payload_bytes\": "
+               << workload.memory.common_input_capture_payload_bytes << ",\n";
+        output << "        \"benchmark_capture_bank_payload_bytes\": "
+               << workload.memory.benchmark_capture_bank_payload_bytes << ",\n";
+        output << "        \"shared_plan_allocated_capacity_bytes\": "
+               << workload.memory.shared_plan_allocated_capacity_bytes << "\n";
+        output << "      },\n";
         output << "      \"fixture\": {\n";
         output << "        \"synthetic\": true,\n";
         output << "        \"seed\": " << workload.fixture_seed << ",\n";
+        output << "        \"per_capture_window_count\": "
+               << workload.per_capture_iq.size() << ",\n";
         output << "        \"execution_order_seed\": "
                << (workload.fixture_seed ^ 0x9E3779B97F4A7C15ULL) << ",\n";
         output << "        \"true_timing_offset\": "
                << workload.true_timing_offset << ",\n";
         output << "        \"true_cfo_hz\": "
                << tools::format_float(workload.true_cfo_hz, 1) << "\n";
+        output << "      },\n";
+        output << "      \"fairness_checks\": {\n";
+        output << "        \"shared_candidate_plan\": true,\n";
+        output << "        \"accelerated_weight_tables_bitwise_equal\": "
+               << (workload_result.accelerated_weight_tables_match
+                       ? "true"
+                       : "false")
+               << ",\n";
+        output << "        \"per_capture_reference_cases_valid\": "
+               << (workload_result.per_capture_reference_results.size() ==
+                           workload.per_capture_iq.size()
+                       ? "true"
+                       : "false")
+               << ",\n";
+        output << "        \"timed_execution_order_randomized\": true,\n";
+        output << "        \"sme2_per_capture_packing_timed\": true\n";
         output << "      },\n";
         output << "      \"reference_result\": {\n";
         output << "        \"valid\": "
@@ -1305,6 +1682,7 @@ std::string serialize_json(const BenchmarkReport& report) {
                    << tools::escape_json(implementation.unavailable_reason)
                    << "\",\n";
             write_correctness_json(output, implementation.correctness);
+            write_memory_json(output, implementation.memory);
             output << "        \"modes\": [\n";
             for (std::size_t mode_index = 0;
                  mode_index < implementation.modes.size();
@@ -1339,9 +1717,17 @@ std::string serialize_json(const BenchmarkReport& report) {
               "mission-derived waveform standards.\",\n";
     output << "    \"Steady-state timing includes score calculation and top-two "
               "selection; it is not an instruction-only microbenchmark.\",\n";
+    output << "    \"Per-capture timing reuses the plan and allocations but "
+              "includes SME2 sample-major packing for every supplied IQ "
+              "window.\",\n";
     output << "    \"The setup-inclusive mode includes implementation-specific "
               "setup costs and is not expected to rank paths identically to "
               "steady state.\",\n";
+    output << "    \"The scalar oracle accumulates in float64; NEON and SME2 use "
+              "the same float32 weights and float32 accumulation and are "
+              "correctness-gated against the oracle.\",\n";
+    output << "    \"Reported memory is payload/capacity accounting, not process "
+              "resident-set size or allocator overhead.\",\n";
     output << "    \"The legacy Viterbi decoder benchmark is independent and is "
               "not evidence for acquisition performance.\"\n";
     output << "  ]\n";
@@ -1364,7 +1750,9 @@ std::string csv_escape(const std::string& value) {
 std::string serialize_csv(const BenchmarkReport& report) {
     std::ostringstream output;
     output << "workload,iq_samples,preamble_length,timing_hypotheses,cfo_hypotheses,"
-              "implementation,implementation_class,available,correctness_passed,mode,"
+              "implementation,implementation_class,reusable_plan_payload_bytes,"
+              "per_capture_workspace_payload_bytes,correlation_output_payload_bytes,"
+              "total_temporary_workspace_payload_bytes,available,correctness_passed,mode,"
               "timing_valid,sample_count,median_latency_ms,mean_latency_ms,"
               "standard_deviation_ms,p95_latency_ms,correlations_per_second,"
               "complex_macs_per_second,speedup_vs_reference,speedup_vs_neon,error\n";
@@ -1378,6 +1766,14 @@ std::string serialize_csv(const BenchmarkReport& report) {
                        << definition.cfo_hypothesis_count << ','
                        << implementation.name << ','
                        << implementation.implementation_class << ','
+                       << implementation.memory.reusable_plan_payload_bytes << ','
+                       << implementation.memory.per_capture_workspace_payload_bytes
+                       << ','
+                       << implementation.memory.correlation_output_payload_bytes
+                       << ','
+                       << implementation.memory
+                              .total_temporary_workspace_payload_bytes
+                       << ','
                        << (implementation.available ? "true" : "false") << ','
                        << (implementation.correctness.passed ? "true" : "false")
                        << ',' << timing_mode_name(mode.mode) << ','

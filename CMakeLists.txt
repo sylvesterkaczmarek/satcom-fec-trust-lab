@@ -45,6 +45,26 @@ function(satcomfec_check_neon_flag flag out_var)
     set("${out_var}" "${${out_var}}" PARENT_SCOPE)
 endfunction()
 
+function(satcomfec_check_neon_only_flag flag out_var)
+    set(saved_required_flags "${CMAKE_REQUIRED_FLAGS}")
+    set(CMAKE_REQUIRED_FLAGS "${flag}")
+    check_cxx_source_compiles("
+        #if !defined(__ARM_NEON) && !defined(__ARM_NEON__)
+        #error NEON macro not defined
+        #endif
+        #if defined(__ARM_FEATURE_SVE) || defined(__ARM_FEATURE_SME)
+        #error scalable or matrix extensions enabled in NEON-only source
+        #endif
+        #include <arm_neon.h>
+        int main() {
+            float32x4_t value = vdupq_n_f32(1.0F);
+            return static_cast<int>(vgetq_lane_f32(value, 0)) == 1 ? 0 : 1;
+        }
+    " "${out_var}")
+    set(CMAKE_REQUIRED_FLAGS "${saved_required_flags}")
+    set("${out_var}" "${${out_var}}" PARENT_SCOPE)
+endfunction()
+
 function(satcomfec_check_sme2_flag flag out_var)
     set(saved_required_flags "${CMAKE_REQUIRED_FLAGS}")
     set(CMAKE_REQUIRED_FLAGS "${flag}")
@@ -119,6 +139,53 @@ if(SATCOMFEC_ENABLE_SME2)
     endif()
     set(SATCOMFEC_SME2_SOURCE_FLAG "${SATCOMFEC_SME2_FLAG}")
     message(STATUS "satcom-fec-trust-lab: SME2 build enabled with ${SATCOMFEC_SME2_FLAG}")
+
+    set(SATCOMFEC_SME2_BASE_NEON_CANDIDATE "")
+    if(SATCOMFEC_SME2_FLAG STREQUAL "-mcpu=native+sme2")
+        set(SATCOMFEC_SME2_BASE_NEON_CANDIDATE
+            "-mcpu=native+nosve+nosve2+nosme+nosme2")
+    elseif(SATCOMFEC_SME2_FLAG STREQUAL "-march=native+sme2")
+        set(SATCOMFEC_SME2_BASE_NEON_CANDIDATE
+            "-march=native+nosve+nosve2+nosme+nosme2")
+    elseif(SATCOMFEC_SME2_FLAG STREQUAL "-march=armv9.4-a+sme2")
+        set(SATCOMFEC_SME2_BASE_NEON_CANDIDATE
+            "-march=armv9.4-a+nosve+nosve2+nosme+nosme2")
+    elseif(SATCOMFEC_SME2_FLAG STREQUAL "-march=armv9.2-a+sme2")
+        set(SATCOMFEC_SME2_BASE_NEON_CANDIDATE
+            "-march=armv9.2-a+nosve+nosve2+nosme+nosme2")
+    endif()
+    set(SATCOMFEC_SME2_NEON_CANDIDATE_FLAGS
+        "${SATCOMFEC_SME2_BASE_NEON_CANDIDATE}"
+        "-march=armv8-a+simd"
+        "-march=armv8-a"
+    )
+    foreach(candidate_flag IN LISTS SATCOMFEC_SME2_NEON_CANDIDATE_FLAGS)
+        if(NOT candidate_flag)
+            continue()
+        endif()
+        string(MAKE_C_IDENTIFIER
+            "SATCOMFEC_SME2_NEON_ONLY_OK_${candidate_flag}"
+            candidate_result)
+        satcomfec_check_neon_only_flag(
+            "${candidate_flag}"
+            "${candidate_result}"
+        )
+        if(${candidate_result})
+            set(SATCOMFEC_NEON_SOURCE_FLAG "${candidate_flag}")
+            set(SATCOMFEC_ACQUISITION_NEON_AVAILABLE ON)
+            message(STATUS
+                "satcom-fec-trust-lab: NEON comparison target disables SVE/SME: "
+                "${candidate_flag}"
+            )
+            break()
+        endif()
+    endforeach()
+    if(NOT SATCOMFEC_ACQUISITION_NEON_AVAILABLE)
+        message(FATAL_ERROR
+            "SATCOMFEC_ENABLE_SME2=ON also requires a NEON-only comparison "
+            "target with SVE and SME disabled."
+        )
+    endif()
 elseif(SATCOMFEC_ENABLE_NEON)
     satcomfec_find_supported_flag(
         SATCOMFEC_NEON_FLAG

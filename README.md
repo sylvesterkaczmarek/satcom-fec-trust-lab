@@ -29,7 +29,8 @@ supported Android app or full SME2-optimized Viterbi decoder.
   256-sample complex preamble; unavailable accelerated paths do not use a
   labeled scalar fallback
 - One correctness-gated acquisition workload sweep with fixed sizes,
-  steady-state and setup-inclusive modes, and structured local timing output
+  steady-state, per-capture, and setup-inclusive modes, plus structured local
+  timing and workspace accounting
 - One legacy decoder-path timing comparison across `viterbi-reference`,
   `viterbi-neon`, and `viterbi-sme2`
 - One healthy versus impaired versus failed trust comparison using checked-in
@@ -62,6 +63,8 @@ supported Android app or full SME2-optimized Viterbi decoder.
 - A decoder alignment check at `scripts/validate_decoder_alignment.sh`
 - A branch-metric equivalence check at `scripts/check_branch_metrics.sh`
 - An acquisition benchmark harness at `scripts/benchmark_acquisition.sh`
+- A five-process repeatability helper at
+  `scripts/repeat_acquisition_benchmark.py`
 - A legacy decoder microbenchmark at `scripts/benchmark_decoder_paths.sh`
 - Automated tests at `tests/test_host_replay.py`
 - Reference/NEON/SME2 acquisition tests at `tests/test_acquisition.py`
@@ -149,6 +152,13 @@ the authoritative JSON and optional CSV summaries with:
 bash scripts/benchmark_acquisition.sh \
   --json build/acquisition-benchmark.json \
   --csv build/acquisition-benchmark.csv
+```
+
+Run five independent full processes without discarding the raw reports:
+
+```bash
+python3 scripts/repeat_acquisition_benchmark.py \
+  --output-dir build/acquisition-repeatability
 ```
 
 On a host and compiler with SME2 support, build and verify the ZA-based
@@ -378,7 +388,8 @@ What works today:
   verify every candidate correlation against the reference, and inspect the
   object for ZA VGx4 instructions
 - run fixed acquisition workload classes with correctness-gated local timing,
-  separate steady-state/setup-inclusive modes, and JSON/CSV reporting
+  separate steady-state/per-capture/setup-inclusive modes, implementation
+  workspace accounting, and JSON/CSV reporting
 - regenerate the synthetic IQ asset and its metadata
 - compare healthy, impaired, and failed trust-monitoring cases on checked-in
   inputs
@@ -435,8 +446,8 @@ What is not included:
 - a checked-in Gradle wrapper or Android build workflow
 - a supported Android app
 - SME2-accelerated Viterbi add-compare-select or traceback
-- checked-in acquisition performance results or a general acquisition speedup
-  claim
+- a claim that checked-in acquisition timings generalize beyond the exact host,
+  build, and run metadata recorded with them
 
 ## Expected output
 
@@ -517,9 +528,12 @@ because its soft decisions are weaker, and the failed replay is capped at
 The acquisition benchmark reports fixed workload dimensions, the deterministic
 seed and execution order, host/compiler/source-flag metadata, runtime Arm
 feature detection, candidate and score equivalence, timing distributions,
-throughput, and relative median latency. An implementation is timed only after
-it matches the scalar result. See [docs/benchmarking.md](docs/benchmarking.md)
-for the exact four workload classes and statistical method.
+throughput, relative median latency, and plan/workspace/output bytes. The
+per-capture mode includes SME2 packing for each newly supplied IQ window while
+reusing the acquisition plan and allocations. An implementation is timed only
+after it matches the scalar result. See
+[docs/benchmarking.md](docs/benchmarking.md) for the exact four workload
+classes, fairness contract, and statistical method.
 
 The legacy decoder harness prints its assumptions inline. Those assumptions
 are:
@@ -560,6 +574,8 @@ Key paths:
 - `scripts/`
   Supported host-side build, acquisition, replay, trust, and validation
   entrypoints
+- `benchmarks/results/`
+  Tracked raw local benchmark reports and their independent-run summaries
 - `Makefile`
   Thin top-level command surface for the supported host-side workflow
 - `tools/`
@@ -589,6 +605,7 @@ Supported host-side scripts:
 - `scripts/check_branch_metrics.sh`
 - `scripts/verify_arm_paths.sh`
 - `scripts/benchmark_acquisition.sh`
+- `scripts/repeat_acquisition_benchmark.py`
 - `scripts/benchmark_decoder_paths.sh`
 - `scripts/generate_synthetic_iq.py`
 - `scripts/generate_acquisition_fixtures.py`
@@ -607,6 +624,7 @@ satcom-fec-trust-lab/
 ├─ CMakeLists.txt                    # Host-side CMake entrypoint
 ├─ README.md
 ├─ assets/social/                   # Repository artwork
+├─ benchmarks/results/              # Tracked raw local benchmark evidence
 ├─ data/synthetic/acquisition/      # Acquisition IQ and ground truth
 ├─ data/synthetic/canned_replay/    # Replay IQ and metadata
 ├─ docs/                            # Short notes for the public demo

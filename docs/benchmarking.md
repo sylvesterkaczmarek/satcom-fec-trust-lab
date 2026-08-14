@@ -14,6 +14,10 @@ bash scripts/benchmark_acquisition.sh \
 # Include SME2 only on a compiler and host that support it.
 SATCOMFEC_ENABLE_SME2=ON bash scripts/benchmark_acquisition.sh \
   --json build/acquisition-benchmark-sme2.json
+
+# Preserve five independent process reports plus a summary of run medians.
+SATCOMFEC_ENABLE_SME2=ON python3 scripts/repeat_acquisition_benchmark.py \
+  --output-dir build/acquisition-repeatability
 ```
 
 An unavailable accelerated implementation is recorded as unavailable and is
@@ -55,6 +59,10 @@ mission-derived waveform profiles.
 - `steady-state` includes correlation, magnitude-squared scoring, and top-two
   reduction using validated inputs and precomputed tables. SME2 packing and
   output buffers are preallocated.
+- `per-capture` reuses the acquisition plan and all realistic allocations, but
+  cycles between two deterministic prevalidated IQ windows. Reference and NEON
+  read the supplied interleaved IQ directly. SME2 sample-major packing for each
+  supplied window is inside the timed operation.
 - `setup-inclusive` additionally includes acquisition-plan allocation and CFO
   table generation. For SME2 it also includes workspace allocation, input
   packing, and release.
@@ -67,13 +75,65 @@ timestamp, OS, architecture, CPU model, compiler, source-specific flags,
 runtime feature detection, vector width where available, workload definition,
 correctness evidence, and implementation actually executed.
 
+## Fairness checks
+
+- All implementations receive one shared timing/CFO hypothesis plan and the
+  same deterministic capture set.
+- NEON and SME2 use bitwise-identical precomputed float32 weights and float32
+  accumulation. The scalar correctness oracle intentionally retains float64
+  weights and accumulation.
+- Every path includes magnitude-squared scoring and top-two selection. SME2's
+  correlation-output writes and scalar reduction remain timed.
+- No unavailable accelerated implementation is timed, and the reported
+  implementation name must match the requested path.
+- Reference auto-vectorization controls and NEON/SME2 target flags remain
+  translation-unit specific. In an SME2 build, the NEON translation unit uses
+  the corresponding base target with SVE and SME explicitly disabled where the
+  compiler accepts it; otherwise configuration requires a NEON-only Armv8
+  target. The report records both source flags.
+- `scripts/verify_sme2_acquisition_assembly.sh` verifies the ZA VGx4 SME2
+  instructions and separately confirms NEON arithmetic without checked
+  SVE/SME instruction patterns in the comparison object.
+- Every timed block consumes a result fingerprint through a volatile sink, and
+  valid implementation/mode blocks are shuffled with the reported seed.
+
+## Memory accounting
+
+Each workload reports common capture bytes and actual shared-plan vector
+capacity. Each implementation reports logical reusable-plan payload,
+per-capture workspace payload, correlation-output payload, total temporary
+workspace payload, and measured allocated capacity when that workspace is
+instantiated. The values exclude allocator bookkeeping, stack objects, process
+resident-set size, and code pages.
+
+The SME2 sample-major workspace scales with
+`2 * preamble_length * timing_hypotheses * sizeof(float)`. Its correlation
+output scales with
+`2 * CFO_hypotheses * timing_hypotheses * sizeof(float)`. Reference and NEON
+do not allocate corresponding dynamic workspaces in the current implementation.
+
+## Independent process runs
+
+`scripts/repeat_acquisition_benchmark.py` requires at least five process runs.
+It stores each raw JSON separately and writes `summary.json` with the median,
+minimum, maximum, spread, and coefficient of variation of the run medians for
+each workload/mode/implementation. SME2 entries retain the SME2-versus-NEON
+speedup from every independent run. Raw reports remain authoritative; the
+summary does not replace them.
+
+Tracked local reports live under `benchmarks/results/`. Hardware identity,
+commit, dirty-tree state, compiler, flags, raw samples, and correctness status
+must be read from each report rather than inferred from prose.
+
 ## Interpretation limits
 
 This is local process timing. It does not control CPU affinity, frequency,
 thermal state, or competing system activity, and it does not measure energy.
-Results from one device are not a general architecture claim. Setup-inclusive
-and steady-state rankings may differ. The benchmark contains no SVE acquisition
-path, so it does not label streaming SVE as SME2 or provide an SVE comparison.
+Results from one device are not a general architecture claim. Steady-state,
+per-capture, and setup-inclusive rankings may differ. Independent process runs
+do not control thermal state or frequency. The benchmark contains no SVE
+acquisition path, so it does not label streaming SVE as SME2 or provide an SVE
+comparison.
 
 ## Legacy decoder experiment
 

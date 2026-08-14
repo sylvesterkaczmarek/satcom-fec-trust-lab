@@ -267,6 +267,81 @@ class AcquisitionReferenceTests(unittest.TestCase):
             self.assertEqual(report["cases"], [])
 
 
+class NeonDisassemblyVerifierTests(unittest.TestCase):
+    def run_verifier(
+        self, neon_text: str, reference_text: str
+    ) -> subprocess.CompletedProcess:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            neon_path = Path(temporary_directory) / "neon.txt"
+            reference_path = Path(temporary_directory) / "reference.txt"
+            neon_path.write_text(neon_text, encoding="utf-8")
+            reference_path.write_text(reference_text, encoding="utf-8")
+            return subprocess.run(
+                (
+                    "bash",
+                    "scripts/check_neon_disassembly.sh",
+                    str(neon_path),
+                    str(reference_path),
+                ),
+                cwd=ROOT_DIR,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+    def test_accepts_gnu_ld2_operand_lane_syntax(self) -> None:
+        completed = self.run_verifier(
+            """
+  138:\t4cdf8820 \tld2\t{v0.4s-v1.4s}, [x1], #32
+  140:\t6e22dc05 \tfmul\tv5.4s, v0.4s, v2.4s
+  150:\t4eb0d4a1 \tfsub\tv1.4s, v5.4s, v16.4s
+  1c8:\t4ea7cca1 \tfmls\tv1.4s, v5.4s, v7.4s
+""",
+            "  20: 1e620800 fmul d0, d0, d2\n",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("AArch64 LD2 structure load", completed.stdout)
+        self.assertIn("ld2", completed.stdout)
+
+    def test_accepts_load_plus_uzp_deinterleave_lowering(self) -> None:
+        completed = self.run_verifier(
+            """
+  100: 3dc00020 ldr q0, [x1]
+  104: 3dc00421 ldr q1, [x1, #16]
+  108: 4e811802 uzp1 v2.4s, v0.4s, v1.4s
+  10c: 4e815803 uzp2 v3.4s, v0.4s, v1.4s
+  110: 6e22dc44 fmul v4.4s, v2.4s, v2.4s
+  114: 4e23cc84 fmla v4.4s, v4.4s, v3.4s
+""",
+            "  20: 1e620800 fmul d0, d0, d2\n",
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("vector load(s) followed by UZP1/UZP2", completed.stdout)
+        self.assertIn("uzp1", completed.stdout.lower())
+
+    def test_rejects_symbol_only_or_scalar_evidence(self) -> None:
+        completed = self.run_verifier(
+            """
+00000000 <run_neon_acquisition>:
+  20: 1e220800 fmul s0, s0, s2
+  24: 1e222800 fadd s0, s0, s2
+""",
+            "  20: 1e620800 fmul d0, d0, d2\n",
+        )
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("deinterleave", completed.stderr)
+
+    def test_rejects_equivalent_vector_sequence_in_reference_object(self) -> None:
+        vector_sequence = """
+  100: 4cdf8820 ld2 {v0.4s-v1.4s}, [x1], #32
+  104: 6e22dc44 fmul v4.4s, v2.4s, v2.4s
+  108: 4e23cc84 fmla v4.4s, v4.4s, v3.4s
+"""
+        completed = self.run_verifier(vector_sequence, vector_sequence)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("scalar reference object", completed.stderr)
+
+
 class AcquisitionBenchmarkTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -331,7 +406,7 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
             repeated_report = json.loads(repeated.stdout)
 
         self.assertTrue(report["ok"])
-        self.assertEqual(report["schema_version"], 1)
+        self.assertEqual(report["schema_version"], 2)
         self.assertEqual(report["benchmark"]["name"], "acquisition-workload-sweep")
         self.assertEqual(report["benchmark"]["timed_sample_count"], 3)
         self.assertEqual(report["benchmark"]["minimum_sample_duration_ms"], 1.0)
@@ -339,6 +414,14 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
         self.assertIn("reference", report["build"]["source_compile_flags"])
         self.assertIn("neon", report["build"]["source_compile_flags"])
         self.assertIn("sme2", report["build"]["source_compile_flags"])
+        if report["runtime_cpu_features"]["sme2_kernel_compiled"]:
+            neon_flags = report["build"]["source_compile_flags"]["neon"]
+            self.assertTrue(
+                ("nosve" in neon_flags and "nosme" in neon_flags)
+                or "armv8-a" in neon_flags
+            )
+        self.assertIn("cpu_model_source", report["host"])
+        self.assertIn("device_model", report["host"])
         self.assertEqual(len(report["workloads"]), 1)
 
         workload = report["workloads"][0]
@@ -357,6 +440,19 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
             },
         )
         self.assertTrue(workload["reference_result"]["valid"])
+        self.assertEqual(workload["fixture"]["per_capture_window_count"], 2)
+        self.assertTrue(
+            workload["fairness_checks"][
+                "accelerated_weight_tables_bitwise_equal"
+            ]
+        )
+        self.assertTrue(
+            workload["fairness_checks"]["per_capture_reference_cases_valid"]
+        )
+        self.assertEqual(
+            workload["memory_accounting"]["common_input_capture_payload_bytes"],
+            2048 * 8,
+        )
         self.assertEqual(len(workload["execution_order_by_sample"]), 3)
         self.assertEqual(len(workload["implementations"]), 3)
         repeated_workload = repeated_report["workloads"][0]
@@ -372,10 +468,38 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
 
         expected_tasks = set()
         for implementation in workload["implementations"]:
-            self.assertEqual(len(implementation["modes"]), 2)
+            self.assertEqual(len(implementation["modes"]), 3)
+            self.assertGreater(
+                implementation["memory_bytes"]["reusable_plan_payload"], 0
+            )
+            if implementation["requested_implementation"] == "sme2":
+                self.assertEqual(
+                    implementation["memory_bytes"][
+                        "per_capture_workspace_payload"
+                    ],
+                    2 * 64 * 1024 * 4,
+                )
+                self.assertEqual(
+                    implementation["memory_bytes"]["correlation_output_payload"],
+                    2 * 5 * 1024 * 4,
+                )
+            else:
+                self.assertEqual(
+                    implementation["memory_bytes"][
+                        "total_temporary_workspace_payload"
+                    ],
+                    0,
+                )
             if implementation["available"]:
                 self.assertTrue(implementation["executed"])
                 self.assertTrue(implementation["correctness"]["passed"])
+                self.assertEqual(
+                    implementation["correctness"]["per_capture_case_count"], 2
+                )
+                self.assertEqual(
+                    implementation["correctness"]["per_capture_cases_passed"],
+                    2,
+                )
                 self.assertEqual(
                     implementation["correctness"]["actual_implementation"],
                     implementation["requested_implementation"],
@@ -406,18 +530,86 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
             self.assertEqual(set(execution_order), expected_tasks)
             self.assertEqual(len(execution_order), len(expected_tasks))
 
-        self.assertEqual(len(csv_rows), 6)
+        self.assertEqual(len(csv_rows), 9)
         self.assertEqual(
             {(row["implementation"], row["mode"]) for row in csv_rows},
             {
                 ("reference", "steady-state"),
+                ("reference", "per-capture"),
                 ("reference", "setup-inclusive"),
                 ("neon", "steady-state"),
+                ("neon", "per-capture"),
                 ("neon", "setup-inclusive"),
                 ("sme2", "steady-state"),
+                ("sme2", "per-capture"),
                 ("sme2", "setup-inclusive"),
             },
         )
+
+    def test_repeatability_helper_preserves_five_process_reports(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            completed = subprocess.run(
+                (
+                    "python3",
+                    "scripts/repeat_acquisition_benchmark.py",
+                    "--runs",
+                    "5",
+                    "--output-dir",
+                    temporary_directory,
+                    "--workload",
+                    "small",
+                    "--warmup-rounds",
+                    "0",
+                    "--samples",
+                    "3",
+                    "--min-sample-ms",
+                    "1",
+                    "--skip-build",
+                ),
+                cwd=ROOT_DIR,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            output_directory = Path(temporary_directory)
+            reports = [
+                json.loads(
+                    (output_directory / f"run-{index:02d}.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                for index in range(1, 6)
+            ]
+            summary = json.loads(
+                (output_directory / "summary.json").read_text(encoding="utf-8")
+            )
+
+        self.assertIn("completed independent process run 5/5", completed.stdout)
+        self.assertEqual(len(reports), 5)
+        self.assertTrue(all(report["ok"] for report in reports))
+        self.assertEqual(summary["run_count"], 5)
+        self.assertEqual(len(summary["runs"]), 5)
+        self.assertEqual(len(summary["groups"]), 9)
+        reference_per_capture = next(
+            group
+            for group in summary["groups"]
+            if group["workload"] == "small"
+            and group["mode"] == "per-capture"
+            and group["implementation"] == "reference"
+        )
+        self.assertEqual(reference_per_capture["valid_run_count"], 5)
+        self.assertEqual(len(reference_per_capture["run_medians"]), 5)
+        self.assertIsNotNone(
+            reference_per_capture["median_of_run_medians_ms"]
+        )
+        sme2_per_capture = next(
+            group
+            for group in summary["groups"]
+            if group["workload"] == "small"
+            and group["mode"] == "per-capture"
+            and group["implementation"] == "sme2"
+        )
+        self.assertEqual(len(sme2_per_capture["sme2_speedup_vs_neon_by_run"]), 5)
 
 
 class AcquisitionSme2Tests(unittest.TestCase):
