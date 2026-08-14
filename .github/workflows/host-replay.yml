@@ -119,10 +119,26 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Android NDK r29
-        run: sdkmanager --install "ndk;29.0.14206865"
+        run: |
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          sdkmanager="${sdk_root}/cmdline-tools/latest/bin/sdkmanager"
+          if [[ ! -x "${sdkmanager}" ]]; then
+            sdkmanager="$(find "${sdk_root}/cmdline-tools" -path '*/bin/sdkmanager' -type f -print -quit)"
+          fi
+          if [[ -z "${sdkmanager}" || ! -x "${sdkmanager}" ]]; then
+            echo "Android sdkmanager was not found under ${sdk_root}" >&2
+            exit 1
+          fi
+          "${sdkmanager}" --install "ndk;29.0.14206865"
+          ndk_root="${sdk_root}/ndk/29.0.14206865"
+          if [[ ! -f "${ndk_root}/build/cmake/android.toolchain.cmake" ]]; then
+            echo "Android NDK installation is incomplete at ${ndk_root}" >&2
+            exit 1
+          fi
+          echo "ANDROID_NDK_HOME=${ndk_root}" >> "${GITHUB_ENV}"
 
       - name: Build and inspect Android SME2 acquisition benchmark
         run: >-
           bash scripts/verify_android_benchmark_build.sh
-          --ndk "${ANDROID_HOME}/ndk/29.0.14206865"
+          --ndk "${ANDROID_NDK_HOME}"
           --sme2 on
