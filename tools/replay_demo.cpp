@@ -353,6 +353,10 @@ int main(int argc, char** argv) {
     std::cout << "  \"implementation_class\": \""
               << satcomfec::tools::escape_json(result.implementation_class)
               << "\",\n";
+    std::cout << "  \"branch_metric_implementation\": \""
+              << satcomfec::tools::escape_json(
+                     result.branch_metric_implementation)
+              << "\",\n";
     std::cout << "  \"implementation_summary\": \""
               << satcomfec::tools::escape_json(result.implementation_summary) << "\",\n";
     std::cout << "  \"samples_per_symbol\": " << result.samples_per_symbol << ",\n";

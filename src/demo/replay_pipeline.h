@@ -45,6 +45,7 @@ struct ReplayResult {
     std::string iq_path;
     std::string decoder_name;
     std::string implementation_class;
+    std::string branch_metric_implementation;
     std::string implementation_summary;
     size_t samples_per_symbol = 0;
     size_t decoded_payload_bytes = 0;

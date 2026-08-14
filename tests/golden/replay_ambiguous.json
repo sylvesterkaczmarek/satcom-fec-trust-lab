@@ -1,7 +1,6 @@
 {
   "ok": true,
   "decoder": "viterbi-neon",
-  "implementation_class": "partial",
   "frame_soft_bits": 244,
   "decoded_text": "SATCOM DEMO OK",
   "crc_ok": true,

@@ -42,6 +42,24 @@ def assert_subset(test_case: unittest.TestCase, actual, expected) -> None:
     test_case.assertEqual(actual, expected)
 
 
+def assert_decoder_reporting(test_case: unittest.TestCase, result: dict) -> None:
+    valid_selections = {
+        "viterbi-reference": {"reference"},
+        "viterbi-neon": {"neon", "fallback"},
+        "viterbi-sme2": {"sme2", "fallback"},
+    }
+    expected_classes = {
+        "reference": "real",
+        "neon": "partial",
+        "sme2": "partial",
+        "fallback": "fallback",
+    }
+    decoder = result["decoder"]
+    selected = result["branch_metric_implementation"]
+    test_case.assertIn(selected, valid_selections[decoder])
+    test_case.assertEqual(result["implementation_class"], expected_classes[selected])
+
+
 class HostReplayTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -62,6 +80,7 @@ class HostReplayTests(unittest.TestCase):
     def test_canned_replay_decodes_expected_payload(self) -> None:
         result = run_json_command("bash", "scripts/run_replay_demo.sh")
         assert_subset(self, result, load_golden("replay_healthy.json"))
+        assert_decoder_reporting(self, result)
 
         self.assertTrue(result["ok"])
         self.assertEqual(result["decoded_text"], self.metadata["message"])
@@ -240,6 +259,7 @@ class HostReplayTests(unittest.TestCase):
             "data/synthetic/canned_replay/demo_conv_bpsk_impaired.iq",
         )
         assert_subset(self, impaired, load_golden("replay_impaired.json"))
+        assert_decoder_reporting(self, impaired)
 
         self.assertTrue(impaired["ok"])
         self.assertEqual(impaired["decoded_text"], self.impaired_metadata["message"])
@@ -279,6 +299,7 @@ class HostReplayTests(unittest.TestCase):
             "data/synthetic/canned_replay/demo_conv_bpsk_ambiguous.iq",
         )
         assert_subset(self, result, load_golden("replay_ambiguous.json"))
+        assert_decoder_reporting(self, result)
 
         self.assertTrue(result["ok"])
         self.assertTrue(result["acquisition"]["acquisition_success"])
@@ -311,6 +332,7 @@ class HostReplayTests(unittest.TestCase):
             "data/synthetic/canned_replay/demo_conv_bpsk_impaired.iq",
         )
         assert_subset(self, result, load_golden("replay_failed.json"))
+        assert_decoder_reporting(self, result)
 
         self.assertFalse(result["ok"])
         self.assertFalse(result["crc_ok"])
@@ -336,6 +358,7 @@ class HostReplayTests(unittest.TestCase):
             "data/synthetic/canned_replay/demo_conv_bpsk_no_signal.iq",
         )
         assert_subset(self, result, load_golden("replay_no_signal.json"))
+        assert_decoder_reporting(self, result)
 
         self.assertFalse(result["ok"])
         self.assertFalse(result["acquisition"]["acquisition_success"])

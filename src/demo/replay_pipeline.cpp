@@ -6,6 +6,7 @@
 #include "../dsp/framing.h"
 #include "../dsp/front_end_dsp.h"
 #include "../dsp/soft_demod.h"
+#include "../fec/branch_metrics_sme2.h"
 #include "../fec/convolutional_codec.h"
 #include "../fec/viterbi_decoder_neon.h"
 #include "../fec/viterbi_decoder_reference.h"
@@ -38,6 +39,19 @@ const ImplementationInfo& decoder_info(ReplayDecoder decoder) {
     }
 
     return viterbi_reference_implementation_info();
+}
+
+const char* selected_branch_metric_implementation(ReplayDecoder decoder) {
+    switch (decoder) {
+        case ReplayDecoder::kViterbiNeon:
+            return branch_metrics_neon_selected_implementation();
+        case ReplayDecoder::kViterbiSme2:
+            return branch_metrics_sme2_selected_implementation();
+        case ReplayDecoder::kViterbiReference:
+            return "reference";
+    }
+
+    return "reference";
 }
 
 bool dispatch_decoder(ReplayDecoder decoder,
@@ -153,6 +167,8 @@ ReplayResult run_demo_replay(const ReplayConfig& config) {
     const ImplementationInfo& info = decoder_info(config.decoder);
     result.decoder_name = info.path_name;
     result.implementation_class = implementation_class_label(info.implementation_class);
+    result.branch_metric_implementation =
+        selected_branch_metric_implementation(config.decoder);
     result.implementation_summary = info.summary;
 
     const PreparedReplayFrame prepared = prepare_demo_frame(config);
