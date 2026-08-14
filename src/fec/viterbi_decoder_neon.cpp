@@ -14,12 +14,14 @@
 namespace satcomfec {
 namespace {
 
+#if SATCOMFEC_FEC_HAS_NEON
 void resize_metric_tables(std::size_t symbol_count, BranchMetricTables& tables) {
     tables.symbol_count = symbol_count;
     for (auto& metric_vector : tables.metric_by_symbol_type) {
         metric_vector.assign(symbol_count, 0);
     }
 }
+#endif
 
 }  // namespace
 
