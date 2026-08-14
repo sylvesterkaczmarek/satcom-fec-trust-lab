@@ -175,6 +175,10 @@ precedence over `SATCOMFEC_BUILD_DIR` and architecture-mode inference. A
 `--skip-build` run fails before timing if the expected
 `benchmark_acquisition` executable is absent or not executable.
 
+The Python regression harness accepts `SATCOMFEC_TEST_BUILD_DIR` when it must
+exercise binaries from an existing CMake build. This test-only locator is
+separate from `SATCOMFEC_BUILD_DIR`, which controls where shell launchers build.
+
 Tracked local reports live under `benchmarks/results/`. Hardware identity,
 commit, dirty-tree state, compiler, flags, raw samples, and correctness status
 in those JSON files are authoritative.

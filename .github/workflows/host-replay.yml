@@ -70,7 +70,7 @@ jobs:
 
       - name: Run all Python regressions
         env:
-          SATCOMFEC_BUILD_DIR: build/ci-portable
+          SATCOMFEC_TEST_BUILD_DIR: build/ci-portable
         run: python3 -m unittest discover -s tests -v
 
   arm64-neon:
@@ -131,7 +131,7 @@ jobs:
 
       - name: Run all regressions with NEON requested
         env:
-          SATCOMFEC_BUILD_DIR: build/ci-neon
+          SATCOMFEC_TEST_BUILD_DIR: build/ci-neon
           SATCOMFEC_ENABLE_NEON: "ON"
         run: python3 -m unittest discover -s tests -v
 

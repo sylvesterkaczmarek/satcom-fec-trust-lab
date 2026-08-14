@@ -11,7 +11,7 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = ROOT_DIR / "data/synthetic/acquisition"
 GOLDEN_PATH = ROOT_DIR / "tests/golden/acquisition_clean.json"
 CONFIGURED_BUILD_DIR = Path(
-    os.environ.get("SATCOMFEC_BUILD_DIR", "build/host_replay")
+    os.environ.get("SATCOMFEC_TEST_BUILD_DIR", "build/host_replay")
 )
 if not CONFIGURED_BUILD_DIR.is_absolute():
     CONFIGURED_BUILD_DIR = ROOT_DIR / CONFIGURED_BUILD_DIR
@@ -24,6 +24,12 @@ BENCHMARK_BINARY = CONFIGURED_BUILD_DIR / "benchmark_acquisition"
 FIXTURE_NAMES = ("clean", "noisy", "frequency_offset", "ambiguous", "weak_faded")
 SCORE_RELATIVE_TOLERANCE = 2.0e-4
 SCORE_ABSOLUTE_TOLERANCE = 1.0e-3
+
+
+def configured_build_environment() -> dict[str, str]:
+    environment = os.environ.copy()
+    environment["SATCOMFEC_BUILD_DIR"] = str(CONFIGURED_BUILD_DIR)
+    return environment
 
 
 def run_acquisition(
@@ -62,6 +68,7 @@ class AcquisitionReferenceTests(unittest.TestCase):
         subprocess.run(
             ("bash", "scripts/build_host_tools.sh", "acquisition_demo"),
             cwd=ROOT_DIR,
+            env=configured_build_environment(),
             check=True,
             capture_output=True,
             text=True,
@@ -245,6 +252,7 @@ class AcquisitionReferenceTests(unittest.TestCase):
         completed = subprocess.run(
             ("bash", "scripts/check_acquisition_neon.sh"),
             cwd=ROOT_DIR,
+            env=configured_build_environment(),
             check=True,
             capture_output=True,
             text=True,
@@ -358,6 +366,7 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
         subprocess.run(
             ("bash", "scripts/build_host_tools.sh", "benchmark_acquisition"),
             cwd=ROOT_DIR,
+            env=configured_build_environment(),
             check=True,
             capture_output=True,
             text=True,
@@ -694,6 +703,7 @@ class AcquisitionSme2Tests(unittest.TestCase):
         subprocess.run(
             ("bash", "scripts/build_host_tools.sh", "acquisition_demo"),
             cwd=ROOT_DIR,
+            env=configured_build_environment(),
             check=True,
             capture_output=True,
             text=True,
@@ -778,6 +788,7 @@ class AcquisitionSme2Tests(unittest.TestCase):
         completed = subprocess.run(
             ("bash", "scripts/check_sme2_acquisition.sh"),
             cwd=ROOT_DIR,
+            env=configured_build_environment(),
             check=True,
             capture_output=True,
             text=True,
