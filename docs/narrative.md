@@ -3,7 +3,9 @@
 The repository is centered on one small replay story:
 
 - load a checked-in IQ file
-- recover the sync word
+- acquire a known IQ preamble across timing and CFO hypotheses
+- compensate the selected CFO and carrier phase
+- confirm aligned framing with the legacy soft sync word
 - decode a convolutionally coded frame
 - confirm the payload with CRC
 - report a trust score alongside the decoded text

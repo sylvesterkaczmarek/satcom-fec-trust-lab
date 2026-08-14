@@ -212,6 +212,7 @@ build_with_compiler() {
     "${ROOT_DIR}/src/acquisition/acquisition_reference.cpp"
     "${ROOT_DIR}/src/acquisition/acquisition_runner.cpp"
     "${ROOT_DIR}/src/acquisition/acquisition_sme2.cpp"
+    "${ROOT_DIR}/src/demo/replay_acquisition.cpp"
     "${ROOT_DIR}/src/demo/replay_pipeline.cpp"
     "${ROOT_DIR}/src/dsp/front_end_dsp.cpp"
     "${ROOT_DIR}/src/dsp/framing.cpp"

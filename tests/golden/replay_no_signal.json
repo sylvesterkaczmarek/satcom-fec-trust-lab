@@ -1,0 +1,36 @@
+{
+  "ok": false,
+  "decoder": "viterbi-neon",
+  "frame_soft_bits": 0,
+  "decoded_payload_bytes": 0,
+  "decoded_text": "",
+  "crc_ok": false,
+  "acquisition": {
+    "selected_implementation": "reference",
+    "search_completed": true,
+    "acquisition_success": false,
+    "ground_truth": {
+      "scenario": "no_signal",
+      "signal_present": false,
+      "timing_offset": null,
+      "cfo_hz": null,
+      "timing_error_samples": null,
+      "cfo_hypothesis_error_hz": null
+    }
+  },
+  "demod": {
+    "symbol_count": 0
+  },
+  "trust_assessment": {
+    "band": "low-confidence",
+    "ambiguous_acquisition": true,
+    "acquisition_rejected": true,
+    "crc_not_evaluated": true,
+    "crc_failed": false
+  },
+  "trust_breakdown": {
+    "capped_by_acquisition_rejection": true,
+    "capped_by_crc_failure": false
+  },
+  "error": "Acquisition rejected: peak strength or separation below threshold"
+}

@@ -10,6 +10,7 @@
 #include "../fec/convolutional_codec.h"
 #include "../trust/trust_features.h"
 #include "../trust/trust_score.h"
+#include "replay_acquisition.h"
 
 namespace satcomfec {
 
@@ -21,14 +22,19 @@ enum class ReplayDecoder {
 
 struct ReplayConfig {
     std::string iq_path;
+    std::string preamble_iq_path =
+        "data/synthetic/canned_replay/preamble_qpsk_256.iq";
     ReplayDecoder decoder = ReplayDecoder::kViterbiNeon;
     size_t samples_per_symbol = 8;
+    ReplayAcquisitionConfig acquisition;
+    ReplayAcquisitionGroundTruth ground_truth;
 };
 
 struct PreparedReplayFrame {
     bool ok = false;
     SoftBitBuffer frame_soft_bits;
     FrontEndStats front_end_stats;
+    ReplayAcquisitionDiagnostics acquisition;
     DemodStats demod_stats;
     FrameDescriptor frame;
     std::string error_message;
@@ -47,6 +53,7 @@ struct ReplayResult {
     std::string decoded_text;
     bool crc_ok = false;
     FrontEndStats front_end_stats;
+    ReplayAcquisitionDiagnostics acquisition;
     DemodStats demod_stats;
     FrameDescriptor frame;
     float trust_score = 0.0f;

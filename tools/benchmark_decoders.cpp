@@ -196,10 +196,12 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
-    const satcomfec::ReplayConfig config {
-        iq_path,
-        satcomfec::ReplayDecoder::kViterbiNeon,
-        8,
+    satcomfec::ReplayConfig config;
+    config.iq_path = iq_path;
+    config.decoder = satcomfec::ReplayDecoder::kViterbiNeon;
+    config.samples_per_symbol = 8;
+    config.acquisition.cfo_hypotheses_hz = {
+        -500.0, -250.0, 0.0, 250.0, 500.0,
     };
     const satcomfec::PreparedReplayFrame prepared =
         satcomfec::prepare_demo_frame(config);
@@ -279,6 +281,12 @@ int main(int argc, char** argv) {
     std::cout << "  },\n";
     std::cout << "  \"prepared_frame\": {\n";
     std::cout << "    \"sample_count\": " << prepared.front_end_stats.sample_count << ",\n";
+    std::cout << "    \"acquisition_implementation\": \""
+              << prepared.acquisition.selected_implementation << "\",\n";
+    std::cout << "    \"acquisition_timing_offset\": "
+              << prepared.acquisition.detected_timing_offset << ",\n";
+    std::cout << "    \"acquisition_cfo_hz\": "
+              << prepared.acquisition.detected_cfo_hz << ",\n";
     std::cout << "    \"demodulated_symbols\": " << prepared.demod_stats.symbol_count << ",\n";
     std::cout << "    \"frame_start_index\": " << prepared.frame.start_index << ",\n";
     std::cout << "    \"frame_length\": " << prepared.frame.length << ",\n";

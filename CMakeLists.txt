@@ -229,6 +229,7 @@ add_library(
     src/acquisition/acquisition_reference.cpp
     src/acquisition/acquisition_runner.cpp
     src/acquisition/acquisition_sme2.cpp
+    src/demo/replay_acquisition.cpp
     src/demo/replay_pipeline.cpp
     src/dsp/front_end_dsp.cpp
     src/dsp/framing.cpp
@@ -423,6 +424,19 @@ add_executable(check_sme2_acquisition tools/check_sme2_acquisition.cpp)
 target_link_libraries(check_sme2_acquisition PRIVATE satcom_replay_core)
 
 if(BUILD_TESTING)
+    add_test(
+        NAME replay_acquisition_end_to_end
+        COMMAND replay_demo
+            --iq data/synthetic/canned_replay/demo_conv_bpsk.iq
+            --metadata data/synthetic/canned_replay/demo_conv_bpsk.json
+            --preamble data/synthetic/canned_replay/preamble_qpsk_256.iq
+            --acquisition reference
+            --decoder viterbi-reference
+    )
+    set_tests_properties(
+        replay_acquisition_end_to_end
+        PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    )
     add_test(
         NAME acquisition_reference_clean
         COMMAND acquisition_demo

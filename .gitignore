@@ -51,6 +51,6 @@ __pycache__/
 # Notebooks checkpoints
 .ipynb_checkpoints/
 
-# Data that should not be committed
+# Local or source-derived scratch data
 data/raw/
 data/tmp/

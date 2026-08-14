@@ -1,47 +1,58 @@
-# Trust Monitors
+# Trust monitors
 
-The replay demo computes a small set of explicit trust features from the
-supported host-side flow:
+The replay demo reports inspectable diagnostics from acquisition, demodulation,
+secondary framing, and CRC. They are deterministic engineering heuristics for
+the checked-in fixtures, not calibrated probabilities or operational anomaly
+detection.
 
-- mean absolute LLR over the framed coded bits
-- normalized mean absolute LLR
-- weak-LLR fraction, defined as the fraction of framed soft bits with
-  `|LLR| < 48`
-- normalized sync score from the framing stage
-- normalized sync margin when a second-best sync candidate exists
-- clipped-symbol fraction from the demodulator
-- CRC pass or fail
+Acquisition features:
 
-`compute_trust_score` combines those features into a scalar value in `[0, 1]`
-with fixed weights:
+- normalized acquisition peak: correlation magnitude squared divided by
+  preamble energy times candidate-window energy
+- acquisition peak separation: `(best_score - second_score) / best_score`
+- timing ambiguity: `1 - peak_separation`
+- residual acquisition uncertainty: `1 - confidence`, where confidence is
+  `sqrt(normalized_peak) * peak_separation`
+- acquisition accepted: both normalized peak and peak separation passed their
+  explicit replay thresholds
 
-- `0.20` LLR strength
-- `0.20` LLR consistency
-- `0.15` sync quality
-- `0.15` sync-margin quality
+The confidence value is deliberately reported with
+`confidence_calibrated=false`. It is useful for ordering these deterministic
+cases, but it is not a probability of correct acquisition.
+
+Downstream features:
+
+- mean absolute LLR and normalized mean absolute LLR
+- fraction of framed soft bits with `|LLR| < 48`
+- normalized 16-bit secondary sync score and margin
+- clipped-symbol fraction
+- whether CRC was evaluated and whether it passed
+
+The score combines bounded component values with fixed weights:
+
+- `0.15` LLR strength
+- `0.15` LLR consistency
+- `0.15` acquisition strength
+- `0.15` acquisition separation
+- `0.10` acquisition certainty
+- `0.05` secondary sync quality
+- `0.05` secondary sync-margin quality
 - `0.05` demod quality
-- `0.25` CRC quality
+- `0.15` CRC quality
 
-CRC failure caps the score at `0.35`, so a replay with failed integrity checks
-cannot appear highly trusted.
+Acquisition rejection caps the score at `0.15`. An evaluated CRC failure caps
+it at `0.35`. A noise-only capture therefore reports acquisition rejection and
+`crc_not_evaluated`, while the corrupted-frame fixture reports a real
+`crc_failed` condition.
 
-The replay output also reports a simple trust-assessment band:
+Checked fixture behavior:
 
-- `high-confidence`
-- `guarded`
-- `low-confidence`
+- `healthy`: exact timing/CFO, clear peak, CRC pass, high confidence
+- `impaired`: exact timing/CFO and CRC pass with weaker acquisition and soft-bit
+  evidence
+- `ambiguous`: exact timing/CFO and CRC pass, but a close distractor peak
+- `failed`: exact acquisition followed by coded-data corruption and CRC failure
+- `no_signal`: low normalized peak, rejected before demodulation
 
-The checked-in synthetic fixtures exercise three trust states:
-
-- `healthy`: clean decode, CRC pass, `high-confidence`
-- `impaired`: same payload and CRC pass, but lower soft-bit strength and a
-  `guarded` assessment
-- `failed`: intact sync plus corrupted coded data, CRC rejection, and
-  `low-confidence`
-
-That progression makes the trust output useful both before and after the decode
-path fails outright.
-
-This is still a compact demo heuristic. It is meant to be inspectable and
-reproducible for the canned replay inputs, not an operational anomaly detector
-or mission-grade link-health model.
+The `high-confidence`, `guarded`, and `low-confidence` bands summarize those
+explicit checks. They are not mission assurance levels.

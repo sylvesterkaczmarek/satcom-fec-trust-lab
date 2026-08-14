@@ -9,6 +9,7 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
 Usage: scripts/check_replay_demo.sh
 
 Builds and runs the canned replay demo, then checks:
+  - IQ-domain acquisition recovers fixture timing and CFO
   - ok == true
   - decoded_text == "SATCOM DEMO OK"
   - crc_ok == true
@@ -29,12 +30,19 @@ echo "${OUTPUT}"
 echo "${OUTPUT}" | jq -e '.ok == true' >/dev/null
 echo "${OUTPUT}" | jq -e '.decoded_text == "SATCOM DEMO OK"' >/dev/null
 echo "${OUTPUT}" | jq -e '.crc_ok == true' >/dev/null
+echo "${OUTPUT}" | jq -e '.acquisition.selected_implementation == "reference"' >/dev/null
+echo "${OUTPUT}" | jq -e '.acquisition.acquisition_success == true' >/dev/null
+echo "${OUTPUT}" | jq -e '.acquisition.ground_truth.timing_error_samples == 0' >/dev/null
+echo "${OUTPUT}" | jq -e '.acquisition.ground_truth.cfo_hypothesis_error_hz == 0' >/dev/null
 echo "${OUTPUT}" | jq -e '.demod.samples_per_symbol == 8' >/dev/null
+echo "${OUTPUT}" | jq -e '.framing.sync_start_index == 0' >/dev/null
 echo "${OUTPUT}" | jq -e '.framing.frame_length == .frame_soft_bits' >/dev/null
 echo "${OUTPUT}" | jq -e '.trust_breakdown.score == .trust_score' >/dev/null
 echo "${OUTPUT}" | jq -e '.trust_breakdown.capped_by_crc_failure == false' >/dev/null
 
 echo "${OUTPUT}" | jq -e --slurpfile metadata "${METADATA_PATH}" \
   '.decoded_text == $metadata[0].message and
+   .acquisition.detected_timing_offset == $metadata[0].true_timing_offset and
+   .acquisition.detected_cfo_hz == $metadata[0].true_cfo_hz and
    .demod.samples_per_symbol == $metadata[0].samples_per_symbol and
    .frame_soft_bits == $metadata[0].coded_bits_per_frame' >/dev/null

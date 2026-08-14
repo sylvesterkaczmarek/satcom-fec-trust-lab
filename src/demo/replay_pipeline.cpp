@@ -1,6 +1,7 @@
 #include "replay_pipeline.h"
 
 #include <algorithm>
+#include <limits>
 
 #include "../dsp/framing.h"
 #include "../dsp/front_end_dsp.h"
@@ -72,6 +73,12 @@ PreparedReplayFrame prepare_demo_frame(const ReplayConfig& config) {
         return prepared;
     }
 
+    std::vector<ComplexF> preamble;
+    if (!load_iq_from_file(config.preamble_iq_path, preamble)) {
+        prepared.error_message = "Failed to load acquisition preamble";
+        return prepared;
+    }
+
     std::vector<ComplexF> front_end_iq;
     if (!run_front_end(raw_iq,
                        front_end_iq,
@@ -81,8 +88,30 @@ PreparedReplayFrame prepare_demo_frame(const ReplayConfig& config) {
         return prepared;
     }
 
+    const size_t frame_symbol_count =
+        demo_sync_word().size() + demo_coded_bits_per_frame();
+    if (config.samples_per_symbol == 0 ||
+        frame_symbol_count >
+            std::numeric_limits<size_t>::max() / config.samples_per_symbol) {
+        prepared.error_message = "Invalid replay samples-per-symbol setting";
+        return prepared;
+    }
+
+    std::vector<ComplexF> aligned_frame_iq;
+    if (!acquire_and_align_replay_frame(
+            front_end_iq,
+            preamble,
+            frame_symbol_count * config.samples_per_symbol,
+            config.acquisition,
+            config.ground_truth,
+            aligned_frame_iq,
+            prepared.acquisition,
+            prepared.error_message)) {
+        return prepared;
+    }
+
     SoftBitBuffer soft_bits;
-    if (!soft_demodulate_bpsk(front_end_iq, soft_bits,
+    if (!soft_demodulate_bpsk(aligned_frame_iq, soft_bits,
                               DemodConfig {config.samples_per_symbol},
                               &prepared.demod_stats)) {
         prepared.error_message = "Soft demodulation failed";
@@ -102,6 +131,11 @@ PreparedReplayFrame prepare_demo_frame(const ReplayConfig& config) {
     }
 
     prepared.frame = frames.front();
+    if (prepared.frame.sync_start_index != 0) {
+        prepared.error_message =
+            "Frame sync disagreed with IQ-domain acquisition alignment";
+        return prepared;
+    }
     const auto frame_begin =
         soft_bits.begin() + static_cast<long>(prepared.frame.start_index);
     const auto frame_end =
@@ -122,14 +156,28 @@ ReplayResult run_demo_replay(const ReplayConfig& config) {
     result.implementation_summary = info.summary;
 
     const PreparedReplayFrame prepared = prepare_demo_frame(config);
-    if (!prepared.ok) {
-        result.error_message = prepared.error_message;
-        return result;
-    }
     result.front_end_stats = prepared.front_end_stats;
+    result.acquisition = prepared.acquisition;
     result.demod_stats = prepared.demod_stats;
     result.frame = prepared.frame;
     result.frame_soft_bits = prepared.frame_soft_bits.size();
+    if (!prepared.ok) {
+        result.error_message = prepared.error_message;
+        result.trust_features = compute_trust_features(
+            prepared.frame_soft_bits,
+            prepared.frame,
+            static_cast<int>(demo_sync_word().size()),
+            prepared.demod_stats,
+            prepared.acquisition,
+            false,
+            false);
+        result.trust_breakdown =
+            compute_trust_score_breakdown(result.trust_features);
+        result.trust_assessment =
+            assess_trust(result.trust_features, result.trust_breakdown);
+        result.trust_score = result.trust_breakdown.score;
+        return result;
+    }
 
     std::vector<uint8_t> decoded_bits;
     if (!dispatch_decoder(config.decoder,
@@ -158,6 +206,8 @@ ReplayResult run_demo_replay(const ReplayConfig& config) {
         prepared.frame,
         static_cast<int>(demo_sync_word().size()),
         prepared.demod_stats,
+        prepared.acquisition,
+        true,
         result.crc_ok);
     result.trust_breakdown =
         compute_trust_score_breakdown(result.trust_features);

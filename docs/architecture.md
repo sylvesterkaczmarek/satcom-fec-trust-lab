@@ -1,34 +1,35 @@
 # Architecture
 
-The repository has two independent host-side IQ workflows. The acquisition
-workflow loads a generated complex preamble and receive window, prepares a grid
-of timing/CFO hypotheses, and runs the selected reference, Arm NEON, or Arm
-SME2 matched-filter search described in `docs/acquisition_design.md`. Its
-entrypoint is `tools/acquisition_demo.cpp`. The SME2 path prepares a packed
-timing-hypothesis workspace, then accumulates complex correlations with SME2
-VGx4 operations in ZA. Unsupported NEON and SME2 builds report unavailable;
-there is no labeled scalar fallback.
+The repository has one end-to-end replay workflow and one acquisition benchmark
+harness. Both use the same reference, Arm NEON, and Arm SME2 matched-filter
+implementations described in `docs/acquisition_design.md`. The standalone
+`acquisition_demo` remains a focused correctness tool; acquisition is no longer
+isolated from replay.
 
 The replay workflow is:
 
 1. `load_iq_from_file` reads an interleaved float32 IQ recording.
 2. `run_front_end` removes DC bias and normalizes RMS level.
-3. `soft_demodulate_bpsk` performs integrate-and-dump demodulation at a fixed
-   samples-per-symbol setting and scales soft decisions from the observed symbol
-   envelope.
-4. `find_frames` locates the 16-bit sync word by correlation, tracks any
-   second-best candidate, and slices the coded frame.
-5. `viterbi_decode_reference_path`, `viterbi_decode_neon`, or
+3. `acquire_and_align_replay_frame` searches valid frame-start timing offsets
+   and five CFO hypotheses against the known 256-sample QPSK preamble.
+4. The selected complex correlation supplies timing, CFO, and carrier phase.
+   The pipeline rejects weak or insufficiently separated peaks, then corrects
+   CFO and phase for the aligned frame.
+5. `soft_demodulate_bpsk` demodulates only that aligned frame.
+6. `find_frames` checks that the legacy 16-bit soft sync is at offset zero and
+   slices the coded bits. It is a secondary consistency check, not the primary
+   acquisition mechanism.
+7. `viterbi_decode_reference_path`, `viterbi_decode_neon`, or
    `viterbi_decode_sme2` decodes the convolutionally coded frame. The Neon path
    uses checked-in Neon branch-metric preparation when `__ARM_NEON` or
    `__ARM_NEON__` is available. The SME2 path uses SME2/SME streaming-mode
    branch-metric preparation only when built for a suitable Armv9 SME2 target
    with `__ARM_FEATURE_SME2`. The Viterbi trellis recurrence and traceback
    remain scalar in all paths.
-6. The decoded bytes are checked with CRC-8.
-7. `compute_trust_features` and `compute_trust_score` summarize replay
-   confidence from sync quality, sync ambiguity, soft-bit magnitude, weak-bit
-   rate, demod clipping, and CRC success.
+8. The decoded bytes are checked with CRC-8.
+9. `compute_trust_features` and `compute_trust_score` summarize normalized
+   acquisition strength, peak separation, residual uncertainty, soft-bit
+   evidence, secondary sync, demod clipping, and CRC state.
 
 The host-side entrypoint for this flow is `tools/replay_demo.cpp`, built and
 run by `scripts/run_replay_demo.sh`. Decoder alignment and local timing are
@@ -43,6 +44,7 @@ timing. Per-capture timing reuses the plan and allocations while charging SME2
 for sample-major packing of each supplied IQ window. The decoder benchmark is
 not used as evidence for acquisition behavior.
 
-The replay result is intentionally structured. It reports front-end statistics,
-demodulation and framing details, decoder identity, trust features, and the
-trust-score component weights that produced the final scalar score.
+The replay result reports acquisition implementation and candidate evidence,
+synthetic ground-truth errors when available, front-end/demodulation/framing
+details, decoder identity, and the trust-score components. Ground truth is
+reported after the search and is never used to select a candidate.

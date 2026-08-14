@@ -11,21 +11,43 @@
     "trust_band": "guarded",
     "decoded_text": "SATCOM DEMO OK"
   },
+  "ambiguous": {
+    "ok": true,
+    "crc_ok": true,
+    "trust_band": "guarded",
+    "ambiguous_acquisition": true,
+    "decoded_text": "SATCOM DEMO OK"
+  },
   "failed": {
     "ok": false,
     "crc_ok": false,
     "trust_band": "low-confidence",
     "error": "CRC mismatch"
   },
+  "no_signal": {
+    "ok": false,
+    "crc_ok": false,
+    "trust_band": "low-confidence",
+    "acquisition_success": false,
+    "acquisition_rejected": true,
+    "crc_not_evaluated": true,
+    "demod_symbol_count": 0,
+    "error": "Acquisition rejected: peak strength or separation below threshold"
+  },
   "comparison": {
     "healthy_impaired_same_payload": true,
     "trust_score_order_ok": true,
+    "acquisition_confidence_order_ok": true,
     "impaired_has_more_weak_bits": true,
     "impaired_has_lower_llr_strength": true,
     "failed_crc_rejected": true,
+    "ambiguous_peak_detected": true,
+    "no_signal_rejected_before_demod": true,
     "trust_band_progression": [
       "high-confidence",
       "guarded",
+      "guarded",
+      "low-confidence",
       "low-confidence"
     ]
   }

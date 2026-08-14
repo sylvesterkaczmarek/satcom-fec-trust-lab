@@ -1,5 +1,6 @@
 import json
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -7,7 +8,9 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 METADATA_PATH = ROOT_DIR / "data/synthetic/canned_replay/demo_conv_bpsk.json"
 IMPAIRED_METADATA_PATH = ROOT_DIR / "data/synthetic/canned_replay/demo_conv_bpsk_impaired.json"
+AMBIGUOUS_METADATA_PATH = ROOT_DIR / "data/synthetic/canned_replay/demo_conv_bpsk_ambiguous.json"
 FAILED_METADATA_PATH = ROOT_DIR / "data/synthetic/canned_replay/demo_conv_bpsk_failed.json"
+NO_SIGNAL_METADATA_PATH = ROOT_DIR / "data/synthetic/canned_replay/demo_conv_bpsk_no_signal.json"
 GOLDEN_DIR = ROOT_DIR / "tests/golden"
 
 
@@ -46,8 +49,14 @@ class HostReplayTests(unittest.TestCase):
         cls.impaired_metadata = json.loads(
             IMPAIRED_METADATA_PATH.read_text(encoding="utf-8")
         )
+        cls.ambiguous_metadata = json.loads(
+            AMBIGUOUS_METADATA_PATH.read_text(encoding="utf-8")
+        )
         cls.failed_metadata = json.loads(
             FAILED_METADATA_PATH.read_text(encoding="utf-8")
+        )
+        cls.no_signal_metadata = json.loads(
+            NO_SIGNAL_METADATA_PATH.read_text(encoding="utf-8")
         )
 
     def test_canned_replay_decodes_expected_payload(self) -> None:
@@ -66,6 +75,25 @@ class HostReplayTests(unittest.TestCase):
         )
         self.assertGreater(result["framing"]["sync_score"], 0)
         self.assertFalse(result["framing"]["has_second_best_correlation"])
+        self.assertEqual(
+            result["acquisition"]["selected_implementation"], "reference"
+        )
+        self.assertTrue(result["acquisition"]["acquisition_success"])
+        self.assertEqual(
+            result["acquisition"]["detected_timing_offset"],
+            self.metadata["true_timing_offset"],
+        )
+        self.assertEqual(
+            result["acquisition"]["detected_cfo_hz"],
+            self.metadata["true_cfo_hz"],
+        )
+        self.assertEqual(
+            result["acquisition"]["ground_truth"]["timing_error_samples"], 0
+        )
+        self.assertEqual(
+            result["acquisition"]["ground_truth"]["cfo_hypothesis_error_hz"], 0
+        )
+        self.assertGreater(result["acquisition"]["normalized_peak"], 0.9)
         self.assertGreater(result["trust_features"]["mean_abs_llr"], 0.0)
         self.assertGreaterEqual(result["trust_score"], 0.0)
         self.assertLessEqual(result["trust_score"], 1.0)
@@ -151,6 +179,34 @@ class HostReplayTests(unittest.TestCase):
             paths["viterbi-reference"]["decoded_bit_checksum"],
         )
 
+    def test_end_to_end_acquisition_paths_report_actual_implementation(self) -> None:
+        for implementation in ("neon", "sme2"):
+            result = run_json_command(
+                "bash",
+                "scripts/run_replay_demo.sh",
+                "--allow-failure",
+                "--acquisition",
+                implementation,
+                "data/synthetic/canned_replay/demo_conv_bpsk.iq",
+                "viterbi-reference",
+            )
+            selected = result["acquisition"]["selected_implementation"]
+            self.assertIn(selected, {implementation, "unavailable"})
+            if selected == implementation:
+                self.assertTrue(result["ok"])
+                self.assertEqual(result["decoded_text"], self.metadata["message"])
+                self.assertEqual(
+                    result["acquisition"]["ground_truth"]["timing_error_samples"],
+                    0,
+                )
+                self.assertEqual(
+                    result["acquisition"]["ground_truth"]["cfo_hypothesis_error_hz"],
+                    0,
+                )
+            else:
+                self.assertFalse(result["ok"])
+                self.assertIn("kernel is not compiled", result["error"])
+
     def test_branch_metric_paths_match_reference_on_deterministic_inputs(self) -> None:
         result = run_json_command("bash", "scripts/check_branch_metrics.sh")
 
@@ -183,6 +239,19 @@ class HostReplayTests(unittest.TestCase):
         )
         self.assertEqual(impaired["trust_assessment"]["band"], "guarded")
         self.assertTrue(impaired["trust_assessment"]["weak_soft_bits"])
+        self.assertTrue(impaired["acquisition"]["acquisition_success"])
+        self.assertEqual(
+            impaired["acquisition"]["detected_timing_offset"],
+            self.impaired_metadata["true_timing_offset"],
+        )
+        self.assertEqual(
+            impaired["acquisition"]["detected_cfo_hz"],
+            self.impaired_metadata["true_cfo_hz"],
+        )
+        self.assertLess(
+            impaired["acquisition"]["confidence"],
+            healthy["acquisition"]["confidence"],
+        )
         self.assertLess(impaired["trust_score"], healthy["trust_score"])
         self.assertLess(
             impaired["trust_features"]["mean_abs_llr"],
@@ -192,6 +261,33 @@ class HostReplayTests(unittest.TestCase):
             impaired["trust_features"]["weak_llr_fraction"],
             healthy["trust_features"]["weak_llr_fraction"],
         )
+
+    def test_ambiguous_replay_decodes_with_competing_acquisition_peak(self) -> None:
+        healthy = run_json_command("bash", "scripts/run_replay_demo.sh")
+        result = run_json_command(
+            "bash",
+            "scripts/run_replay_demo.sh",
+            "data/synthetic/canned_replay/demo_conv_bpsk_ambiguous.iq",
+        )
+        assert_subset(self, result, load_golden("replay_ambiguous.json"))
+
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["acquisition"]["acquisition_success"])
+        self.assertEqual(result["decoded_text"], self.ambiguous_metadata["message"])
+        self.assertEqual(
+            result["acquisition"]["detected_timing_offset"],
+            self.ambiguous_metadata["true_timing_offset"],
+        )
+        self.assertEqual(
+            result["acquisition"]["detected_cfo_hz"],
+            self.ambiguous_metadata["true_cfo_hz"],
+        )
+        self.assertTrue(result["trust_assessment"]["ambiguous_acquisition"])
+        self.assertEqual(result["trust_assessment"]["band"], "guarded")
+        self.assertLess(
+            result["acquisition"]["normalized_peak_separation"], 0.2
+        )
+        self.assertLess(result["trust_score"], healthy["trust_score"])
 
     def test_failed_replay_is_crc_rejected_and_low_confidence(self) -> None:
         result = run_json_command(
@@ -212,8 +308,41 @@ class HostReplayTests(unittest.TestCase):
         self.assertEqual(result["samples_per_symbol"], self.failed_metadata["samples_per_symbol"])
         self.assertEqual(result["trust_assessment"]["band"], "low-confidence")
         self.assertTrue(result["trust_assessment"]["crc_failed"])
+        self.assertFalse(result["trust_assessment"]["crc_not_evaluated"])
+        self.assertTrue(result["acquisition"]["acquisition_success"])
+        self.assertEqual(
+            result["acquisition"]["ground_truth"]["timing_error_samples"], 0
+        )
+        self.assertEqual(
+            result["acquisition"]["ground_truth"]["cfo_hypothesis_error_hz"], 0
+        )
         self.assertLess(result["trust_score"], impaired["trust_score"])
         self.assertEqual(result["error"], "CRC mismatch")
+
+    def test_noise_only_replay_is_rejected_before_demodulation(self) -> None:
+        result = run_json_command(
+            "bash",
+            "scripts/run_replay_demo.sh",
+            "--allow-failure",
+            "data/synthetic/canned_replay/demo_conv_bpsk_no_signal.iq",
+        )
+        assert_subset(self, result, load_golden("replay_no_signal.json"))
+
+        self.assertFalse(result["ok"])
+        self.assertFalse(result["acquisition"]["acquisition_success"])
+        self.assertFalse(
+            result["acquisition"]["ground_truth"]["signal_present"]
+        )
+        self.assertLess(
+            result["acquisition"]["normalized_peak"],
+            result["acquisition"]["minimum_normalized_peak"],
+        )
+        self.assertEqual(result["demod"]["symbol_count"], 0)
+        self.assertEqual(result["frame_soft_bits"], 0)
+        self.assertTrue(result["trust_assessment"]["acquisition_rejected"])
+        self.assertTrue(result["trust_assessment"]["crc_not_evaluated"])
+        self.assertFalse(result["trust_assessment"]["crc_failed"])
+        self.assertEqual(result["trust_assessment"]["band"], "low-confidence")
 
     def test_trust_comparison_script_has_expected_progression(self) -> None:
         result = run_json_command("bash", "scripts/compare_trust_cases.sh")
@@ -221,9 +350,18 @@ class HostReplayTests(unittest.TestCase):
 
         self.assertEqual(
             result["comparison"]["trust_band_progression"],
-            ["high-confidence", "guarded", "low-confidence"],
+            [
+                "high-confidence",
+                "guarded",
+                "guarded",
+                "low-confidence",
+                "low-confidence",
+            ],
         )
         self.assertTrue(result["comparison"]["trust_score_order_ok"])
+        self.assertTrue(result["comparison"]["acquisition_confidence_order_ok"])
+        self.assertTrue(result["comparison"]["ambiguous_peak_detected"])
+        self.assertTrue(result["comparison"]["no_signal_rejected_before_demod"])
         self.assertGreater(
             result["comparison"]["failed_score_delta"],
             result["comparison"]["impaired_score_delta"],
@@ -233,16 +371,64 @@ class HostReplayTests(unittest.TestCase):
         self.assertEqual(self.metadata["message"], "SATCOM DEMO OK")
         self.assertEqual(self.metadata["message_bytes"], 14)
         self.assertEqual(self.metadata["payload_bytes_with_crc"], 15)
+        self.assertEqual(
+            self.metadata["schema"], "satcom-fec-trust-lab/replay-fixture-v2"
+        )
+        self.assertEqual(self.metadata["sample_count"], 4096)
+        self.assertEqual(self.metadata["preamble_length"], 256)
+        self.assertEqual(self.metadata["true_timing_offset"], 192)
+        self.assertEqual(self.metadata["true_cfo_hz"], 250.0)
         self.assertEqual(self.metadata["samples_per_symbol"], 8)
         self.assertEqual(self.metadata["coded_bits_per_frame"], 244)
         self.assertEqual(len(self.metadata["sync_word_bits"]), 16)
         self.assertEqual(self.impaired_metadata["scenario"], "impaired")
         self.assertEqual(self.impaired_metadata["message"], "SATCOM DEMO OK")
         self.assertEqual(self.impaired_metadata["samples_per_symbol"], 8)
+        self.assertEqual(self.ambiguous_metadata["scenario"], "ambiguous")
+        self.assertIsNotNone(self.ambiguous_metadata["distractor"])
         self.assertEqual(self.failed_metadata["scenario"], "failed")
         self.assertEqual(self.failed_metadata["message"], "SATCOM DEMO OK")
         self.assertEqual(self.failed_metadata["samples_per_symbol"], 8)
         self.assertEqual(self.failed_metadata["corruption_mode"], "invert")
+        self.assertEqual(self.no_signal_metadata["scenario"], "no_signal")
+        self.assertFalse(self.no_signal_metadata["signal_present"])
+        self.assertFalse(self.no_signal_metadata["acquisition_expected"])
+
+    def test_replay_fixture_generation_is_byte_deterministic(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            output_dir = Path(temporary_directory)
+            preamble = output_dir / "preamble_qpsk_256.iq"
+            for profile in ("healthy", "impaired", "ambiguous", "failed", "no_signal"):
+                stem = "demo_conv_bpsk" if profile == "healthy" else f"demo_conv_bpsk_{profile}"
+                generated_iq = output_dir / f"{stem}.iq"
+                generated_metadata = output_dir / f"{stem}.json"
+                subprocess.run(
+                    [
+                        "python3",
+                        "scripts/generate_synthetic_iq.py",
+                        "--profile",
+                        profile,
+                        "--output",
+                        str(generated_iq),
+                        "--metadata",
+                        str(generated_metadata),
+                        "--preamble-output",
+                        str(preamble),
+                    ],
+                    cwd=ROOT_DIR,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+                checked_in_iq = ROOT_DIR / "data/synthetic/canned_replay" / f"{stem}.iq"
+                self.assertEqual(generated_iq.read_bytes(), checked_in_iq.read_bytes())
+                generated = json.loads(generated_metadata.read_text(encoding="utf-8"))
+                checked_in = json.loads(
+                    (ROOT_DIR / "data/synthetic/canned_replay" / f"{stem}.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                self.assertEqual(generated, checked_in)
 
 
 if __name__ == "__main__":

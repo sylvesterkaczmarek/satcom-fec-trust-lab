@@ -1,4 +1,4 @@
-.PHONY: help build replay replay-impaired replay-failed acquisition check check-acquisition check-acquisition-neon verify-acquisition-neon check-acquisition-sme2 verify-acquisition-sme2 compare-trust align check-metrics verify-arm benchmark benchmark-acquisition benchmark-acquisition-repeat benchmark-decoder-legacy test regenerate
+.PHONY: help build replay replay-impaired replay-ambiguous replay-failed replay-no-signal acquisition check check-acquisition check-acquisition-neon verify-acquisition-neon check-acquisition-sme2 verify-acquisition-sme2 compare-trust align check-metrics verify-arm benchmark benchmark-acquisition benchmark-acquisition-repeat benchmark-decoder-legacy test regenerate
 
 help:
 	@printf '%s\n' \
@@ -6,7 +6,9 @@ help:
 	  '  make build           Build the supported host-side tools' \
 	  '  make replay          Run the baseline replay fixture' \
 	  '  make replay-impaired Run the impaired replay fixture' \
+	  '  make replay-ambiguous Run the competing-peak replay fixture' \
 	  '  make replay-failed   Run the CRC-failing replay fixture' \
+	  '  make replay-no-signal Run the acquisition-rejection fixture' \
 	  '  make acquisition     Run the clean scalar acquisition fixture' \
 	  '  make check           Verify the baseline replay output' \
 	  '  make check-acquisition Verify all scalar acquisition fixtures' \
@@ -14,7 +16,7 @@ help:
 	  '  make verify-acquisition-neon Verify NEON execution and instructions' \
 	  '  make check-acquisition-sme2 Check SME2 equivalence or availability' \
 	  '  make verify-acquisition-sme2 Verify SME2 execution and instructions' \
-	  '  make compare-trust   Compare healthy, impaired, and failed trust results' \
+	  '  make compare-trust   Compare all replay trust states' \
 	  '  make align           Validate decoder-path alignment' \
 	  '  make check-metrics   Validate branch-metric path equivalence' \
 	  '  make verify-arm      Verify portable and optional Arm build modes' \
@@ -34,8 +36,14 @@ replay:
 replay-impaired:
 	bash scripts/run_replay_demo.sh data/synthetic/canned_replay/demo_conv_bpsk_impaired.iq
 
+replay-ambiguous:
+	bash scripts/run_replay_demo.sh data/synthetic/canned_replay/demo_conv_bpsk_ambiguous.iq
+
 replay-failed:
 	bash scripts/run_replay_demo.sh --allow-failure data/synthetic/canned_replay/demo_conv_bpsk_failed.iq
+
+replay-no-signal:
+	bash scripts/run_replay_demo.sh --allow-failure data/synthetic/canned_replay/demo_conv_bpsk_no_signal.iq
 
 acquisition:
 	bash scripts/run_acquisition_demo.sh

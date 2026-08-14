@@ -7,8 +7,8 @@ Publicly supported workflow:
 
 1. Build the host-side tools.
 2. Run and verify the scalar acquisition fixtures.
-3. Run the baseline replay fixture.
-4. Run the impaired and failed fixtures to inspect trust degradation and CRC rejection.
+3. Run the baseline replay fixture, including IQ acquisition and alignment.
+4. Run impaired, ambiguous, CRC-failed, and no-signal fixtures.
 5. Verify the replay output, trust comparison, and decoder-path alignment.
 
 Exact commands:
@@ -43,7 +43,9 @@ bash scripts/verify_acquisition_neon.sh
 bash scripts/check_sme2_acquisition.sh
 bash scripts/run_replay_demo.sh
 bash scripts/run_replay_demo.sh data/synthetic/canned_replay/demo_conv_bpsk_impaired.iq
+bash scripts/run_replay_demo.sh data/synthetic/canned_replay/demo_conv_bpsk_ambiguous.iq
 bash scripts/run_replay_demo.sh --allow-failure data/synthetic/canned_replay/demo_conv_bpsk_failed.iq
+bash scripts/run_replay_demo.sh --allow-failure data/synthetic/canned_replay/demo_conv_bpsk_no_signal.iq
 bash scripts/check_replay_demo.sh
 bash scripts/compare_trust_cases.sh
 bash scripts/validate_decoder_alignment.sh
@@ -63,6 +65,11 @@ Checked-in fixtures:
 - `data/synthetic/canned_replay/demo_conv_bpsk_impaired.json`
 - `data/synthetic/canned_replay/demo_conv_bpsk_failed.iq`
 - `data/synthetic/canned_replay/demo_conv_bpsk_failed.json`
+- `data/synthetic/canned_replay/demo_conv_bpsk_ambiguous.iq`
+- `data/synthetic/canned_replay/demo_conv_bpsk_ambiguous.json`
+- `data/synthetic/canned_replay/demo_conv_bpsk_no_signal.iq`
+- `data/synthetic/canned_replay/demo_conv_bpsk_no_signal.json`
+- `data/synthetic/canned_replay/preamble_qpsk_256.iq`
 - `data/synthetic/acquisition/preamble_qpsk_256.iq`
 - `data/synthetic/acquisition/{clean,noisy,frequency_offset,ambiguous,weak_faded}.iq`
 - matching JSON ground-truth sidecars for each acquisition capture
@@ -74,7 +81,7 @@ Generated from source in this repo:
 
 What CI verifies:
 
-- baseline replay decode correctness
+- exact replay timing/CFO recovery before demodulation and payload decode
 - scalar acquisition timing/CFO recovery on five deterministic fixtures
 - reference/NEON acquisition equivalence on native Arm64 CI
 - explicit NEON-unavailable reporting on portable x86 CI
@@ -89,7 +96,7 @@ What CI verifies:
 - five-process repeatability helper behavior on the small fixed workload,
   including preservation of each raw report
 - deterministic byte-for-byte acquisition fixture regeneration
-- healthy versus impaired versus failed trust comparison
+- healthy, impaired, ambiguous, CRC-failed, and no-signal trust behavior
 - reference versus partial-NEON versus SME2-or-fallback path alignment on the
   same prepared replay frame
 - reference, NEON-or-fallback, and SME2-or-fallback branch-metric equivalence on

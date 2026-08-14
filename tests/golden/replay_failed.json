@@ -7,14 +7,29 @@
   "expected_payload_bytes": 14,
   "decoded_payload_bytes": 14,
   "crc_ok": false,
+  "acquisition": {
+    "selected_implementation": "reference",
+    "acquisition_success": true,
+    "detected_timing_offset": 256,
+    "detected_cfo_hz": 500.0,
+    "ground_truth": {
+      "scenario": "failed",
+      "timing_error_samples": 0,
+      "cfo_hypothesis_error_hz": 0.0
+    }
+  },
   "trust_assessment": {
     "band": "low-confidence",
     "weak_soft_bits": true,
+    "ambiguous_acquisition": false,
+    "acquisition_rejected": false,
     "ambiguous_sync": false,
     "demod_clipping": false,
+    "crc_not_evaluated": false,
     "crc_failed": true
   },
   "trust_breakdown": {
+    "capped_by_acquisition_rejection": false,
     "capped_by_crc_failure": true
   },
   "error": "CRC mismatch"

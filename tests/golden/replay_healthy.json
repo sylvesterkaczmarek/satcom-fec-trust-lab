@@ -8,11 +8,39 @@
   "decoded_payload_bytes": 14,
   "decoded_text": "SATCOM DEMO OK",
   "crc_ok": true,
+  "acquisition": {
+    "requested_implementation": "reference",
+    "selected_implementation": "reference",
+    "search_completed": true,
+    "acquisition_success": true,
+    "preamble_length": 256,
+    "timing_hypothesis_count": 1761,
+    "cfo_hypothesis_count": 5,
+    "detected_timing_offset": 192,
+    "detected_cfo_hz": 250.0,
+    "confidence_calibrated": false,
+    "ground_truth": {
+      "available": true,
+      "scenario": "healthy",
+      "signal_present": true,
+      "timing_offset": 192,
+      "cfo_hz": 250.0,
+      "timing_error_samples": 0,
+      "cfo_hypothesis_error_hz": 0.0
+    }
+  },
   "trust_assessment": {
     "band": "high-confidence",
     "weak_soft_bits": false,
+    "ambiguous_acquisition": false,
+    "acquisition_rejected": false,
     "ambiguous_sync": false,
     "demod_clipping": false,
+    "crc_not_evaluated": false,
     "crc_failed": false
+  },
+  "trust_breakdown": {
+    "capped_by_acquisition_rejection": false,
+    "capped_by_crc_failure": false
   }
 }

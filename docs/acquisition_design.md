@@ -46,6 +46,20 @@ The checked-in classes are:
 These are synthetic engineering fixtures. They are not recordings from a
 radio, spacecraft, or mission waveform.
 
+## Replay integration
+
+The canned replay uses the same acquisition API with a separate deterministic
+256-sample QPSK preamble at 48 ksample/s. A 4,096-sample replay capture searches
+1,761 integer timing offsets that leave room for the complete BPSK frame and
+five CFO hypotheses from `-500 Hz` through `500 Hz`.
+
+After selecting the best candidate, the replay adapter uses the complex
+correlation phase and selected CFO to correct the aligned frame. It accepts a
+candidate only when normalized peak energy is at least `0.10` and raw-score
+peak separation is at least `0.05`. These fixed thresholds are deterministic
+demo checks, not receiver-operating-characteristic calibration. The subsequent
+16-bit soft sync must appear at aligned symbol offset zero.
+
 ## Correctness criteria
 
 The injected timing and CFO values lie exactly on the configured search grid.

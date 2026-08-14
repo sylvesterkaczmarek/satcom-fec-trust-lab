@@ -3,10 +3,11 @@
 ![Satcom FEC Trust Lab](assets/social/github-social-card-satcom-fec-trust-lab.png)
 
 This repository is a host-side satcom signal-processing project built around
-deterministic synthetic IQ fixtures. It contains two public workflows: a
-timing/CFO acquisition search with scalar reference, Arm NEON, and explicitly
-enabled Arm SME2 implementations, and a compact BPSK replay path from IQ
-through framing, Viterbi decode, CRC, and structured trust diagnostics.
+deterministic synthetic IQ fixtures. The supported replay path performs complex
+IQ timing/CFO acquisition before aligned BPSK demodulation, Viterbi decode,
+CRC, and structured trust diagnostics. The same scalar reference, Arm NEON,
+and explicitly enabled Arm SME2 acquisition kernels are also available through
+a standalone correctness tool and benchmark harness.
 
 The public repo provides scoped host-side acquisition and replay demos, not a
 supported Android app or full SME2-optimized Viterbi decoder.
@@ -22,8 +23,8 @@ supported Android app or full SME2-optimized Viterbi decoder.
 
 ## Supported scope
 
-- One host-side replay path from checked-in IQ to decoded payload plus trust
-  output
+- One host-side replay path from checked-in IQ through preamble acquisition,
+  CFO/phase compensation, aligned demodulation, decode, CRC, and trust output
 - Scalar reference, Arm NEON, and opt-in Arm SME2 acquisition paths over
   4,096-sample IQ windows, 3,841 timing hypotheses, 9 CFO hypotheses, and a
   256-sample complex preamble; unavailable accelerated paths do not use a
@@ -33,8 +34,8 @@ supported Android app or full SME2-optimized Viterbi decoder.
   timing and workspace accounting
 - One legacy decoder-path timing comparison across `viterbi-reference`,
   `viterbi-neon`, and `viterbi-sme2`
-- One healthy versus impaired versus failed trust comparison using checked-in
-  synthetic fixtures
+- One healthy, impaired, ambiguous, CRC-failed, and no-signal trust comparison
+  using checked-in synthetic fixtures
 
 ## What is included
 
@@ -46,6 +47,12 @@ supported Android app or full SME2-optimized Viterbi decoder.
   `data/synthetic/canned_replay/demo_conv_bpsk_impaired.iq`
 - A checked-in CRC-failing synthetic IQ recording at
   `data/synthetic/canned_replay/demo_conv_bpsk_failed.iq`
+- A competing-peak fixture at
+  `data/synthetic/canned_replay/demo_conv_bpsk_ambiguous.iq`
+- A noise-only rejection fixture at
+  `data/synthetic/canned_replay/demo_conv_bpsk_no_signal.iq`
+- The replay acquisition preamble at
+  `data/synthetic/canned_replay/preamble_qpsk_256.iq`
 - Metadata for that recording at
   `data/synthetic/canned_replay/demo_conv_bpsk.json`
 - Metadata for the impaired recording at
@@ -75,26 +82,34 @@ supported Android app or full SME2-optimized Viterbi decoder.
 
 ## What the replay demo does
 
-The canned replay frame carries the ASCII payload `SATCOM DEMO OK`. The
-generator script appends a CRC-8 byte, convolutionally encodes the payload with
-a rate-1/2 code using generators `(7, 5)` in octal, prepends a 16-bit sync
-word, and modulates the result as oversampled BPSK in interleaved float32 IQ.
+Each signal-bearing replay capture contains leading noise, a known 256-sample
+QPSK preamble, and an oversampled BPSK frame with controlled timing, carrier
+phase, and CFO. The frame carries `SATCOM DEMO OK`, a CRC-8 byte, a rate-1/2
+`(7, 5)` convolutional code, and a 16-bit secondary sync word.
+
+The runner normalizes the full capture, searches valid timing/CFO hypotheses,
+rejects weak or insufficiently separated peaks, compensates the selected CFO
+and carrier phase, and demodulates only the aligned frame. The 16-bit sync check
+then verifies offset zero before the existing Viterbi/CRC path runs.
 
 The replay runner reports:
 
 - decoded text
 - CRC result
+- requested and selected acquisition implementation
+- detected timing/CFO, raw and normalized peak evidence, and peak separation
+- synthetic ground-truth timing/CFO error when a metadata sidecar is present
 - front-end normalization statistics
 - demodulation and framing statistics
 - trust features, trust-score breakdown, and a trust assessment band
 
-The checked-in synthetic asset set contains three scenarios:
+The checked-in synthetic asset set contains five scenarios:
 
-- `healthy`: the baseline replay used by the quick start
-- `impaired`: a replay with deterministic added noise, stronger amplitude
-  ripple, and a short mid-frame fade
-- `failed`: a replay that still acquires sync but has a deliberately corrupted
-  coded-data segment, so the supported replay path reaches CRC rejection
+- `healthy`: exact acquisition and clean payload decode
+- `impaired`: exact acquisition and decode with weaker signal evidence
+- `ambiguous`: exact acquisition and decode despite a competing preamble peak
+- `failed`: exact acquisition followed by coded-data corruption and CRC failure
+- `no_signal`: acquisition rejection before demodulation
 
 ## Quick start
 
@@ -136,7 +151,9 @@ Common follow-on commands:
 
 ```bash
 make replay-impaired
+make replay-ambiguous
 make replay-failed
+make replay-no-signal
 make compare-trust
 make align
 make check-metrics
@@ -235,28 +252,41 @@ documented in [docs/sme2_acquisition.md](docs/sme2_acquisition.md).
 Healthy replay:
 
 ```bash
-bash scripts/run_replay_demo.sh | jq '{decoder, decoded_text, crc_ok, trust_score, trust_assessment}'
+bash scripts/run_replay_demo.sh | jq \
+  '{decoded_text, crc_ok, acquisition, trust_score, trust_assessment}'
 ```
 
 Example output:
 
 ```json
 {
-  "decoder": "viterbi-neon",
   "decoded_text": "SATCOM DEMO OK",
   "crc_ok": true,
-  "trust_score": 1,
+  "acquisition": {
+    "selected_implementation": "reference",
+    "acquisition_success": true,
+    "detected_timing_offset": 192,
+    "detected_cfo_hz": 250,
+    "normalized_peak": 0.996778,
+    "normalized_peak_separation": 0.955311,
+    "confidence": 0.953771,
+    "confidence_calibrated": false
+  },
+  "trust_score": 0.988191,
   "trust_assessment": {
     "band": "high-confidence",
     "weak_soft_bits": false,
+    "ambiguous_acquisition": false,
+    "acquisition_rejected": false,
     "ambiguous_sync": false,
     "demod_clipping": false,
+    "crc_not_evaluated": false,
     "crc_failed": false
   }
 }
 ```
 
-Healthy versus impaired versus failed trust comparison:
+Replay trust comparison:
 
 ```bash
 bash scripts/compare_trust_cases.sh
@@ -267,24 +297,36 @@ Example output:
 ```json
 {
   "healthy": {
-    "trust_score": 1.0,
+    "trust_score": 0.988191,
     "trust_band": "high-confidence",
-    "weak_llr_fraction": 0.0
+    "acquisition_confidence": 0.953771
   },
   "impaired": {
-    "trust_score": 0.93645,
+    "trust_score": 0.907839,
     "trust_band": "guarded",
-    "weak_llr_fraction": 0.147541
+    "acquisition_confidence": 0.832182
+  },
+  "ambiguous": {
+    "trust_score": 0.776973,
+    "trust_band": "guarded",
+    "ambiguous_acquisition": true,
+    "acquisition_confidence": 0.111134
   },
   "failed": {
     "trust_score": 0.35,
     "trust_band": "low-confidence",
     "error": "CRC mismatch"
   },
+  "no_signal": {
+    "trust_score": 0.067797,
+    "trust_band": "low-confidence",
+    "acquisition_success": false,
+    "crc_not_evaluated": true
+  },
   "comparison": {
-    "healthy_impaired_same_payload": true,
     "trust_score_order_ok": true,
-    "failed_crc_rejected": true
+    "ambiguous_peak_detected": true,
+    "no_signal_rejected_before_demod": true
   }
 }
 ```
@@ -391,8 +433,8 @@ What works today:
   separate steady-state/per-capture/setup-inclusive modes, implementation
   workspace accounting, and JSON/CSV reporting
 - regenerate the synthetic IQ asset and its metadata
-- compare healthy, impaired, and failed trust-monitoring cases on checked-in
-  inputs
+- compare healthy, impaired, ambiguous, CRC-failed, and noise-only trust cases
+  on checked-in inputs
 - compare `viterbi-reference`, `viterbi-neon`, and `viterbi-sme2` entrypoints
   on the same canned input and evaluation window
 - verify that reference, NEON-or-fallback, and SME2-or-fallback branch-metric
@@ -456,74 +498,40 @@ The replay runner prints JSON similar to:
 ```json
 {
   "ok": true,
-  "iq_path": "data/synthetic/canned_replay/demo_conv_bpsk.iq",
   "decoder": "viterbi-neon",
-  "implementation_class": "partial",
-  "implementation_summary": "Partial NEON implementation: Arm NEON precomputes branch metrics when __ARM_NEON is available; add-compare-select and traceback use the shared scalar reference core.",
-  "samples_per_symbol": 8,
-  "frame_soft_bits": 244,
-  "expected_payload_bytes": 14,
-  "decoded_payload_bytes": 14,
   "decoded_text": "SATCOM DEMO OK",
   "crc_ok": true,
-  "front_end": {
-    "sample_count": 2080,
-    "dc_i": 0.070320,
-    "dc_q": -0.019993,
-    "rms_before_normalization": 1.001070,
-    "rms_after_normalization": 1.0
-  },
-  "demod": {
-    "symbol_count": 260,
-    "samples_per_symbol": 8,
-    "max_abs_symbol_mean": 1.116615,
-    "clipped_symbol_count": 0
-  },
-  "framing": {
-    "sync_start_index": 0,
-    "frame_start_index": 16,
-    "frame_length": 244,
-    "sync_score": 16,
-    "has_second_best_correlation": false,
-    "second_best_sync_start_index": 0,
-    "second_best_sync_score": 16
-  },
-  "trust_features": {
-    "mean_abs_llr": 113.213,
-    "normalized_mean_abs_llr": 1.0,
-    "weak_llr_fraction": 0.0,
-    "normalized_sync_score": 1.0,
-    "normalized_sync_margin": 1.0,
-    "clipped_symbol_fraction": 0.0,
-    "crc_pass": 1.0
-  },
-  "trust_breakdown": {
-    "llr_strength": 1.0,
-    "llr_consistency": 1.0,
-    "sync_quality": 1.0,
-    "sync_margin_quality": 1.0,
-    "demod_quality": 1.0,
-    "crc_quality": 1.0,
-    "capped_by_crc_failure": false,
-    "score": 1.0
+  "acquisition": {
+    "requested_implementation": "reference",
+    "selected_implementation": "reference",
+    "acquisition_success": true,
+    "detected_timing_offset": 192,
+    "detected_cfo_hz": 250.0,
+    "normalized_peak": 0.996778,
+    "normalized_peak_separation": 0.955311,
+    "confidence": 0.953771,
+    "confidence_calibrated": false,
+    "ground_truth": {
+      "timing_error_samples": 0,
+      "cfo_hypothesis_error_hz": 0.0
+    }
   },
   "trust_assessment": {
     "band": "high-confidence",
-    "weak_soft_bits": false,
-    "ambiguous_sync": false,
-    "demod_clipping": false,
+    "ambiguous_acquisition": false,
+    "acquisition_rejected": false,
+    "crc_not_evaluated": false,
     "crc_failed": false
   },
-  "trust_score": 1.0,
+  "trust_score": 0.988191,
   "error": ""
 }
 ```
 
-The trust comparison script prints a compact healthy versus impaired versus
-failed summary. In the checked-in deterministic asset set, the healthy replay decodes with
-`high-confidence`, the impaired replay still decodes but drops to `guarded`
-because its soft decisions are weaker, and the failed replay is capped at
-`low-confidence` because CRC rejection is treated as a hard trust limiter.
+The trust comparison distinguishes a clear healthy peak, a weaker impaired
+case, a close competing peak, a post-acquisition CRC failure, and a noise-only
+capture rejected before demodulation. Acquisition confidence is an uncalibrated
+diagnostic, not a probability.
 
 The acquisition benchmark reports fixed workload dimensions, the deterministic
 seed and execution order, host/compiler/source-flag metadata, runtime Arm
@@ -570,7 +578,8 @@ Key paths:
 - `data/synthetic/acquisition/`
   Deterministic preamble, acquisition captures, and ground-truth metadata
 - `data/synthetic/canned_replay/`
-  Checked-in healthy, impaired, and failed replay fixtures plus metadata
+  Checked-in preamble plus healthy, impaired, ambiguous, CRC-failed, and
+  noise-only replay fixtures and metadata
 - `scripts/`
   Supported host-side build, acquisition, replay, trust, and validation
   entrypoints
