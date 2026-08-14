@@ -135,7 +135,16 @@ class HostReplayTests(unittest.TestCase):
         self.assertTrue(result["alignment"]["payload_text_match"])
 
         paths = {path["decoder"]: path for path in result["paths"]}
-        self.assertEqual(paths["viterbi-neon"]["implementation_class"], "partial")
+        expected_neon_class = (
+            "partial"
+            if paths["viterbi-neon"]["branch_metric"]["selected_implementation"]
+            == "neon"
+            else "fallback"
+        )
+        self.assertEqual(
+            paths["viterbi-neon"]["implementation_class"],
+            expected_neon_class,
+        )
         self.assertEqual(paths["viterbi-reference"]["implementation_class"], "real")
         self.assertIn(
             paths["viterbi-sme2"]["implementation_class"],

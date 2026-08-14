@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import asdict, dataclass
+import hashlib
 import json
 import math
 import os
@@ -351,8 +352,17 @@ def write_iq(path: Path, samples: Iterable[complex]) -> None:
             output.write(struct.pack("<ff", sample.real, sample.imag))
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def write_metadata(
     path: Path,
+    iq_path: Path,
     preamble_path: Path,
     frame_bits: list[int],
     scenario: ScenarioConfig,
@@ -372,6 +382,7 @@ def write_metadata(
     preamble_reference = os.path.relpath(preamble_path, start=path.parent)
     metadata = {
         "schema": "satcom-fec-trust-lab/replay-fixture-v2",
+        "generator": "scripts/generate_synthetic_iq.py",
         "scenario": scenario.name,
         "description": scenario.description,
         "iq_format": "interleaved little-endian float32 I,Q",
@@ -389,6 +400,8 @@ def write_metadata(
         "preamble_length": PREAMBLE_LENGTH,
         "preamble_modulation": "deterministic QPSK",
         "preamble_seed": PREAMBLE_SEED,
+        "preamble_sha256": sha256_file(preamble_path),
+        "iq_sha256": sha256_file(iq_path),
         "timing_search_start": 0,
         "timing_search_stop_inclusive": timing_search_stop,
         "timing_search_step": 1,
@@ -446,7 +459,7 @@ def generate_profile(
     output.parent.mkdir(parents=True, exist_ok=True)
     write_iq(output, capture)
     metadata.parent.mkdir(parents=True, exist_ok=True)
-    write_metadata(metadata, preamble_path, frame_bits, scenario)
+    write_metadata(metadata, output, preamble_path, frame_bits, scenario)
     print(f"Wrote {output}")
     print(f"Wrote {metadata}")
 

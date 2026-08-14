@@ -136,11 +136,12 @@ configure_android() {
     -DANDROID_PLATFORM="${ANDROID_PLATFORM}" \
     -DANDROID_STL=c++_static \
     -DCMAKE_BUILD_TYPE=Release \
-    "-DCMAKE_CXX_FLAGS=-Wall -Wextra -Wpedantic -Werror" \
     -DBUILD_TESTING=OFF \
     -DSATCOMFEC_ANDROID_BENCHMARK_ONLY=ON \
     -DSATCOMFEC_ENABLE_NEON=ON \
-    -DSATCOMFEC_ENABLE_SME2="${enable_sme2}"
+    -DSATCOMFEC_ENABLE_SME2="${enable_sme2}" \
+    -DSATCOMFEC_ENABLE_WARNINGS=ON \
+    -DSATCOMFEC_WARNINGS_AS_ERRORS=ON
 }
 
 mkdir -p "${OUTPUT_DIR}"

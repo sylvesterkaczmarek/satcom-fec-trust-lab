@@ -46,6 +46,8 @@ supported Android app or full SME2-optimized Viterbi decoder.
   `data/synthetic/canned_replay/demo_conv_bpsk.iq`
 - Five deterministic acquisition captures and ground-truth metadata under
   `data/synthetic/acquisition/`
+- Recorded generator seeds and SHA-256 fixture hashes in each metadata sidecar
+  and `data/synthetic/fixture_manifest.json`
 - A checked-in impaired synthetic IQ recording at
   `data/synthetic/canned_replay/demo_conv_bpsk_impaired.iq`
 - A checked-in CRC-failing synthetic IQ recording at
@@ -124,12 +126,17 @@ Requirements for the supported quick start:
 - `bash`
 - `make`
 - `c++` with C++17 support
-- `cmake` is optional; scripts fall back to direct `c++` builds when CMake is
-  unavailable
+- `cmake` 3.22 or newer
 - `python3`
 - `jq` for the validation scripts
 
-Recommended first run:
+Complete clean-checkout correctness verification:
+
+```bash
+make verify
+```
+
+Short interactive path:
 
 ```bash
 make build
@@ -163,6 +170,7 @@ make replay-no-signal
 make compare-trust
 make align
 make check-metrics
+make verify-fixtures
 make verify-arm
 make benchmark
 make test
@@ -206,6 +214,10 @@ Regenerate the checked-in synthetic fixtures:
 ```bash
 make regenerate
 ```
+
+`make regenerate` rewrites both fixture families and their tracked checksum
+manifest. `make verify-fixtures` verifies the recorded seeds and SHA-256 values
+without changing repository files.
 
 Run the alternate decoder entrypoint:
 
@@ -397,7 +409,7 @@ Viterbi branch-metric implementation and verification:
 - SME2 wrapper: `src/fec/viterbi_decoder_sme2.cpp`
 - CMake build command:
   `cmake -S . -B build/sme2 -DSATCOMFEC_ENABLE_SME2=ON`
-- Direct build command:
+- CMake helper command:
   `SATCOMFEC_ENABLE_SME2=ON bash scripts/build_host_tools.sh all`
 - Verification command: `bash scripts/verify_arm_paths.sh`
 - Branch-metric equivalence command: `bash scripts/check_branch_metrics.sh`
@@ -412,6 +424,8 @@ See [docs/benchmarking.md](docs/benchmarking.md)
 for the exact benchmark scope and reporting notes.
 See [docs/reproducibility.md](docs/reproducibility.md)
 for the clean-checkout rerun procedure.
+See [docs/technical_review.md](docs/technical_review.md)
+for build-separation, numerical-equivalence, and instruction-evidence commands.
 
 ## What this repository does not claim
 
@@ -444,6 +458,7 @@ What works today:
   separate steady-state/per-capture/setup-inclusive modes, implementation
   workspace accounting, and JSON/CSV reporting
 - regenerate the synthetic IQ asset and its metadata
+- verify fixture seeds and SHA-256 hashes against the tracked manifest
 - compare healthy, impaired, ambiguous, CRC-failed, and noise-only trust cases
   on checked-in inputs
 - compare `viterbi-reference`, `viterbi-neon`, and `viterbi-sme2` entrypoints
@@ -451,9 +466,10 @@ What works today:
 - verify that reference, NEON-or-fallback, and SME2-or-fallback branch-metric
   preparation produce identical metric arrays on deterministic inputs
 
-Required hardware:
+Required build environment:
 
-- a development machine with a C++17-capable `c++` compiler
+- a development machine with CMake 3.22+, a C++17-capable compiler, Python 3,
+  and `jq`
 
 Optional hardware:
 
@@ -629,11 +645,15 @@ Supported host-side scripts:
 - `scripts/benchmark_decoder_paths.sh`
 - `scripts/generate_synthetic_iq.py`
 - `scripts/generate_acquisition_fixtures.py`
+- `scripts/check_compile_commands.py`
+- `scripts/update_fixture_checksums.py`
+- `scripts/verify_public_workflow.sh`
 
 Automated validation:
 
 - `tests/test_host_replay.py`
 - `tests/test_acquisition.py`
+- `tests/test_build_integrity.py`
 - `.github/workflows/host-replay.yml`
 
 ## Repository layout
@@ -641,7 +661,7 @@ Automated validation:
 ```text
 satcom-fec-trust-lab/
 ├─ .github/workflows/host-replay.yml # Clean-checkout host CI
-├─ CMakeLists.txt                    # Host-side CMake entrypoint
+├─ CMakeLists.txt                    # Authoritative host/NDK build graph
 ├─ README.md
 ├─ assets/social/                   # Repository artwork
 ├─ benchmarks/results/              # Tracked raw local benchmark evidence

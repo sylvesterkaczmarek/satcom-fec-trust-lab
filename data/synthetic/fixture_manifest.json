@@ -1,0 +1,141 @@
+{
+  "files": [
+    {
+      "bytes": 32768,
+      "path": "data/synthetic/acquisition/ambiguous.iq",
+      "sha256": "2459eecf5fc8ad44a90489c1735abc673d9a69bf26a95e67dbdb779852333c21"
+    },
+    {
+      "bytes": 1186,
+      "path": "data/synthetic/acquisition/ambiguous.json",
+      "sha256": "cde3fcbab51acb083391f1369c635896d94f7e884c136c88b26b99713ea060db"
+    },
+    {
+      "bytes": 32768,
+      "path": "data/synthetic/acquisition/clean.iq",
+      "sha256": "84fa72f4e6202c571fa6ce5a9823d02afb5dedbc18b87de3187cec8dc2fd1642"
+    },
+    {
+      "bytes": 1064,
+      "path": "data/synthetic/acquisition/clean.json",
+      "sha256": "77d8f129c9e8730a899e58e5dde5f7e0ac3f6a33d4b770be44337ee35600803a"
+    },
+    {
+      "bytes": 32768,
+      "path": "data/synthetic/acquisition/frequency_offset.iq",
+      "sha256": "1f872cdab14a36471f97f005ce382a9120af70cf3adc7ddf7320a03da7cc3b5e"
+    },
+    {
+      "bytes": 1078,
+      "path": "data/synthetic/acquisition/frequency_offset.json",
+      "sha256": "28cc31281c70d69a01a0d16ecdfc1cc3845b53980194e67aeef9bec246d54814"
+    },
+    {
+      "bytes": 32768,
+      "path": "data/synthetic/acquisition/noisy.iq",
+      "sha256": "656a6f4f283997b7b2ce1bd9bf7df0810551196d10ab563e85307a66a1c9f20e"
+    },
+    {
+      "bytes": 1078,
+      "path": "data/synthetic/acquisition/noisy.json",
+      "sha256": "af6cb46347520e402efdd256054dd74bb89b988a4c75a2e2f5b8aa47b77289d3"
+    },
+    {
+      "bytes": 2048,
+      "path": "data/synthetic/acquisition/preamble_qpsk_256.iq",
+      "sha256": "3fb921f8e536d7856947d165f1f8ff1999d365e7311213a2bb2a3cc410d2f415"
+    },
+    {
+      "bytes": 32768,
+      "path": "data/synthetic/acquisition/weak_faded.iq",
+      "sha256": "9e392ddd9a263550a898764675d56fc9b1a267334ab00ba4d047306af1cd77cc"
+    },
+    {
+      "bytes": 1086,
+      "path": "data/synthetic/acquisition/weak_faded.json",
+      "sha256": "41808e9b39822f0895c4a3fb8249f98b7e42cc96ef693a2b4a142b33d6ae171c"
+    },
+    {
+      "bytes": 32768,
+      "path": "data/synthetic/canned_replay/demo_conv_bpsk.iq",
+      "sha256": "bdc4aa3771a9c432a64c08ada6a780bb55193c2148ae961bb96c2e329f805b71"
+    },
+    {
+      "bytes": 1839,
+      "path": "data/synthetic/canned_replay/demo_conv_bpsk.json",
+      "sha256": "0476d2ca552877da66ecec80a67eb16b974cfda765c1619b1f6bb728a71a0af3"
+    },
+    {
+      "bytes": 32768,
+      "path": "data/synthetic/canned_replay/demo_conv_bpsk_ambiguous.iq",
+      "sha256": "70d0189200111c48ddb7609d434463bfb728e7e387111b494b4e1ab99f18dd0e"
+    },
+    {
+      "bytes": 1949,
+      "path": "data/synthetic/canned_replay/demo_conv_bpsk_ambiguous.json",
+      "sha256": "b47b8c27e0318bbd45cbb108d0ea3fa25fe317a66824f82698c8afe490f0d784"
+    },
+    {
+      "bytes": 32768,
+      "path": "data/synthetic/canned_replay/demo_conv_bpsk_failed.iq",
+      "sha256": "2fc57753d5ad2c73145c43e446998040a929e551e1e7d37aac0f3b41b974759e"
+    },
+    {
+      "bytes": 1819,
+      "path": "data/synthetic/canned_replay/demo_conv_bpsk_failed.json",
+      "sha256": "4af0d0a846bb1fafaa5e33dfc3009b7c215091c663f41c9ddbfb741f63a2c79c"
+    },
+    {
+      "bytes": 32768,
+      "path": "data/synthetic/canned_replay/demo_conv_bpsk_impaired.iq",
+      "sha256": "7be6958f8d9f3c0529df0ba96521084b743414b12f286364883c2e24f2e79fb3"
+    },
+    {
+      "bytes": 1835,
+      "path": "data/synthetic/canned_replay/demo_conv_bpsk_impaired.json",
+      "sha256": "f93c5d753e69871d9540928c304b119e0981b6dc6c0e2a4ad1344540bd5aed6f"
+    },
+    {
+      "bytes": 32768,
+      "path": "data/synthetic/canned_replay/demo_conv_bpsk_no_signal.iq",
+      "sha256": "dccfce5009943b4ae092bd9781ddd15aa2e97e03505a2afb89013c4987398249"
+    },
+    {
+      "bytes": 1832,
+      "path": "data/synthetic/canned_replay/demo_conv_bpsk_no_signal.json",
+      "sha256": "a5461cc4e2119e43548db2aac34da70419e456e59de47a60cacd26786fc5f0da"
+    },
+    {
+      "bytes": 2048,
+      "path": "data/synthetic/canned_replay/preamble_qpsk_256.iq",
+      "sha256": "3fb921f8e536d7856947d165f1f8ff1999d365e7311213a2bb2a3cc410d2f415"
+    }
+  ],
+  "generated_by": "scripts/update_fixture_checksums.py",
+  "generators": [
+    {
+      "fixture_seeds": {
+        "ambiguous": 3104,
+        "clean": 3101,
+        "frequency_offset": 3103,
+        "noisy": 3102,
+        "weak_faded": 3105
+      },
+      "path": "scripts/generate_acquisition_fixtures.py",
+      "preamble_seed": 2029
+    },
+    {
+      "fixture_seeds": {
+        "ambiguous": 37,
+        "failed": 41,
+        "healthy": 7,
+        "impaired": 29,
+        "no_signal": 53
+      },
+      "path": "scripts/generate_synthetic_iq.py",
+      "preamble_seed": 2029
+    }
+  ],
+  "hash_algorithm": "sha256",
+  "schema": "satcom-fec-trust-lab/fixture-manifest-v1"
+}

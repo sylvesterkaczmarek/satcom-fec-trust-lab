@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import random
@@ -231,17 +232,28 @@ def write_iq(path: Path, samples: Iterable[complex]) -> None:
             output.write(struct.pack("<ff", sample.real, sample.imag))
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def write_fixture(
     output_dir: Path,
     scenario: Scenario,
     preamble: list[complex],
     preamble_seed: int,
+    preamble_sha256: str,
 ) -> None:
     capture = make_capture(scenario, preamble)
-    write_iq(output_dir / f"{scenario.name}.iq", capture)
+    iq_path = output_dir / f"{scenario.name}.iq"
+    write_iq(iq_path, capture)
 
     metadata = {
         "schema": "satcom-fec-trust-lab/acquisition-fixture-v1",
+        "generator": "scripts/generate_acquisition_fixtures.py",
         "scenario": scenario.name,
         "description": scenario.description,
         "iq_format": "interleaved little-endian float32 I,Q",
@@ -252,6 +264,8 @@ def write_fixture(
         "preamble_length": PREAMBLE_LENGTH,
         "preamble_modulation": "deterministic QPSK",
         "preamble_seed": preamble_seed,
+        "preamble_sha256": preamble_sha256,
+        "iq_sha256": sha256_file(iq_path),
         "timing_search_start": TIMING_SEARCH_START,
         "timing_search_stop_inclusive": TIMING_SEARCH_STOP_INCLUSIVE,
         "timing_search_step": TIMING_SEARCH_STEP,
@@ -382,9 +396,17 @@ def main() -> int:
     selected = [apply_overrides(scenario, arguments) for scenario in selected]
 
     preamble = qpsk_preamble(PREAMBLE_LENGTH, arguments.preamble_seed)
-    write_iq(arguments.output_dir / "preamble_qpsk_256.iq", preamble)
+    preamble_path = arguments.output_dir / "preamble_qpsk_256.iq"
+    write_iq(preamble_path, preamble)
+    preamble_sha256 = sha256_file(preamble_path)
     for scenario in selected:
-        write_fixture(arguments.output_dir, scenario, preamble, arguments.preamble_seed)
+        write_fixture(
+            arguments.output_dir,
+            scenario,
+            preamble,
+            arguments.preamble_seed,
+            preamble_sha256,
+        )
 
     print(
         f"generated {len(selected)} acquisition fixture(s) in {arguments.output_dir} "

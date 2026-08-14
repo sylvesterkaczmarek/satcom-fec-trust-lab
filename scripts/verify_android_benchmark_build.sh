@@ -22,7 +22,7 @@ EOF
   exit 0
 fi
 
-bash "${ROOT_DIR}/scripts/build_android_benchmark.sh" "$@" >/dev/null
+bash "${ROOT_DIR}/scripts/build_android_benchmark.sh" "$@"
 
 BUILD_INFO="${OUTPUT_DIR}/last-build.env"
 if [[ ! -f "${BUILD_INFO}" ]]; then
@@ -43,6 +43,14 @@ if [[ -z "${ANDROID_NDK_HOME}" || -z "${ANDROID_BENCHMARK_BINARY}" ||
   echo "error: Android build metadata is incomplete" >&2
   exit 1
 fi
+
+compile_mode="neon"
+if [[ "${SATCOMFEC_ANDROID_SME2_COMPILED}" == "ON" ]]; then
+  compile_mode="sme2"
+fi
+python3 "${ROOT_DIR}/scripts/check_compile_commands.py" \
+  --build-dir "${ANDROID_BENCHMARK_BUILD_DIR}" \
+  --expect "${compile_mode}"
 
 find_ndk_tool() {
   local tool_name="$1"

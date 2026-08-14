@@ -1,4 +1,4 @@
-.PHONY: help build replay replay-impaired replay-ambiguous replay-failed replay-no-signal acquisition check check-acquisition check-acquisition-neon verify-acquisition-neon check-acquisition-sme2 verify-acquisition-sme2 compare-trust align check-metrics verify-arm benchmark benchmark-acquisition benchmark-acquisition-repeat benchmark-android-build benchmark-android-verify benchmark-android-run benchmark-decoder-legacy test regenerate
+.PHONY: help build replay replay-impaired replay-ambiguous replay-failed replay-no-signal acquisition check check-acquisition check-acquisition-neon verify-acquisition-neon check-acquisition-sme2 verify-acquisition-sme2 compare-trust align check-metrics verify verify-fixtures verify-arm benchmark benchmark-acquisition benchmark-acquisition-repeat benchmark-android-build benchmark-android-verify benchmark-android-run benchmark-decoder-legacy test regenerate
 
 help:
 	@printf '%s\n' \
@@ -19,6 +19,8 @@ help:
 	  '  make compare-trust   Compare all replay trust states' \
 	  '  make align           Validate decoder-path alignment' \
 	  '  make check-metrics   Validate branch-metric path equivalence' \
+	  '  make verify          Run clean strict, sanitizer, and public correctness checks' \
+	  '  make verify-fixtures Verify tracked fixture seeds and SHA-256 hashes' \
 	  '  make verify-arm      Verify portable and optional Arm build modes' \
 	  '  make benchmark       Run the acquisition workload-size sweep' \
 	  '  make benchmark-acquisition Run the acquisition workload-size sweep' \
@@ -78,6 +80,12 @@ align:
 check-metrics:
 	bash scripts/check_branch_metrics.sh
 
+verify:
+	bash scripts/verify_public_workflow.sh
+
+verify-fixtures:
+	python3 scripts/update_fixture_checksums.py --check
+
 verify-arm:
 	bash scripts/verify_arm_paths.sh
 
@@ -108,3 +116,4 @@ test:
 regenerate:
 	python3 scripts/generate_synthetic_iq.py
 	python3 scripts/generate_acquisition_fixtures.py
+	python3 scripts/update_fixture_checksums.py

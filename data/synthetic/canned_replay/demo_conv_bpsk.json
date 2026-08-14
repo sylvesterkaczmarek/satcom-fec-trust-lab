@@ -1,5 +1,6 @@
 {
   "schema": "satcom-fec-trust-lab/replay-fixture-v2",
+  "generator": "scripts/generate_synthetic_iq.py",
   "scenario": "healthy",
   "description": "Decodable replay with leading noise, non-zero timing offset, and a positive carrier-frequency offset.",
   "iq_format": "interleaved little-endian float32 I,Q",
@@ -34,6 +35,8 @@
   "preamble_length": 256,
   "preamble_modulation": "deterministic QPSK",
   "preamble_seed": 2029,
+  "preamble_sha256": "3fb921f8e536d7856947d165f1f8ff1999d365e7311213a2bb2a3cc410d2f415",
+  "iq_sha256": "bdc4aa3771a9c432a64c08ada6a780bb55193c2148ae961bb96c2e329f805b71",
   "timing_search_start": 0,
   "timing_search_stop_inclusive": 1760,
   "timing_search_step": 1,

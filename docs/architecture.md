@@ -55,3 +55,17 @@ The replay result reports acquisition implementation and candidate evidence,
 synthetic ground-truth errors when available, front-end/demodulation/framing
 details, decoder identity, and the trust-score components. Ground truth is
 reported after the search and is never used to select a candidate.
+
+## Build boundaries
+
+CMake is the authoritative host and NDK build path. Compiler warning and
+sanitizer options are common target options; architecture features are not.
+The scalar acquisition reference has a dedicated translation unit with loop
+and SLP vectorization disabled. NEON and SME2 flags are attached only to their
+respective implementation sources. The legacy FEC scalar core is similarly
+separate from NEON branch metrics and SME2 branch metrics.
+
+Every configured build exports `compile_commands.json`.
+`scripts/check_compile_commands.py` verifies the boundaries and fails if an
+SME2 target flag contaminates the scalar reference, NEON comparison, or generic
+FEC source.

@@ -6,9 +6,14 @@ on:
   pull_request:
     branches: ["main"]
 
+permissions:
+  contents: read
+
 jobs:
-  host-replay:
+  portable-x86:
+    name: Portable x86/Linux correctness
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -19,52 +24,57 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y cmake jq binutils
 
-      - name: Regenerate deterministic IQ assets
+      - name: Require x86-64 runner
+        run: test "$(uname -m)" = "x86_64"
+
+      - name: Regenerate and verify deterministic fixtures
         run: |
           python3 scripts/generate_synthetic_iq.py
           python3 scripts/generate_acquisition_fixtures.py
+          python3 scripts/update_fixture_checksums.py --check
+          git diff --exit-code -- data/synthetic
 
-      - name: Check canned replay output
-        run: bash scripts/check_replay_demo.sh
-
-      - name: Compare healthy and impaired trust cases
-        run: bash scripts/compare_trust_cases.sh
-
-      - name: Check decoder alignment
-        run: bash scripts/validate_decoder_alignment.sh
-
-      - name: Check branch-metric path alignment
-        run: bash scripts/check_branch_metrics.sh
-
-      - name: Check scalar acquisition fixtures
-        run: bash scripts/check_acquisition_demo.sh
-
-      - name: Check portable NEON availability reporting
-        run: bash scripts/check_acquisition_neon.sh
-
-      - name: Check portable SME2 availability reporting
-        run: bash scripts/check_sme2_acquisition.sh
-
-      - name: Validate portable acquisition benchmark report
+      - name: Configure strict portable build
         run: >-
-          bash scripts/benchmark_acquisition.sh
-          --workload small
-          --warmup-rounds 0
-          --samples 3
-          --min-sample-ms 1
-          > build/acquisition-benchmark-smoke.json
+          cmake -S . -B build/ci-portable
+          -DCMAKE_BUILD_TYPE=Release
+          -DSATCOMFEC_ENABLE_NEON=OFF
+          -DSATCOMFEC_ENABLE_SME2=OFF
+          -DSATCOMFEC_ENABLE_WARNINGS=ON
+          -DSATCOMFEC_WARNINGS_AS_ERRORS=ON
 
-      - name: Verify Arm build modes
-        run: bash scripts/verify_arm_paths.sh
+      - name: Build portable tools
+        run: cmake --build build/ci-portable --parallel
 
-      - name: Run automated host replay tests
+      - name: Verify translation-unit flag separation
+        run: >-
+          python3 scripts/check_compile_commands.py
+          --build-dir build/ci-portable
+          --expect portable
+
+      - name: Run portable CTests
+        run: ctest --test-dir build/ci-portable --output-on-failure
+
+      - name: Verify replay, trust, acquisition, and FEC workflows
+        run: |
+          bash scripts/check_replay_demo.sh
+          bash scripts/compare_trust_cases.sh
+          bash scripts/check_acquisition_demo.sh
+          bash scripts/check_acquisition_neon.sh
+          bash scripts/check_sme2_acquisition.sh
+          bash scripts/validate_decoder_alignment.sh
+          bash scripts/check_branch_metrics.sh
+
+      - name: Run all Python regressions
         run: python3 -m unittest discover -s tests -v
 
   arm64-neon:
+    name: Native Arm64/Linux NEON correctness
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -78,41 +88,88 @@ jobs:
       - name: Install build and inspection tools
         run: sudo apt-get update && sudo apt-get install -y cmake jq binutils
 
-      - name: Regenerate deterministic acquisition assets
-        run: python3 scripts/generate_acquisition_fixtures.py
+      - name: Require AArch64 runner
+        run: test "$(uname -m)" = "aarch64"
 
-      - name: Build explicit AArch64 NEON configuration
-        run: |
-          cmake -S . -B build/ci-neon \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DSATCOMFEC_ENABLE_NEON=ON
-          cmake --build build/ci-neon --parallel
+      - name: Verify deterministic fixtures
+        run: python3 scripts/update_fixture_checksums.py --check
 
-      - name: Run CTest on Arm64
+      - name: Configure explicit NEON build
+        run: >-
+          cmake -S . -B build/ci-neon
+          -DCMAKE_BUILD_TYPE=Release
+          -DSATCOMFEC_ENABLE_NEON=ON
+          -DSATCOMFEC_ENABLE_SME2=OFF
+          -DSATCOMFEC_ENABLE_WARNINGS=ON
+          -DSATCOMFEC_WARNINGS_AS_ERRORS=ON
+
+      - name: Build explicit NEON tools
+        run: cmake --build build/ci-neon --parallel
+
+      - name: Verify translation-unit flag separation
+        run: >-
+          python3 scripts/check_compile_commands.py
+          --build-dir build/ci-neon
+          --expect neon
+
+      - name: Run native Arm64 CTests and equivalence checks
         run: ctest --test-dir build/ci-neon --output-on-failure
 
-      - name: Validate native NEON acquisition benchmark report
+      - name: Execute NEON and inspect object instructions
+        run: bash scripts/verify_acquisition_neon.sh
+
+      - name: Run non-authoritative benchmark smoke test
         run: >-
           build/ci-neon/benchmark_acquisition
           --workload small
           --warmup-rounds 0
           --samples 3
           --min-sample-ms 1
-          > build/acquisition-benchmark-neon-smoke.json
+          > build/ci-neon/non-authoritative-smoke.json
 
-      - name: Require NEON execution and inspect instructions
-        run: bash scripts/verify_acquisition_neon.sh
-
-      - name: Check SME2 availability without requiring SME2 hardware
-        run: bash scripts/check_sme2_acquisition.sh
-
-      - name: Run all host tests on Arm64
+      - name: Run all regressions with NEON requested
         env:
           SATCOMFEC_ENABLE_NEON: "ON"
         run: python3 -m unittest discover -s tests -v
 
-  android-ndk:
+  portable-sanitizers:
+    name: Portable x86 ASan and UBSan
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install CMake
+        run: sudo apt-get update && sudo apt-get install -y cmake
+
+      - name: Configure sanitizer build
+        run: >-
+          cmake -S . -B build/ci-sanitizers
+          -DCMAKE_BUILD_TYPE=Debug
+          -DSATCOMFEC_ENABLE_NEON=OFF
+          -DSATCOMFEC_ENABLE_SME2=OFF
+          -DSATCOMFEC_ENABLE_WARNINGS=ON
+          -DSATCOMFEC_WARNINGS_AS_ERRORS=ON
+          -DSATCOMFEC_ENABLE_SANITIZERS=ON
+
+      - name: Build with ASan and UBSan
+        run: cmake --build build/ci-sanitizers --parallel
+
+      - name: Verify portable flag separation
+        run: >-
+          python3 scripts/check_compile_commands.py
+          --build-dir build/ci-sanitizers
+          --expect portable
+
+      - name: Run CTests under ASan and UBSan
+        run: ctest --test-dir build/ci-sanitizers --output-on-failure
+
+  sme2-compile-assembly:
+    name: SME2 compile and assembly evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -137,7 +194,7 @@ jobs:
           fi
           echo "ANDROID_NDK_HOME=${ndk_root}" >> "${GITHUB_ENV}"
 
-      - name: Build and inspect Android SME2 acquisition benchmark
+      - name: Compile and inspect genuine SME2 acquisition object
         run: >-
           bash scripts/verify_android_benchmark_build.sh
           --ndk "${ANDROID_NDK_HOME}"

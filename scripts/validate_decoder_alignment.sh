@@ -48,7 +48,11 @@ echo "${OUTPUT}" | jq -e '.paths[2].decode_ok == true' >/dev/null
 echo "${OUTPUT}" | jq -e '.paths[0].decoder == "viterbi-neon"' >/dev/null
 echo "${OUTPUT}" | jq -e '.paths[1].decoder == "viterbi-reference"' >/dev/null
 echo "${OUTPUT}" | jq -e '.paths[2].decoder == "viterbi-sme2"' >/dev/null
-echo "${OUTPUT}" | jq -e '.paths[0].implementation_class == "partial"' >/dev/null
+echo "${OUTPUT}" | jq -e '
+  (.paths[0].branch_metric.selected_implementation == "neon" and
+   .paths[0].implementation_class == "partial") or
+  (.paths[0].branch_metric.selected_implementation == "fallback" and
+   .paths[0].implementation_class == "fallback")' >/dev/null
 echo "${OUTPUT}" | jq -e '.paths[1].implementation_class == "real"' >/dev/null
 echo "${OUTPUT}" | jq -e '.paths[2].implementation_class == "partial" or .paths[2].implementation_class == "fallback"' >/dev/null
 echo "${OUTPUT}" | jq -e '.paths[0].branch_metric.selected_implementation == "neon" or .paths[0].branch_metric.selected_implementation == "fallback"' >/dev/null

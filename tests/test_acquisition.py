@@ -406,12 +406,22 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
             repeated_report = json.loads(repeated.stdout)
 
         self.assertTrue(report["ok"])
-        self.assertEqual(report["schema_version"], 2)
+        self.assertEqual(report["schema_version"], 3)
         self.assertEqual(report["benchmark"]["name"], "acquisition-workload-sweep")
         self.assertEqual(report["benchmark"]["timed_sample_count"], 3)
         self.assertEqual(report["benchmark"]["minimum_sample_duration_ms"], 1.0)
         self.assertEqual(report["build"]["cxx_standard"], "C++17")
         self.assertEqual(report["build"]["target"], "host-native")
+        self.assertEqual(report["build"]["build_system"], "cmake")
+        self.assertTrue(report["build"]["cmake_version"])
+        self.assertTrue(report["build"]["cmake_generator"])
+        self.assertTrue(report["build"]["compiler_path"])
+        self.assertTrue(report["build"]["compiler_id"])
+        self.assertTrue(report["build"]["options"]["warnings_enabled"])
+        self.assertEqual(
+            report["build"]["source_files"]["reference"],
+            "src/acquisition/acquisition_reference.cpp",
+        )
         self.assertIn("reference", report["build"]["source_compile_flags"])
         self.assertIn("neon", report["build"]["source_compile_flags"])
         self.assertIn("sme2", report["build"]["source_compile_flags"])

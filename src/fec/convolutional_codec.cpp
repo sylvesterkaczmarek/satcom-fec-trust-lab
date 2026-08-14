@@ -5,10 +5,6 @@
 
 #include "branch_metrics_sme2.h"
 
-#if defined(__ARM_NEON) || defined(__ARM_NEON__)
-#include <arm_neon.h>
-#endif
-
 #include "../util/logging.h"
 
 namespace satcomfec {
@@ -38,38 +34,6 @@ void resize_metric_tables(size_t symbol_count, BranchMetricTables& tables) {
 }
 
 }  // namespace
-
-const ImplementationInfo& viterbi_neon_implementation_info() {
-    static const ImplementationInfo info {
-        "viterbi-neon",
-        ImplementationClass::kPartial,
-        "Partial NEON implementation: Arm NEON precomputes branch metrics when "
-        "__ARM_NEON is available; add-compare-select and traceback use the shared "
-        "scalar reference core.",
-    };
-    return info;
-}
-
-const ImplementationInfo& viterbi_sme2_implementation_info() {
-#if defined(__ARM_FEATURE_SME2)
-    static const ImplementationInfo info {
-        "viterbi-sme2",
-        ImplementationClass::kPartial,
-        "Partial SME2 implementation: SME2/SME streaming mode is used for "
-        "branch metric preparation; Viterbi trellis recurrence and traceback "
-        "remain scalar because of temporal dependency.",
-    };
-#else
-    static const ImplementationInfo info {
-        "viterbi-sme2",
-        ImplementationClass::kFallback,
-        "SME2 branch metric kernel was not compiled for this target; this path "
-        "falls back to scalar reference branch metrics. Viterbi trellis "
-        "recurrence and traceback remain scalar.",
-    };
-#endif
-    return info;
-}
 
 const ImplementationInfo& viterbi_reference_implementation_info() {
     static const ImplementationInfo info {
@@ -143,80 +107,6 @@ bool prepare_branch_metrics_reference(const SoftBitBuffer& soft_in,
     }
 
     return true;
-}
-
-bool prepare_branch_metrics_neon(const SoftBitBuffer& soft_in,
-                                 BranchMetricTables& tables) {
-#if defined(__ARM_NEON) || defined(__ARM_NEON__)
-    if (soft_in.empty() || (soft_in.size() % 2) != 0) {
-        log_error("prepare_branch_metrics_neon: expected an even number of soft bits");
-        return false;
-    }
-
-    const size_t symbol_count = soft_in.size() / 2;
-    resize_metric_tables(symbol_count, tables);
-
-    size_t symbol_index = 0;
-    for (; symbol_index + 16 <= symbol_count; symbol_index += 16) {
-        const auto* interleaved_ptr =
-            reinterpret_cast<const int8_t*>(soft_in.data() + 2 * symbol_index);
-        const int8x16x2_t pair = vld2q_s8(interleaved_ptr);
-
-        const int16x8_t llr0_lo = vmovl_s8(vget_low_s8(pair.val[0]));
-        const int16x8_t llr0_hi = vmovl_s8(vget_high_s8(pair.val[0]));
-        const int16x8_t llr1_lo = vmovl_s8(vget_low_s8(pair.val[1]));
-        const int16x8_t llr1_hi = vmovl_s8(vget_high_s8(pair.val[1]));
-
-        const int16x8_t sum_lo = vaddq_s16(llr0_lo, llr1_lo);
-        const int16x8_t sum_hi = vaddq_s16(llr0_hi, llr1_hi);
-        const int16x8_t diff_lo = vsubq_s16(llr0_lo, llr1_lo);
-        const int16x8_t diff_hi = vsubq_s16(llr0_hi, llr1_hi);
-        const int16x8_t inv_diff_lo = vsubq_s16(llr1_lo, llr0_lo);
-        const int16x8_t inv_diff_hi = vsubq_s16(llr1_hi, llr0_hi);
-
-        vst1q_s16(tables.metric_by_symbol_type[0].data() + symbol_index, vnegq_s16(sum_lo));
-        vst1q_s16(tables.metric_by_symbol_type[0].data() + symbol_index + 8, vnegq_s16(sum_hi));
-        vst1q_s16(tables.metric_by_symbol_type[1].data() + symbol_index, inv_diff_lo);
-        vst1q_s16(tables.metric_by_symbol_type[1].data() + symbol_index + 8, inv_diff_hi);
-        vst1q_s16(tables.metric_by_symbol_type[2].data() + symbol_index, diff_lo);
-        vst1q_s16(tables.metric_by_symbol_type[2].data() + symbol_index + 8, diff_hi);
-        vst1q_s16(tables.metric_by_symbol_type[3].data() + symbol_index, sum_lo);
-        vst1q_s16(tables.metric_by_symbol_type[3].data() + symbol_index + 8, sum_hi);
-    }
-
-    for (; symbol_index < symbol_count; ++symbol_index) {
-        const int llr0 = static_cast<int>(soft_in[2 * symbol_index]);
-        const int llr1 = static_cast<int>(soft_in[2 * symbol_index + 1]);
-        tables.metric_by_symbol_type[0][symbol_index] =
-            static_cast<int16_t>(-(llr0 + llr1));
-        tables.metric_by_symbol_type[1][symbol_index] =
-            static_cast<int16_t>(llr1 - llr0);
-        tables.metric_by_symbol_type[2][symbol_index] =
-            static_cast<int16_t>(llr0 - llr1);
-        tables.metric_by_symbol_type[3][symbol_index] =
-            static_cast<int16_t>(llr0 + llr1);
-    }
-
-    return true;
-#else
-    return prepare_branch_metrics_reference(soft_in, tables);
-#endif
-}
-
-bool branch_metrics_neon_kernel_compiled() {
-#if defined(__ARM_NEON) || defined(__ARM_NEON__)
-    return true;
-#else
-    return false;
-#endif
-}
-
-const char* branch_metrics_neon_selected_implementation() {
-#if defined(__ARM_NEON) || defined(__ARM_NEON__)
-    return "neon";
-#else
-    return "fallback";
-#endif
 }
 
 bool viterbi_decode_from_metrics(const BranchMetricTables& tables,

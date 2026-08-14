@@ -80,6 +80,58 @@
 #define SATCOMFEC_BENCHMARK_TARGET "host-native"
 #endif
 
+#ifndef SATCOMFEC_BENCHMARK_BUILD_SYSTEM
+#define SATCOMFEC_BENCHMARK_BUILD_SYSTEM "unavailable"
+#endif
+
+#ifndef SATCOMFEC_BENCHMARK_CMAKE_VERSION
+#define SATCOMFEC_BENCHMARK_CMAKE_VERSION "unavailable"
+#endif
+
+#ifndef SATCOMFEC_BENCHMARK_CMAKE_GENERATOR
+#define SATCOMFEC_BENCHMARK_CMAKE_GENERATOR "unavailable"
+#endif
+
+#ifndef SATCOMFEC_BENCHMARK_COMPILER_PATH
+#define SATCOMFEC_BENCHMARK_COMPILER_PATH "unavailable"
+#endif
+
+#ifndef SATCOMFEC_BENCHMARK_COMPILER_ID
+#define SATCOMFEC_BENCHMARK_COMPILER_ID "unavailable"
+#endif
+
+#ifndef SATCOMFEC_BENCHMARK_COMPILER_TARGET
+#define SATCOMFEC_BENCHMARK_COMPILER_TARGET "unavailable"
+#endif
+
+#ifndef SATCOMFEC_BENCHMARK_SYSTEM_NAME
+#define SATCOMFEC_BENCHMARK_SYSTEM_NAME "unavailable"
+#endif
+
+#ifndef SATCOMFEC_BENCHMARK_SYSTEM_PROCESSOR
+#define SATCOMFEC_BENCHMARK_SYSTEM_PROCESSOR "unavailable"
+#endif
+
+#ifndef SATCOMFEC_BENCHMARK_WARNINGS_ENABLED
+#define SATCOMFEC_BENCHMARK_WARNINGS_ENABLED "OFF"
+#endif
+
+#ifndef SATCOMFEC_BENCHMARK_WARNINGS_AS_ERRORS
+#define SATCOMFEC_BENCHMARK_WARNINGS_AS_ERRORS "OFF"
+#endif
+
+#ifndef SATCOMFEC_BENCHMARK_SANITIZERS_ENABLED
+#define SATCOMFEC_BENCHMARK_SANITIZERS_ENABLED "OFF"
+#endif
+
+#ifndef SATCOMFEC_BENCHMARK_NEON_REQUESTED
+#define SATCOMFEC_BENCHMARK_NEON_REQUESTED "OFF"
+#endif
+
+#ifndef SATCOMFEC_BENCHMARK_SME2_REQUESTED
+#define SATCOMFEC_BENCHMARK_SME2_REQUESTED "OFF"
+#endif
+
 namespace satcomfec::benchmark {
 namespace {
 
@@ -97,6 +149,11 @@ constexpr double kScoreRelativeTolerance = 2.0e-4;
 constexpr std::size_t kPerCaptureWindowCount = 2;
 
 volatile std::uint64_t g_result_sink = 0;
+
+bool build_option_enabled(const char* value) {
+    return std::strcmp(value, "ON") == 0 || std::strcmp(value, "1") == 0 ||
+           std::strcmp(value, "TRUE") == 0;
+}
 
 enum class ImplementationId {
     kReference,
@@ -1477,7 +1534,7 @@ void write_mode_json(std::ostream& output, const ModeResult& mode, bool trailing
 std::string serialize_json(const BenchmarkReport& report) {
     std::ostringstream output;
     output << "{\n";
-    output << "  \"schema_version\": 2,\n";
+    output << "  \"schema_version\": 3,\n";
     output << "  \"ok\": " << (report.ok ? "true" : "false") << ",\n";
     output << "  \"benchmark\": {\n";
     output << "    \"name\": \"acquisition-workload-sweep\",\n";
@@ -1564,8 +1621,24 @@ std::string serialize_json(const BenchmarkReport& report) {
     output << "    }\n";
     output << "  },\n";
     output << "  \"build\": {\n";
+    output << "    \"build_system\": \""
+           << tools::escape_json(SATCOMFEC_BENCHMARK_BUILD_SYSTEM) << "\",\n";
     output << "    \"target\": \"" << SATCOMFEC_BENCHMARK_TARGET << "\",\n";
+    output << "    \"cmake_version\": \""
+           << tools::escape_json(SATCOMFEC_BENCHMARK_CMAKE_VERSION) << "\",\n";
+    output << "    \"cmake_generator\": \""
+           << tools::escape_json(SATCOMFEC_BENCHMARK_CMAKE_GENERATOR) << "\",\n";
+    output << "    \"system_name\": \""
+           << tools::escape_json(SATCOMFEC_BENCHMARK_SYSTEM_NAME) << "\",\n";
+    output << "    \"system_processor\": \""
+           << tools::escape_json(SATCOMFEC_BENCHMARK_SYSTEM_PROCESSOR) << "\",\n";
     output << "    \"compiler\": \"" << compiler_name() << "\",\n";
+    output << "    \"compiler_id\": \""
+           << tools::escape_json(SATCOMFEC_BENCHMARK_COMPILER_ID) << "\",\n";
+    output << "    \"compiler_path\": \""
+           << tools::escape_json(SATCOMFEC_BENCHMARK_COMPILER_PATH) << "\",\n";
+    output << "    \"compiler_target\": \""
+           << tools::escape_json(SATCOMFEC_BENCHMARK_COMPILER_TARGET) << "\",\n";
     output << "    \"compiler_version\": \""
            << tools::escape_json(compiler_version()) << "\",\n";
     output << "    \"cxx_standard\": \"C++17\",\n";
@@ -1573,6 +1646,33 @@ std::string serialize_json(const BenchmarkReport& report) {
            << "\",\n";
     output << "    \"common_compile_flags\": \""
            << tools::escape_json(SATCOMFEC_BENCHMARK_COMMON_FLAGS) << "\",\n";
+    output << "    \"options\": {\n";
+    output << "      \"warnings_enabled\": "
+           << (build_option_enabled(SATCOMFEC_BENCHMARK_WARNINGS_ENABLED)
+                   ? "true"
+                   : "false")
+           << ",\n";
+    output << "      \"warnings_as_errors\": "
+           << (build_option_enabled(SATCOMFEC_BENCHMARK_WARNINGS_AS_ERRORS)
+                   ? "true"
+                   : "false")
+           << ",\n";
+    output << "      \"asan_ubsan_enabled\": "
+           << (build_option_enabled(SATCOMFEC_BENCHMARK_SANITIZERS_ENABLED)
+                   ? "true"
+                   : "false")
+           << ",\n";
+    output << "      \"explicit_neon_requested\": "
+           << (build_option_enabled(SATCOMFEC_BENCHMARK_NEON_REQUESTED)
+                   ? "true"
+                   : "false")
+           << ",\n";
+    output << "      \"explicit_sme2_requested\": "
+           << (build_option_enabled(SATCOMFEC_BENCHMARK_SME2_REQUESTED)
+                   ? "true"
+                   : "false")
+           << "\n";
+    output << "    },\n";
     output << "    \"source_compile_flags\": {\n";
     output << "      \"reference\": \""
            << tools::escape_json(SATCOMFEC_BENCHMARK_REFERENCE_FLAGS) << "\",\n";
@@ -1580,6 +1680,11 @@ std::string serialize_json(const BenchmarkReport& report) {
            << tools::escape_json(SATCOMFEC_BENCHMARK_NEON_FLAGS) << "\",\n";
     output << "      \"sme2\": \""
            << tools::escape_json(SATCOMFEC_BENCHMARK_SME2_FLAGS) << "\"\n";
+    output << "    },\n";
+    output << "    \"source_files\": {\n";
+    output << "      \"reference\": \"src/acquisition/acquisition_reference.cpp\",\n";
+    output << "      \"neon\": \"src/acquisition/acquisition_neon.cpp\",\n";
+    output << "      \"sme2\": \"src/acquisition/acquisition_sme2.cpp\"\n";
     output << "    }\n";
     output << "  },\n";
     output << "  \"runtime_cpu_features\": {\n";

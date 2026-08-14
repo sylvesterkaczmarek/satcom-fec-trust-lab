@@ -5,6 +5,16 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_ROOT="${ROOT_DIR}/build/verify_arm_paths"
 CXX_BIN="${CXX:-c++}"
+ARCHITECTURE="$(uname -m)"
+
+if ! command -v cmake >/dev/null 2>&1; then
+  echo "error: cmake 3.22 or newer is required" >&2
+  exit 1
+fi
+if ! command -v "${CXX_BIN}" >/dev/null 2>&1; then
+  echo "error: C++ compiler not found: ${CXX_BIN}" >&2
+  exit 1
+fi
 
 flag_supported() {
   local flag="$1"
@@ -41,10 +51,9 @@ sme2_acle_supported() {
 select_sme2_flag() {
   local flag
   local flags=(-march=armv9.4-a+sme2 -march=armv9.2-a+sme2)
-  if [[ "$(uname -s)" == "Darwin" && "$(uname -m)" == "arm64" ]]; then
+  if [[ "$(uname -s)" == "Darwin" && "${ARCHITECTURE}" == "arm64" ]]; then
     flags=(-mcpu=native+sme2 -march=native+sme2 "${flags[@]}")
   fi
-
   for flag in "${flags[@]}"; do
     if flag_supported "${flag}" && sme2_acle_supported "${flag}"; then
       printf '%s\n' "${flag}"
@@ -54,114 +63,76 @@ select_sme2_flag() {
   return 1
 }
 
-build_with_cmake_or_script() {
+configure_and_build() {
   local build_dir="$1"
   shift
-  local -a cmake_options=("$@")
-
-  if command -v cmake >/dev/null 2>&1; then
-    cmake -S "${ROOT_DIR}" -B "${build_dir}" \
-      -DCMAKE_BUILD_TYPE=Release \
-      "${cmake_options[@]}"
-    cmake --build "${build_dir}" --target \
-      replay_demo \
-      benchmark_decoders \
-      benchmark_acquisition \
-      check_branch_metrics \
-      acquisition_demo \
-      check_acquisition_kernels \
-      check_sme2_acquisition
-    return
-  fi
-
-  bash "${ROOT_DIR}/scripts/build_host_tools.sh" all
+  cmake -S "${ROOT_DIR}" -B "${build_dir}" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_CXX_COMPILER="${CXX_BIN}" \
+    -DSATCOMFEC_ENABLE_WARNINGS=ON \
+    -DSATCOMFEC_WARNINGS_AS_ERRORS=ON \
+    "$@"
+  cmake --build "${build_dir}" --parallel
 }
 
-echo "Compiler:"
-"${CXX_BIN}" --version
-
-echo
-echo "Detected architecture:"
-uname -m
-
-echo
-echo "Default portable build:"
-build_with_cmake_or_script "${BUILD_ROOT}/portable" \
-  -DSATCOMFEC_ENABLE_NEON=OFF \
-  -DSATCOMFEC_ENABLE_SME2=OFF
-
-if command -v cmake >/dev/null 2>&1; then
-  portable_benchmark="${BUILD_ROOT}/portable/benchmark_acquisition"
-else
-  portable_benchmark="${ROOT_DIR}/build/host_replay/benchmark_acquisition"
-fi
-
-echo
-echo "Checking portable acquisition benchmark report:"
-"${portable_benchmark}" \
-  --workload small \
-  --warmup-rounds 0 \
-  --samples 3 \
-  --min-sample-ms 1 \
-  >/dev/null
-echo "Portable acquisition benchmark report passed."
-
-echo
-echo "Running unit tests on default build:"
-python3 -m unittest discover -s "${ROOT_DIR}/tests" -v
-
-echo
-echo "Checking branch-metric path selection on default build:"
-bash "${ROOT_DIR}/scripts/check_branch_metrics.sh"
-
-echo
-echo "SME2 build probe:"
-if sme2_flag="$(select_sme2_flag)"; then
-  echo "SME2 compiler support detected with ${sme2_flag}"
-  if command -v cmake >/dev/null 2>&1; then
-    build_with_cmake_or_script "${BUILD_ROOT}/sme2" \
-      -DSATCOMFEC_ENABLE_SME2=ON
-    sme2_acquisition_checker="${BUILD_ROOT}/sme2/check_sme2_acquisition"
-    sme2_benchmark="${BUILD_ROOT}/sme2/benchmark_acquisition"
-  else
-    SATCOMFEC_ENABLE_SME2=ON bash "${ROOT_DIR}/scripts/build_host_tools.sh" all
-    sme2_acquisition_checker="${ROOT_DIR}/build/host_replay/check_sme2_acquisition"
-    sme2_benchmark="${ROOT_DIR}/build/host_replay/benchmark_acquisition"
-  fi
-
-  echo
-  echo "Checking SME2 acquisition correctness and runtime availability:"
-  "${sme2_acquisition_checker}"
-
-  echo
-  echo "Checking SME2-build acquisition benchmark report:"
-  "${sme2_benchmark}" \
+run_build_checks() {
+  local build_dir="$1"
+  local mode="$2"
+  python3 "${ROOT_DIR}/scripts/check_compile_commands.py" \
+    --build-dir "${build_dir}" \
+    --expect "${mode}"
+  ctest --test-dir "${build_dir}" --output-on-failure
+  "${build_dir}/benchmark_acquisition" \
     --workload small \
     --warmup-rounds 0 \
     --samples 3 \
     --min-sample-ms 1 \
     >/dev/null
-  echo "SME2-build acquisition benchmark report passed."
+  echo "${mode} build and correctness checks passed."
+}
 
-  sme2_obj="${BUILD_ROOT}/branch_metrics_sme2.o"
-  mkdir -p "${BUILD_ROOT}"
-  "${CXX_BIN}" -std=c++17 -O2 "${sme2_flag}" \
-    -I"${ROOT_DIR}/src" \
-    -c "${ROOT_DIR}/src/fec/branch_metrics_sme2.cpp" \
-    -o "${sme2_obj}"
+echo "Compiler:"
+"${CXX_BIN}" --version
+echo
+echo "Architecture: ${ARCHITECTURE}"
 
-  if command -v nm >/dev/null 2>&1; then
+cmake -E remove_directory "${BUILD_ROOT}"
+
+echo
+echo "Portable build:"
+configure_and_build "${BUILD_ROOT}/portable" \
+  -DSATCOMFEC_ENABLE_NEON=OFF \
+  -DSATCOMFEC_ENABLE_SME2=OFF
+run_build_checks "${BUILD_ROOT}/portable" portable
+
+case "${ARCHITECTURE}" in
+  arm64|aarch64)
     echo
-    echo "SME2 object symbols:"
-    nm "${sme2_obj}" | grep -E 'prepare_branch_metrics_sme2|branch_metrics_sme2' || true
-  elif command -v objdump >/dev/null 2>&1; then
+    echo "Explicit NEON build:"
+    configure_and_build "${BUILD_ROOT}/neon" \
+      -DSATCOMFEC_ENABLE_NEON=ON \
+      -DSATCOMFEC_ENABLE_SME2=OFF
+    run_build_checks "${BUILD_ROOT}/neon" neon
+    ;;
+  *)
     echo
-    echo "SME2 object symbols:"
-    objdump -t "${sme2_obj}" | grep -E 'prepare_branch_metrics_sme2|branch_metrics_sme2' || true
-  else
-    echo "nm/objdump not available; skipped SME2 object symbol listing"
-  fi
+    echo "Explicit NEON execution skipped: ${ARCHITECTURE} is not AArch64."
+    ;;
+esac
+
+echo
+echo "SME2 build probe:"
+if sme2_flag="$(select_sme2_flag)"; then
+  echo "SME2 ACLE compiler support detected with ${sme2_flag}."
+  configure_and_build "${BUILD_ROOT}/sme2" \
+    -DSATCOMFEC_ENABLE_NEON=OFF \
+    -DSATCOMFEC_ENABLE_SME2=ON
+  run_build_checks "${BUILD_ROOT}/sme2" sme2
+  "${BUILD_ROOT}/sme2/check_sme2_acquisition"
 else
-  echo "SME2 compiler support not detected; skipped SATCOMFEC_ENABLE_SME2=ON build."
-  echo "This is expected on x86 CI and on Arm toolchains without SME2 ACLE support."
+  echo "SME2 ACLE compiler support was not detected; SME2 build skipped."
+  echo "This is expected on x86 and on Arm toolchains without SME2 ACLE support."
 fi
+
+echo
+echo "Arm path verification passed."

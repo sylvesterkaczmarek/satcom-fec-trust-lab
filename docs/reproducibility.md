@@ -14,6 +14,17 @@ Publicly supported workflow:
 Exact commands:
 
 ```bash
+make verify
+```
+
+`make verify` starts from fresh build directories and performs fixture hash
+verification, a strict-warning portable build, compile-command isolation
+checks, CTests, supported replay/trust/acquisition/FEC scripts, Python
+regressions, ASan/UBSan CTests, and optional native Arm build probes.
+
+Individual commands remain available:
+
+```bash
 make build
 make acquisition
 make check-acquisition
@@ -57,6 +68,10 @@ python3 scripts/repeat_acquisition_benchmark.py \
 python3 -m unittest discover -s tests -v
 ```
 
+Requirements are CMake 3.22+, a C++17 compiler, Python 3, Bash, Make, and `jq`.
+The supported build helper always uses CMake; there is no second direct-compiler
+build graph that can drift from the documented source flags.
+
 Checked-in fixtures:
 
 - `data/synthetic/canned_replay/demo_conv_bpsk.iq`
@@ -73,14 +88,30 @@ Checked-in fixtures:
 - `data/synthetic/acquisition/preamble_qpsk_256.iq`
 - `data/synthetic/acquisition/{clean,noisy,frequency_offset,ambiguous,weak_faded}.iq`
 - matching JSON ground-truth sidecars for each acquisition capture
+- `data/synthetic/fixture_manifest.json`, containing SHA-256 and byte length
+  for every generated IQ/JSON file plus each generator's fixture seeds
 
 Generated from source in this repo:
 
 - `scripts/generate_synthetic_iq.py`
 - `scripts/generate_acquisition_fixtures.py`
+- `scripts/update_fixture_checksums.py`
+
+Each sidecar records `generator`, `seed`, `preamble_seed`, `iq_sha256`, and
+`preamble_sha256`. Verify the checked-in bytes without regeneration using
+`make verify-fixtures`. `make regenerate` rewrites both fixture families and
+then updates the manifest.
 
 What CI verifies:
 
+- portable x86/Linux compilation, strict warnings, CTests, replay, trust,
+  acquisition, legacy FEC checks, fixture regeneration, and Python tests
+- portable x86 ASan/UBSan compilation and CTest execution
+- source-specific compile flags through the exported compile-command database
+- native Arm64/Linux reference/NEON execution, numerical equivalence, and NEON
+  object instruction evidence
+- NDK SME2 compilation plus streaming-mode and ZA VGx4 instruction evidence;
+  this lane does not execute SME2 or publish timing
 - exact replay timing/CFO recovery before demodulation and payload decode
 - Android NDK r29 cross-compilation of the command-line acquisition benchmark,
   including AArch64 ELF, NEON, scalar-isolation, and SME2 instruction checks

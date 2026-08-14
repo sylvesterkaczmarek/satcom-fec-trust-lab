@@ -81,6 +81,12 @@ timestamp, OS, architecture, CPU model, compiler, source-specific flags,
 runtime feature detection, vector width where available, workload definition,
 correctness evidence, and implementation actually executed.
 
+The `build` object also records the CMake version and generator, compiler path,
+compiler ID and target, target system/processor, warning and sanitizer options,
+and the exact source files represented by each implementation label. These
+fields describe the binary that emitted the report; they do not replace the
+tracked `compile_commands.json` separation check.
+
 ## Fairness checks
 
 - All implementations receive one shared timing/CFO hypothesis plan and the

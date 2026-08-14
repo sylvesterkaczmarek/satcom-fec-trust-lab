@@ -12,9 +12,17 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE BOOL "Export compile commands" FORCE)
 
 option(SATCOMFEC_ENABLE_NEON "Build with an explicit AArch64 NEON target flag" OFF)
 option(SATCOMFEC_ENABLE_SME2 "Build with an explicit AArch64 SME2 target flag" OFF)
+option(SATCOMFEC_ENABLE_WARNINGS "Enable project compiler warnings" ON)
+option(SATCOMFEC_WARNINGS_AS_ERRORS "Treat project compiler warnings as errors" OFF)
+option(
+    SATCOMFEC_ENABLE_SANITIZERS
+    "Enable AddressSanitizer and UndefinedBehaviorSanitizer"
+    OFF
+)
 option(
     SATCOMFEC_ANDROID_BENCHMARK_ONLY
     "Build only the acquisition benchmark for Android/ADB execution"
@@ -37,6 +45,61 @@ if(SATCOMFEC_ANDROID_BENCHMARK_ONLY)
     message(STATUS
         "satcom-fec-trust-lab: Android ADB benchmark-only build for "
         "${CMAKE_ANDROID_ARCH_ABI} (${ANDROID_PLATFORM})"
+    )
+endif()
+
+add_library(satcomfec_project_options INTERFACE)
+set(SATCOMFEC_PROJECT_WARNING_FLAGS "")
+set(SATCOMFEC_PROJECT_SANITIZER_FLAGS "")
+
+if(SATCOMFEC_ENABLE_WARNINGS)
+    if(MSVC)
+        set(SATCOMFEC_PROJECT_WARNING_FLAGS "/W4")
+        if(SATCOMFEC_WARNINGS_AS_ERRORS)
+            list(APPEND SATCOMFEC_PROJECT_WARNING_FLAGS "/WX")
+        endif()
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        set(SATCOMFEC_PROJECT_WARNING_FLAGS "-Wall" "-Wextra" "-Wpedantic")
+        if(SATCOMFEC_WARNINGS_AS_ERRORS)
+            list(APPEND SATCOMFEC_PROJECT_WARNING_FLAGS "-Werror")
+        endif()
+    else()
+        message(WARNING
+            "Compiler warning flags are not defined for ${CMAKE_CXX_COMPILER_ID}."
+        )
+    endif()
+    target_compile_options(
+        satcomfec_project_options
+        INTERFACE
+        ${SATCOMFEC_PROJECT_WARNING_FLAGS}
+    )
+endif()
+
+if(SATCOMFEC_ENABLE_SANITIZERS)
+    if(ANDROID)
+        message(FATAL_ERROR
+            "SATCOMFEC_ENABLE_SANITIZERS=ON is supported only by the portable host build."
+        )
+    endif()
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        message(FATAL_ERROR
+            "SATCOMFEC_ENABLE_SANITIZERS=ON requires GCC or Clang."
+        )
+    endif()
+    set(
+        SATCOMFEC_PROJECT_SANITIZER_FLAGS
+        "-fsanitize=address,undefined"
+        "-fno-omit-frame-pointer"
+    )
+    target_compile_options(
+        satcomfec_project_options
+        INTERFACE
+        ${SATCOMFEC_PROJECT_SANITIZER_FLAGS}
+    )
+    target_link_options(
+        satcomfec_project_options
+        INTERFACE
+        "-fsanitize=address,undefined"
     )
 endif()
 
@@ -284,6 +347,7 @@ add_library(
     STATIC
     ${SATCOMFEC_CORE_SOURCES}
 )
+target_link_libraries(satcom_replay_core PRIVATE satcomfec_project_options)
 
 set(SATCOMFEC_REFERENCE_COMPILE_OPTIONS "")
 if(SATCOMFEC_NO_LOOP_VECTORIZE_FLAG)
@@ -308,19 +372,18 @@ if(SATCOMFEC_ACQUISITION_NEON_AVAILABLE)
         SOURCE src/acquisition/acquisition_neon.cpp
         APPEND PROPERTY COMPILE_DEFINITIONS SATCOMFEC_ACQUISITION_NEON_COMPILED=1
     )
+    set_property(
+        SOURCE src/fec/viterbi_decoder_neon.cpp
+        APPEND PROPERTY COMPILE_DEFINITIONS SATCOMFEC_FEC_NEON_COMPILED=1
+    )
     if(SATCOMFEC_NEON_SOURCE_FLAG)
         set_property(
-            SOURCE src/acquisition/acquisition_neon.cpp
+            SOURCE
+                src/acquisition/acquisition_neon.cpp
+                src/fec/viterbi_decoder_neon.cpp
             APPEND PROPERTY COMPILE_OPTIONS "${SATCOMFEC_NEON_SOURCE_FLAG}"
         )
     endif()
-endif()
-
-if(SATCOMFEC_NEON_SOURCE_FLAG AND NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
-    set_property(
-        SOURCE src/fec/convolutional_codec.cpp
-        APPEND PROPERTY COMPILE_OPTIONS "${SATCOMFEC_NEON_SOURCE_FLAG}"
-    )
 endif()
 
 if(SATCOMFEC_SME2_SOURCE_FLAG)
@@ -330,9 +393,7 @@ if(SATCOMFEC_SME2_SOURCE_FLAG)
     )
     if(NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
         set_property(
-            SOURCE
-                src/fec/branch_metrics_sme2.cpp
-                src/fec/convolutional_codec.cpp
+            SOURCE src/fec/branch_metrics_sme2.cpp
             APPEND PROPERTY COMPILE_OPTIONS "${SATCOMFEC_SME2_SOURCE_FLAG}"
         )
     endif()
@@ -356,10 +417,16 @@ target_include_directories(
 
 if(NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
     add_executable(replay_demo tools/replay_demo.cpp)
-    target_link_libraries(replay_demo PRIVATE satcom_replay_core)
+    target_link_libraries(
+        replay_demo
+        PRIVATE satcom_replay_core satcomfec_project_options
+    )
 
     add_executable(benchmark_decoders tools/benchmark_decoders.cpp)
-    target_link_libraries(benchmark_decoders PRIVATE satcom_replay_core)
+    target_link_libraries(
+        benchmark_decoders
+        PRIVATE satcom_replay_core satcomfec_project_options
+    )
 endif()
 
 add_executable(
@@ -367,7 +434,10 @@ add_executable(
     tools/acquisition_benchmark.cpp
     tools/benchmark_acquisition.cpp
 )
-target_link_libraries(benchmark_acquisition PRIVATE satcom_replay_core)
+target_link_libraries(
+    benchmark_acquisition
+    PRIVATE satcom_replay_core satcomfec_project_options
+)
 
 set(SATCOMFEC_BENCHMARK_GIT_SHA "unavailable")
 set(SATCOMFEC_BENCHMARK_GIT_DIRTY "unknown")
@@ -410,6 +480,12 @@ else()
     set(SATCOMFEC_BENCHMARK_BUILD_TYPE "unspecified")
     set(SATCOMFEC_BENCHMARK_COMMON_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
 endif()
+string(JOIN " " SATCOMFEC_BENCHMARK_WARNING_FLAGS ${SATCOMFEC_PROJECT_WARNING_FLAGS})
+string(JOIN " " SATCOMFEC_BENCHMARK_SANITIZER_FLAGS ${SATCOMFEC_PROJECT_SANITIZER_FLAGS})
+string(APPEND
+    SATCOMFEC_BENCHMARK_COMMON_FLAGS
+    " ${SATCOMFEC_BENCHMARK_WARNING_FLAGS} ${SATCOMFEC_BENCHMARK_SANITIZER_FLAGS}"
+)
 string(STRIP "${SATCOMFEC_BENCHMARK_COMMON_FLAGS}" SATCOMFEC_BENCHMARK_COMMON_FLAGS)
 string(JOIN " " SATCOMFEC_BENCHMARK_REFERENCE_FLAGS ${SATCOMFEC_REFERENCE_COMPILE_OPTIONS})
 if(NOT SATCOMFEC_BENCHMARK_REFERENCE_FLAGS)
@@ -466,22 +542,120 @@ satcomfec_add_string_definition(
     benchmark_acquisition SATCOMFEC_BENCHMARK_TARGET
     "${SATCOMFEC_BENCHMARK_TARGET}"
 )
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_BUILD_SYSTEM
+    "cmake"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_CMAKE_VERSION
+    "${CMAKE_VERSION}"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_CMAKE_GENERATOR
+    "${CMAKE_GENERATOR}"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_COMPILER_PATH
+    "${CMAKE_CXX_COMPILER}"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_COMPILER_ID
+    "${CMAKE_CXX_COMPILER_ID}"
+)
+if(CMAKE_CXX_COMPILER_TARGET)
+    set(SATCOMFEC_BENCHMARK_COMPILER_TARGET "${CMAKE_CXX_COMPILER_TARGET}")
+else()
+    set(SATCOMFEC_BENCHMARK_COMPILER_TARGET "compiler-default")
+endif()
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_COMPILER_TARGET
+    "${SATCOMFEC_BENCHMARK_COMPILER_TARGET}"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_SYSTEM_NAME
+    "${CMAKE_SYSTEM_NAME}"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_SYSTEM_PROCESSOR
+    "${CMAKE_SYSTEM_PROCESSOR}"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_WARNINGS_ENABLED
+    "${SATCOMFEC_ENABLE_WARNINGS}"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_WARNINGS_AS_ERRORS
+    "${SATCOMFEC_WARNINGS_AS_ERRORS}"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_SANITIZERS_ENABLED
+    "${SATCOMFEC_ENABLE_SANITIZERS}"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_NEON_REQUESTED
+    "${SATCOMFEC_ENABLE_NEON}"
+)
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_SME2_REQUESTED
+    "${SATCOMFEC_ENABLE_SME2}"
+)
 
 if(NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
     add_executable(check_branch_metrics tools/check_branch_metrics.cpp)
-    target_link_libraries(check_branch_metrics PRIVATE satcom_replay_core)
+    target_link_libraries(
+        check_branch_metrics
+        PRIVATE satcom_replay_core satcomfec_project_options
+    )
 
     add_executable(acquisition_demo tools/acquisition_demo.cpp)
-    target_link_libraries(acquisition_demo PRIVATE satcom_replay_core)
+    target_link_libraries(
+        acquisition_demo
+        PRIVATE satcom_replay_core satcomfec_project_options
+    )
 
     add_executable(check_acquisition_kernels tools/check_acquisition_kernels.cpp)
-    target_link_libraries(check_acquisition_kernels PRIVATE satcom_replay_core)
+    target_link_libraries(
+        check_acquisition_kernels
+        PRIVATE satcom_replay_core satcomfec_project_options
+    )
 
     add_executable(check_sme2_acquisition tools/check_sme2_acquisition.cpp)
-    target_link_libraries(check_sme2_acquisition PRIVATE satcom_replay_core)
+    target_link_libraries(
+        check_sme2_acquisition
+        PRIVATE satcom_replay_core satcomfec_project_options
+    )
 endif()
 
 if(BUILD_TESTING AND NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
+    find_package(Python3 3 REQUIRED COMPONENTS Interpreter)
+    if(SATCOMFEC_ENABLE_SME2)
+        set(SATCOMFEC_COMPILE_CHECK_MODE "sme2")
+    elseif(SATCOMFEC_ENABLE_NEON)
+        set(SATCOMFEC_COMPILE_CHECK_MODE "neon")
+    else()
+        set(SATCOMFEC_COMPILE_CHECK_MODE "portable")
+    endif()
+    add_test(
+        NAME fixture_manifest_integrity
+        COMMAND "${Python3_EXECUTABLE}"
+            scripts/update_fixture_checksums.py
+            --check
+    )
+    set_tests_properties(
+        fixture_manifest_integrity
+        PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+    add_test(
+        NAME compile_flag_separation
+        COMMAND "${Python3_EXECUTABLE}"
+            scripts/check_compile_commands.py
+            --build-dir "${CMAKE_BINARY_DIR}"
+            --expect "${SATCOMFEC_COMPILE_CHECK_MODE}"
+    )
+    set_tests_properties(
+        compile_flag_separation
+        PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    )
     add_test(
         NAME replay_acquisition_end_to_end
         COMMAND replay_demo
