@@ -110,3 +110,19 @@ jobs:
         env:
           SATCOMFEC_ENABLE_NEON: "ON"
         run: python3 -m unittest discover -s tests -v
+
+  android-ndk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Android NDK r29
+        run: sdkmanager --install "ndk;29.0.14206865"
+
+      - name: Build and inspect Android SME2 acquisition benchmark
+        run: >-
+          bash scripts/verify_android_benchmark_build.sh
+          --ndk "${ANDROID_HOME}/ndk/29.0.14206865"
+          --sme2 on

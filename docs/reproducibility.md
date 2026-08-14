@@ -82,6 +82,8 @@ Generated from source in this repo:
 What CI verifies:
 
 - exact replay timing/CFO recovery before demodulation and payload decode
+- Android NDK r29 cross-compilation of the command-line acquisition benchmark,
+  including AArch64 ELF, NEON, scalar-isolation, and SME2 instruction checks
 - scalar acquisition timing/CFO recovery on five deterministic fixtures
 - reference/NEON acquisition equivalence on native Arm64 CI
 - explicit NEON-unavailable reporting on portable x86 CI

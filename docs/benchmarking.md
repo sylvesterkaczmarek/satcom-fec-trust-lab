@@ -5,6 +5,12 @@ available SME2 acquisition implementations against fixed synthetic workload
 classes. JSON written to standard output is authoritative; `--json PATH` and
 `--csv PATH` optionally persist the JSON and a compact summary.
 
+The same correctness-gated harness can be built as a minimal `arm64-v8a`
+Android command-line executable and run through ADB. Build/runtime feature
+gating and exact commands are documented in
+[`docs/android_benchmark.md`](android_benchmark.md). No mobile result is
+included unless it was retrieved from an actual device run.
+
 ```bash
 # Full predetermined sweep with default statistical settings.
 bash scripts/benchmark_acquisition.sh \

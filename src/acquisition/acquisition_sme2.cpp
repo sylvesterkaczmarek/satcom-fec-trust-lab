@@ -153,21 +153,21 @@ AcquisitionResult result_from_workspace(
 }
 
 bool runtime_has_sme2() {
-    if (!__arm_has_sme()) {
-        return false;
-    }
 #if defined(__APPLE__)
     int supported = 0;
     std::size_t supported_size = sizeof(supported);
-    return sysctlbyname(
-               "hw.optional.arm.FEAT_SME2",
-               &supported,
-               &supported_size,
-               nullptr,
-               0) == 0 &&
-           supported != 0;
+    const bool hardware_supported =
+        sysctlbyname(
+            "hw.optional.arm.FEAT_SME2",
+            &supported,
+            &supported_size,
+            nullptr,
+            0) == 0 &&
+        supported != 0;
+    return hardware_supported && __arm_has_sme();
 #elif defined(__linux__) && defined(HWCAP2_SME2)
-    return (getauxval(AT_HWCAP2) & HWCAP2_SME2) != 0;
+    // Check the kernel-provided capability mask before touching streaming state.
+    return (getauxval(AT_HWCAP2) & HWCAP2_SME2) != 0 && __arm_has_sme();
 #else
     return false;
 #endif

@@ -411,6 +411,7 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
         self.assertEqual(report["benchmark"]["timed_sample_count"], 3)
         self.assertEqual(report["benchmark"]["minimum_sample_duration_ms"], 1.0)
         self.assertEqual(report["build"]["cxx_standard"], "C++17")
+        self.assertEqual(report["build"]["target"], "host-native")
         self.assertIn("reference", report["build"]["source_compile_flags"])
         self.assertIn("neon", report["build"]["source_compile_flags"])
         self.assertIn("sme2", report["build"]["source_compile_flags"])
@@ -422,6 +423,9 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
             )
         self.assertIn("cpu_model_source", report["host"])
         self.assertIn("device_model", report["host"])
+        self.assertFalse(report["host"]["android"]["build"])
+        self.assertIn("auxv_hwcap_hex", report["runtime_cpu_features"])
+        self.assertIn("auxv_hwcap2_hex", report["runtime_cpu_features"])
         self.assertEqual(len(report["workloads"]), 1)
 
         workload = report["workloads"][0]

@@ -1,4 +1,4 @@
-.PHONY: help build replay replay-impaired replay-ambiguous replay-failed replay-no-signal acquisition check check-acquisition check-acquisition-neon verify-acquisition-neon check-acquisition-sme2 verify-acquisition-sme2 compare-trust align check-metrics verify-arm benchmark benchmark-acquisition benchmark-acquisition-repeat benchmark-decoder-legacy test regenerate
+.PHONY: help build replay replay-impaired replay-ambiguous replay-failed replay-no-signal acquisition check check-acquisition check-acquisition-neon verify-acquisition-neon check-acquisition-sme2 verify-acquisition-sme2 compare-trust align check-metrics verify-arm benchmark benchmark-acquisition benchmark-acquisition-repeat benchmark-android-build benchmark-android-verify benchmark-android-run benchmark-decoder-legacy test regenerate
 
 help:
 	@printf '%s\n' \
@@ -23,6 +23,9 @@ help:
 	  '  make benchmark       Run the acquisition workload-size sweep' \
 	  '  make benchmark-acquisition Run the acquisition workload-size sweep' \
 	  '  make benchmark-acquisition-repeat Run five independent benchmark processes' \
+	  '  make benchmark-android-build Build the arm64-v8a ADB benchmark' \
+	  '  make benchmark-android-verify Inspect the Android ELF and SIMD objects' \
+	  '  make benchmark-android-run Build and run it on an authorized ADB device' \
 	  '  make benchmark-decoder-legacy Run the legacy decoder microbenchmark' \
 	  '  make test            Run the host-side automated tests' \
 	  '  make regenerate      Regenerate the checked-in synthetic fixtures'
@@ -86,6 +89,15 @@ benchmark-acquisition:
 
 benchmark-acquisition-repeat:
 	python3 scripts/repeat_acquisition_benchmark.py
+
+benchmark-android-build:
+	bash scripts/build_android_benchmark.sh
+
+benchmark-android-verify:
+	bash scripts/verify_android_benchmark_build.sh
+
+benchmark-android-run:
+	bash scripts/run_android_benchmark.sh
 
 benchmark-decoder-legacy:
 	bash scripts/benchmark_decoder_paths.sh

@@ -15,6 +15,30 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 option(SATCOMFEC_ENABLE_NEON "Build with an explicit AArch64 NEON target flag" OFF)
 option(SATCOMFEC_ENABLE_SME2 "Build with an explicit AArch64 SME2 target flag" OFF)
+option(
+    SATCOMFEC_ANDROID_BENCHMARK_ONLY
+    "Build only the acquisition benchmark for Android/ADB execution"
+    OFF
+)
+
+if(SATCOMFEC_ANDROID_BENCHMARK_ONLY)
+    if(NOT ANDROID)
+        message(FATAL_ERROR
+            "SATCOMFEC_ANDROID_BENCHMARK_ONLY=ON requires the Android NDK "
+            "CMake toolchain file. Use scripts/build_android_benchmark.sh."
+        )
+    endif()
+    if(NOT CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
+        message(FATAL_ERROR
+            "The Android acquisition benchmark supports only arm64-v8a; got "
+            "'${CMAKE_ANDROID_ARCH_ABI}'."
+        )
+    endif()
+    message(STATUS
+        "satcom-fec-trust-lab: Android ADB benchmark-only build for "
+        "${CMAKE_ANDROID_ARCH_ABI} (${ANDROID_PLATFORM})"
+    )
+endif()
 
 function(satcomfec_find_supported_flag out_var)
     foreach(candidate_flag IN LISTS ARGN)
@@ -141,7 +165,11 @@ if(SATCOMFEC_ENABLE_SME2)
     message(STATUS "satcom-fec-trust-lab: SME2 build enabled with ${SATCOMFEC_SME2_FLAG}")
 
     set(SATCOMFEC_SME2_BASE_NEON_CANDIDATE "")
-    if(SATCOMFEC_SME2_FLAG STREQUAL "-mcpu=native+sme2")
+    if(ANDROID)
+        # Keep all code outside the gated SME2 translation unit runnable on
+        # baseline arm64-v8a devices.
+        set(SATCOMFEC_SME2_BASE_NEON_CANDIDATE "-march=armv8-a+simd")
+    elseif(SATCOMFEC_SME2_FLAG STREQUAL "-mcpu=native+sme2")
         set(SATCOMFEC_SME2_BASE_NEON_CANDIDATE
             "-mcpu=native+nosve+nosve2+nosme+nosme2")
     elseif(SATCOMFEC_SME2_FLAG STREQUAL "-march=native+sme2")
@@ -221,29 +249,40 @@ if(NOT SATCOMFEC_ACQUISITION_NEON_AVAILABLE)
     endif()
 endif()
 
-add_library(
-    satcom_replay_core
-    STATIC
+set(
+    SATCOMFEC_ACQUISITION_SOURCES
     src/acquisition/acquisition_neon.cpp
     src/acquisition/acquisition_plan.cpp
     src/acquisition/acquisition_reference.cpp
     src/acquisition/acquisition_runner.cpp
     src/acquisition/acquisition_sme2.cpp
-    src/demo/replay_acquisition.cpp
-    src/demo/replay_pipeline.cpp
-    src/dsp/front_end_dsp.cpp
-    src/dsp/framing.cpp
-    src/dsp/soft_demod.cpp
-    src/fec/branch_metrics_sme2.cpp
-    src/fec/convolutional_codec.cpp
-    src/fec/ldpc_bitflip.cpp
-    src/fec/viterbi_decoder_neon.cpp
-    src/fec/viterbi_decoder_reference.cpp
-    src/fec/viterbi_decoder_sme2.cpp
-    src/trust/trust_features.cpp
-    src/trust/trust_score.cpp
-    src/util/iq_reader.cpp
-    src/util/logging.cpp
+)
+
+set(SATCOMFEC_CORE_SOURCES ${SATCOMFEC_ACQUISITION_SOURCES})
+if(NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
+    list(APPEND SATCOMFEC_CORE_SOURCES
+        src/demo/replay_acquisition.cpp
+        src/demo/replay_pipeline.cpp
+        src/dsp/front_end_dsp.cpp
+        src/dsp/framing.cpp
+        src/dsp/soft_demod.cpp
+        src/fec/branch_metrics_sme2.cpp
+        src/fec/convolutional_codec.cpp
+        src/fec/ldpc_bitflip.cpp
+        src/fec/viterbi_decoder_neon.cpp
+        src/fec/viterbi_decoder_reference.cpp
+        src/fec/viterbi_decoder_sme2.cpp
+        src/trust/trust_features.cpp
+        src/trust/trust_score.cpp
+        src/util/iq_reader.cpp
+        src/util/logging.cpp
+    )
+endif()
+
+add_library(
+    satcom_replay_core
+    STATIC
+    ${SATCOMFEC_CORE_SOURCES}
 )
 
 set(SATCOMFEC_REFERENCE_COMPILE_OPTIONS "")
@@ -277,7 +316,7 @@ if(SATCOMFEC_ACQUISITION_NEON_AVAILABLE)
     endif()
 endif()
 
-if(SATCOMFEC_NEON_SOURCE_FLAG)
+if(SATCOMFEC_NEON_SOURCE_FLAG AND NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
     set_property(
         SOURCE src/fec/convolutional_codec.cpp
         APPEND PROPERTY COMPILE_OPTIONS "${SATCOMFEC_NEON_SOURCE_FLAG}"
@@ -286,16 +325,27 @@ endif()
 
 if(SATCOMFEC_SME2_SOURCE_FLAG)
     set_property(
-        SOURCE
-            src/acquisition/acquisition_sme2.cpp
-            src/fec/branch_metrics_sme2.cpp
-            src/fec/convolutional_codec.cpp
+        SOURCE src/acquisition/acquisition_sme2.cpp
         APPEND PROPERTY COMPILE_OPTIONS "${SATCOMFEC_SME2_SOURCE_FLAG}"
     )
+    if(NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
+        set_property(
+            SOURCE
+                src/fec/branch_metrics_sme2.cpp
+                src/fec/convolutional_codec.cpp
+            APPEND PROPERTY COMPILE_OPTIONS "${SATCOMFEC_SME2_SOURCE_FLAG}"
+        )
+    endif()
     set_property(
         SOURCE src/acquisition/acquisition_sme2.cpp
         APPEND PROPERTY COMPILE_DEFINITIONS SATCOMFEC_ACQUISITION_SME2_COMPILED=1
     )
+endif()
+
+if(ANDROID)
+    set(SATCOMFEC_BENCHMARK_TARGET "android-adb-native")
+else()
+    set(SATCOMFEC_BENCHMARK_TARGET "host-native")
 endif()
 
 target_include_directories(
@@ -304,11 +354,13 @@ target_include_directories(
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 
-add_executable(replay_demo tools/replay_demo.cpp)
-target_link_libraries(replay_demo PRIVATE satcom_replay_core)
+if(NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
+    add_executable(replay_demo tools/replay_demo.cpp)
+    target_link_libraries(replay_demo PRIVATE satcom_replay_core)
 
-add_executable(benchmark_decoders tools/benchmark_decoders.cpp)
-target_link_libraries(benchmark_decoders PRIVATE satcom_replay_core)
+    add_executable(benchmark_decoders tools/benchmark_decoders.cpp)
+    target_link_libraries(benchmark_decoders PRIVATE satcom_replay_core)
+endif()
 
 add_executable(
     benchmark_acquisition
@@ -410,20 +462,26 @@ satcomfec_add_string_definition(
     benchmark_acquisition SATCOMFEC_BENCHMARK_SME2_FLAGS
     "${SATCOMFEC_BENCHMARK_SME2_FLAGS}"
 )
+satcomfec_add_string_definition(
+    benchmark_acquisition SATCOMFEC_BENCHMARK_TARGET
+    "${SATCOMFEC_BENCHMARK_TARGET}"
+)
 
-add_executable(check_branch_metrics tools/check_branch_metrics.cpp)
-target_link_libraries(check_branch_metrics PRIVATE satcom_replay_core)
+if(NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
+    add_executable(check_branch_metrics tools/check_branch_metrics.cpp)
+    target_link_libraries(check_branch_metrics PRIVATE satcom_replay_core)
 
-add_executable(acquisition_demo tools/acquisition_demo.cpp)
-target_link_libraries(acquisition_demo PRIVATE satcom_replay_core)
+    add_executable(acquisition_demo tools/acquisition_demo.cpp)
+    target_link_libraries(acquisition_demo PRIVATE satcom_replay_core)
 
-add_executable(check_acquisition_kernels tools/check_acquisition_kernels.cpp)
-target_link_libraries(check_acquisition_kernels PRIVATE satcom_replay_core)
+    add_executable(check_acquisition_kernels tools/check_acquisition_kernels.cpp)
+    target_link_libraries(check_acquisition_kernels PRIVATE satcom_replay_core)
 
-add_executable(check_sme2_acquisition tools/check_sme2_acquisition.cpp)
-target_link_libraries(check_sme2_acquisition PRIVATE satcom_replay_core)
+    add_executable(check_sme2_acquisition tools/check_sme2_acquisition.cpp)
+    target_link_libraries(check_sme2_acquisition PRIVATE satcom_replay_core)
+endif()
 
-if(BUILD_TESTING)
+if(BUILD_TESTING AND NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
     add_test(
         NAME replay_acquisition_end_to_end
         COMMAND replay_demo

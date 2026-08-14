@@ -31,12 +31,17 @@
 #endif
 
 #if defined(__linux__)
+#include <cerrno>
 #include <sys/auxv.h>
 #if defined(__has_include)
 #if __has_include(<asm/hwcap.h>)
 #include <asm/hwcap.h>
 #endif
 #endif
+#endif
+
+#if defined(__ANDROID__)
+#include <sys/system_properties.h>
 #endif
 
 #if defined(__unix__) || defined(__APPLE__)
@@ -69,6 +74,10 @@
 
 #ifndef SATCOMFEC_BENCHMARK_SME2_FLAGS
 #define SATCOMFEC_BENCHMARK_SME2_FLAGS "not-compiled"
+#endif
+
+#ifndef SATCOMFEC_BENCHMARK_TARGET
+#define SATCOMFEC_BENCHMARK_TARGET "host-native"
 #endif
 
 namespace satcomfec::benchmark {
@@ -217,6 +226,12 @@ struct HostMetadata {
     std::string cpu_model = "unavailable";
     std::string cpu_model_source = "unavailable";
     std::string device_model = "unavailable";
+    std::string android_version = "unavailable";
+    std::string android_api_level = "unavailable";
+    std::string android_abi = "unavailable";
+    std::uint64_t auxiliary_vector_hwcap = 0;
+    std::uint64_t auxiliary_vector_hwcap2 = 0;
+    bool auxiliary_vector_available = false;
     bool neon_hardware_supported = false;
     bool sve_hardware_supported = false;
     bool sme_hardware_supported = false;
@@ -559,6 +574,21 @@ std::string linux_cpu_model() {
 }
 #endif
 
+#if defined(__ANDROID__)
+std::string android_system_property(const char* name) {
+    char value[PROP_VALUE_MAX] {};
+    const int length = __system_property_get(name, value);
+    return length > 0 ? std::string(value, static_cast<std::size_t>(length))
+                      : "unavailable";
+}
+#endif
+
+std::string hexadecimal_capability(std::uint64_t value) {
+    std::ostringstream output;
+    output << "0x" << std::hex << value;
+    return output.str();
+}
+
 HostMetadata collect_host_metadata() {
     HostMetadata host;
 #if defined(__unix__) || defined(__APPLE__)
@@ -580,21 +610,38 @@ HostMetadata collect_host_metadata() {
 #elif defined(__linux__)
     host.cpu_model = linux_cpu_model();
     host.cpu_model_source = "/proc/cpuinfo";
+#if defined(__ANDROID__)
+    host.os_name = "Android";
+    host.android_version = android_system_property("ro.build.version.release");
+    host.android_api_level = android_system_property("ro.build.version.sdk");
+    host.android_abi = android_system_property("ro.product.cpu.abi");
+    host.device_model = android_system_property("ro.product.model");
+#endif
+    errno = 0;
+    host.auxiliary_vector_hwcap = getauxval(AT_HWCAP);
+    const bool hwcap_available = errno == 0;
+    errno = 0;
+    host.auxiliary_vector_hwcap2 = getauxval(AT_HWCAP2);
+    const bool hwcap2_available = errno == 0;
+    host.auxiliary_vector_available = hwcap_available && hwcap2_available;
 #if defined(__aarch64__)
     host.neon_hardware_supported = true;
 #endif
 #if defined(HWCAP_ASIMD)
     host.neon_hardware_supported =
-        (getauxval(AT_HWCAP) & HWCAP_ASIMD) != 0;
+        (host.auxiliary_vector_hwcap & HWCAP_ASIMD) != 0;
 #endif
 #if defined(HWCAP_SVE)
-    host.sve_hardware_supported = (getauxval(AT_HWCAP) & HWCAP_SVE) != 0;
+    host.sve_hardware_supported =
+        (host.auxiliary_vector_hwcap & HWCAP_SVE) != 0;
 #endif
 #if defined(HWCAP2_SME)
-    host.sme_hardware_supported = (getauxval(AT_HWCAP2) & HWCAP2_SME) != 0;
+    host.sme_hardware_supported =
+        (host.auxiliary_vector_hwcap2 & HWCAP2_SME) != 0;
 #endif
 #if defined(HWCAP2_SME2)
-    host.sme2_hardware_supported = (getauxval(AT_HWCAP2) & HWCAP2_SME2) != 0;
+    host.sme2_hardware_supported =
+        (host.auxiliary_vector_hwcap2 & HWCAP2_SME2) != 0;
 #endif
 #endif
 
@@ -1501,9 +1548,23 @@ std::string serialize_json(const BenchmarkReport& report) {
     output << "    \"cpu_model_source\": \""
            << tools::escape_json(report.host.cpu_model_source) << "\",\n";
     output << "    \"device_model\": \""
-           << tools::escape_json(report.host.device_model) << "\"\n";
+           << tools::escape_json(report.host.device_model) << "\",\n";
+    output << "    \"android\": {\n";
+#if defined(__ANDROID__)
+    output << "      \"build\": true,\n";
+#else
+    output << "      \"build\": false,\n";
+#endif
+    output << "      \"version\": \""
+           << tools::escape_json(report.host.android_version) << "\",\n";
+    output << "      \"api_level\": \""
+           << tools::escape_json(report.host.android_api_level) << "\",\n";
+    output << "      \"abi\": \""
+           << tools::escape_json(report.host.android_abi) << "\"\n";
+    output << "    }\n";
     output << "  },\n";
     output << "  \"build\": {\n";
+    output << "    \"target\": \"" << SATCOMFEC_BENCHMARK_TARGET << "\",\n";
     output << "    \"compiler\": \"" << compiler_name() << "\",\n";
     output << "    \"compiler_version\": \""
            << tools::escape_json(compiler_version()) << "\",\n";
@@ -1522,6 +1583,15 @@ std::string serialize_json(const BenchmarkReport& report) {
     output << "    }\n";
     output << "  },\n";
     output << "  \"runtime_cpu_features\": {\n";
+    output << "    \"auxiliary_vector_available\": "
+           << (report.host.auxiliary_vector_available ? "true" : "false")
+           << ",\n";
+    output << "    \"auxv_hwcap_hex\": \""
+           << hexadecimal_capability(report.host.auxiliary_vector_hwcap)
+           << "\",\n";
+    output << "    \"auxv_hwcap2_hex\": \""
+           << hexadecimal_capability(report.host.auxiliary_vector_hwcap2)
+           << "\",\n";
     output << "    \"neon_hardware_supported\": "
            << (report.host.neon_hardware_supported ? "true" : "false") << ",\n";
     output << "    \"neon_kernel_compiled\": "

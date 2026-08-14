@@ -2,23 +2,26 @@
 
 ![Satcom FEC Trust Lab](assets/social/github-social-card-satcom-fec-trust-lab.png)
 
-This repository is a host-side satcom signal-processing project built around
-deterministic synthetic IQ fixtures. The supported replay path performs complex
+This repository is a satcom signal-processing project built around deterministic
+synthetic IQ fixtures. The supported host replay path performs complex
 IQ timing/CFO acquisition before aligned BPSK demodulation, Viterbi decode,
 CRC, and structured trust diagnostics. The same scalar reference, Arm NEON,
 and explicitly enabled Arm SME2 acquisition kernels are also available through
 a standalone correctness tool and benchmark harness.
 
-The public repo provides scoped host-side acquisition and replay demos, not a
+The public repo provides scoped host-side acquisition and replay demos plus a
+minimal Android/ADB native acquisition benchmark. It does not provide a
 supported Android app or full SME2-optimized Viterbi decoder.
 
 ## Repo status
 
 - Publication-safe today: the IQ acquisition search and host-side canned
   replay flow
-- Included validation: host-side automated tests and host CI
-- Not included: Android app packaging, JNI/mobile replay wiring,
-  SME2-accelerated Viterbi trellis recurrence or traceback, live RF capture,
+- Included validation: host-side automated tests, host CI, and an Android NDK
+  command-line benchmark build path
+- Not included: Android app packaging, JNI/mobile replay wiring, checked-in
+  mobile performance results, SME2-accelerated Viterbi trellis recurrence or
+  traceback, live RF capture,
   published performance conclusions, or thermal claims
 
 ## Supported scope
@@ -70,6 +73,9 @@ supported Android app or full SME2-optimized Viterbi decoder.
 - A decoder alignment check at `scripts/validate_decoder_alignment.sh`
 - A branch-metric equivalence check at `scripts/check_branch_metrics.sh`
 - An acquisition benchmark harness at `scripts/benchmark_acquisition.sh`
+- Android NDK/ADB benchmark helpers at `scripts/build_android_benchmark.sh`
+  and `scripts/run_android_benchmark.sh`, plus build-only ELF/instruction
+  verification at `scripts/verify_android_benchmark_build.sh`
 - A five-process repeatability helper at
   `scripts/repeat_acquisition_benchmark.py`
 - A legacy decoder microbenchmark at `scripts/benchmark_decoder_paths.sh`
@@ -178,6 +184,10 @@ python3 scripts/repeat_acquisition_benchmark.py \
   --output-dir build/acquisition-repeatability
 ```
 
+For native acquisition timing on an `arm64-v8a` Android device, see
+[docs/android_benchmark.md](docs/android_benchmark.md). This path builds a
+command-line executable for `adb shell`; it is not an Android application.
+
 On a host and compiler with SME2 support, build and verify the ZA-based
 acquisition path explicitly:
 
@@ -219,8 +229,9 @@ result.
 Run that legacy experiment explicitly with `make benchmark-decoder-legacy`.
 It is not used as evidence for acquisition performance.
 
-The supported quick start does not use Gradle. No Gradle wrapper or Android
-build entrypoint is included in this publication-scoped revision.
+The supported host quick start does not use Gradle. The separate Android path
+uses the NDK CMake toolchain to produce an ADB command-line benchmark; no Gradle
+wrapper or APK build is included.
 
 ## Example sessions
 
@@ -405,8 +416,8 @@ for the clean-checkout rerun procedure.
 ## What this repository does not claim
 
 - It does not ship a live RTL-SDR capture path.
-- It does not ship an Android replay app path.
-- It does not ship a mobile JNI bridge or on-device replay workflow.
+- It does not ship an Android replay app or end-to-end mobile replay path.
+- It does not ship a mobile JNI bridge.
 - It does not claim end-to-end SME2 Viterbi acceleration.
 - It does not ship a mission-derived or Φsat-2 replay asset.
 - It does not present local SME2 acquisition measurements as a general
@@ -485,7 +496,7 @@ What is not included:
 - a public notebook
 - live satellite captures
 - mission-derived replay data
-- a checked-in Gradle wrapper or Android build workflow
+- a checked-in Gradle wrapper or APK build workflow
 - a supported Android app
 - SME2-accelerated Viterbi add-compare-select or traceback
 - a claim that checked-in acquisition timings generalize beyond the exact host,

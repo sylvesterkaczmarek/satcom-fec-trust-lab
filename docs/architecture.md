@@ -44,6 +44,13 @@ timing. Per-capture timing reuses the plan and allocations while charging SME2
 for sample-major packing of each supplied IQ window. The decoder benchmark is
 not used as evidence for acquisition behavior.
 
+For Android, `SATCOMFEC_ANDROID_BENCHMARK_ONLY=ON` narrows the CMake graph to
+the acquisition sources and `benchmark_acquisition`. The NDK build keeps
+reference and NEON code at baseline `arm64-v8a`; only the SME2 translation unit
+receives an SME2 target flag. Runtime `AT_HWCAP2` gating prevents entry into the
+SME2 kernel on unsupported devices. The executable runs directly through ADB
+and does not require an APK or JNI bridge.
+
 The replay result reports acquisition implementation and candidate evidence,
 synthetic ground-truth errors when available, front-end/demodulation/framing
 details, decoder identity, and the trust-score components. Ground truth is
