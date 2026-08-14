@@ -16,10 +16,13 @@ Accelerated acquisition requests report `unavailable` rather than executing a
 fallback under an accelerated name. Acquisition SME2 is a genuine ZA-backed
 kernel; the historical Viterbi streaming-vector experiment is not.
 
-`benchmarks/results/a83cd53/` is historical evidence for an earlier packed SME2
-input path and an earlier NEON baseline. Its JSON remains authoritative for
-that source commit, but its timing and workspace values do not describe the
-current kernels. No Android timing artifact is included.
+`benchmarks/results/b6ed1ec/` is the current five-process Apple M5 Pro evidence
+for the eight-vector NEON and direct-input SME2 kernels. All correctness gates
+passed, and SME2 latency was lower than NEON for every fixed workload and mode
+in every process. This result applies only to the recorded host, compiler, and
+direct-correlation workloads. `benchmarks/results/a83cd53/` remains historical
+evidence for its earlier packed SME2 input path and four-vector NEON baseline.
+No Android timing artifact is included.
 
 `benchmark_acquisition` is the supported benchmark. It verifies candidate
 identity and score tolerances before reporting steady-state, per-capture, and

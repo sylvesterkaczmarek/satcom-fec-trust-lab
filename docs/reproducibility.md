@@ -93,8 +93,13 @@ implementation, randomizes timed implementation order with a reported seed,
 retains raw timing samples, and records host/compiler/build metadata.
 
 Tracked timing evidence is versioned by benchmarked source commit under
-`benchmarks/results/`. `benchmarks/results/a83cd53/` contains five independent
-clean-tree processes for source commit
+`benchmarks/results/`. `benchmarks/results/b6ed1ec/` contains five independent
+clean-tree processes for current-kernel source commit
+`b6ed1ec073ea4406255c3201a39e81ecc67e21fd`. Each raw report records Apple M5
+Pro (`Mac17,9`), Apple Clang 21.0.0, all three timing modes, fixed workload
+definitions, correctness, raw samples, and memory accounting.
+
+`benchmarks/results/a83cd53/` remains historical evidence for source commit
 `a83cd53ffe153fa69329194174f735d0a972380d`; it describes the earlier packed
 SME2 input path and earlier NEON baseline only. The raw JSON is authoritative
 for that source commit.

@@ -36,6 +36,14 @@ dirty-tree status, host, compiler, flags, kernel mechanisms, and memory model
 that produced it. Reports are not silently carried forward after an
 implementation changes.
 
+`benchmarks/results/b6ed1ec/` is current evidence for source commit
+`b6ed1ec073ea4406255c3201a39e81ecc67e21fd`: five clean-tree processes on the
+report-identified Apple M5 Pro (`Mac17,9`) with Apple Clang 21.0.0. Every
+implementation passed correctness gating. SME2 latency was lower than NEON in
+each workload and timing mode in all five processes; the exact medians, raw
+samples, speedup ranges, and memory values are in that directory. This is a
+host- and workload-specific result, not a general architecture claim.
+
 `benchmarks/results/a83cd53/` is historical evidence for source commit
 `a83cd53ffe153fa69329194174f735d0a972380d`. It measured an earlier four-vector
 NEON kernel and a packed-input SME2 kernel. Its JSON remains authoritative for

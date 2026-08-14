@@ -9,6 +9,9 @@ summary. The raw reports are authoritative.
   `a83cd53ffe153fa69329194174f735d0a972380d` on the host identified in the
   reports as Apple M5 Pro (`Mac17,9`). This result measured the earlier packed
   SME2 input path and earlier NEON baseline.
+- [`b6ed1ec/`](b6ed1ec/README.md): five clean-tree runs of source commit
+  `b6ed1ec073ea4406255c3201a39e81ecc67e21fd` on the same host identity. This
+  is the current eight-vector NEON and direct-input SME2 kernel evidence.
 
 Historical files are not rewritten after kernel changes. Their measurements do
 not establish current-kernel performance or a result for another processor,

@@ -127,11 +127,15 @@ CI benchmark invocations are smoke tests only. Tracked reports under
 `benchmarks/results/` are local measurements whose hardware and build metadata
 must be read from each report. No CI timing is publication evidence.
 
-`benchmarks/results/a83cd53/` is retained unchanged as historical evidence for
-an earlier packed SME2 input path and earlier NEON baseline. Its results remain
-valid for the recorded source commit, host, and compiler, but they are not
-current-kernel performance evidence. Read each result directory's metadata
-before using any timing value.
+`benchmarks/results/b6ed1ec/` is current-kernel evidence: five clean-tree Apple
+M5 Pro processes with all three modes, raw samples, correctness gates, memory
+accounting, and independent SME2-versus-NEON ratios. The result shows lower
+SME2 latency for every fixed workload and mode on that host. It is not a
+portable speedup claim.
+
+`benchmarks/results/a83cd53/` remains unchanged as historical evidence for its
+earlier packed SME2 input path and earlier NEON baseline. Read each result
+directory's source, host, and compiler metadata before using any timing value.
 
 ## Not claimed
 

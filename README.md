@@ -159,17 +159,36 @@ assurance levels. See [docs/trust_monitors.md](docs/trust_monitors.md).
 ## Performance evidence
 
 Tracked reports are versioned by benchmarked source commit under
-[`benchmarks/results/`](benchmarks/results/README.md). The existing
-[`a83cd53`](benchmarks/results/a83cd53/README.md) report is retained as
-historical evidence for an earlier four-vector NEON baseline and packed-input
-SME2 implementation. Its JSON remains authoritative for that source commit,
-but its timing and memory values do not describe the current kernels.
+[`benchmarks/results/`](benchmarks/results/README.md). The current
+[`b6ed1ec`](benchmarks/results/b6ed1ec/README.md) report contains five
+clean-tree processes on an Apple M5 Pro (`Mac17,9`) using Apple Clang 21.0.0.
+All implementations passed the scalar correctness gate before timing.
+
+Per-capture latency below is the median of five process-level medians. The
+final column is the range of independently measured NEON-latency/SME2-latency
+ratios across those processes.
+
+| Workload | Reference ms | NEON ms | SME2 ms | SME2 vs NEON range |
+| --- | ---: | ---: | ---: | ---: |
+| small | 0.234944 | 0.036515 | 0.020136 | 1.772-1.895x |
+| medium | 3.414089 | 0.499691 | 0.227356 | 2.169-2.203x |
+| large | 50.140583 | 7.084411 | 3.044657 | 2.282-2.330x |
+| very-large | 300.094875 | 41.319896 | 17.915806 | 2.268-2.375x |
+
+This result supports a lower SME2 latency than NEON for these fixed
+direct-correlation workloads on this host. It is not a cross-device or general
+SME2 speedup claim. The earlier
+[`a83cd53`](benchmarks/results/a83cd53/README.md) result remains unchanged as
+historical evidence for its earlier kernels.
 
 The fixed benchmark reports steady-state, per-capture, and setup-inclusive
 timing. Consecutive timing grids let the current SME2 kernel read interleaved IQ
 directly; arbitrary timing grids require an explicitly reported and timed
-packing step. Results are local process timing: CPU affinity, frequency, and
-thermal state are not controlled, and energy is not measured.
+packing step. Fixed-grid SME2 temporary storage ranges from 40,960 bytes for
+`small` to 6,553,600 bytes for `very-large`; reference and NEON have no
+corresponding dynamic workspace. Results are local process timing: CPU
+affinity, frequency, and thermal state are not controlled, and energy is not
+measured.
 
 Run a non-authoritative local smoke benchmark with:
 

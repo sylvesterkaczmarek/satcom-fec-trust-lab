@@ -91,9 +91,12 @@ output: `2 * CFO hypotheses * timing hypotheses * sizeof(float)`. This is
 `timing hypotheses * preamble length * sizeof(ComplexF)` bytes of packed input.
 Allocator bookkeeping, stack state, and ZA register storage are not counted.
 
-`benchmarks/results/a83cd53/` is retained as historical evidence for the prior
-packed-input SME2 implementation and prior NEON baseline. Its timing and memory
-values must not be attributed to the current kernels.
+`benchmarks/results/b6ed1ec/` contains the current five-process Apple M5 Pro
+timing, correctness, and memory evidence for this direct-input kernel and the
+audited NEON baseline. `benchmarks/results/a83cd53/` is retained unchanged as
+historical evidence for its prior packed-input SME2 implementation and prior
+NEON baseline. Timing and memory values must be attributed to the source commit
+recorded by each result.
 
 The target-specific SME2 translation unit is enabled only with
 `SATCOMFEC_ENABLE_SME2=ON`, a compiler defining `__ARM_FEATURE_SME2`, and ACLE

@@ -1,0 +1,1824 @@
+{
+  "schema_version": 1,
+  "generated_utc": "2026-08-14T14:54:11Z",
+  "run_count": 5,
+  "benchmark_source_commit": "b6ed1ec073ea4406255c3201a39e81ecc67e21fd",
+  "git_working_tree_dirty_at_build": "false",
+  "host": {
+    "os": "Darwin",
+    "os_release": "25.6.0",
+    "architecture": "arm64",
+    "cpu_model": "Apple M5 Pro",
+    "cpu_model_source": "sysctl machdep.cpu.brand_string",
+    "device_model": "Mac17,9",
+    "android": {
+      "build": false,
+      "version": "unavailable",
+      "api_level": "unavailable",
+      "abi": "unavailable"
+    }
+  },
+  "build": {
+    "build_system": "cmake",
+    "target": "host-native",
+    "cmake_version": "4.3.2",
+    "cmake_generator": "Unix Makefiles",
+    "system_name": "Darwin",
+    "system_processor": "arm64",
+    "compiler": "Clang",
+    "compiler_id": "AppleClang",
+    "compiler_path": "/usr/bin/c++",
+    "compiler_target": "compiler-default",
+    "compiler_version": "21.0.0 (clang-2100.1.1.101)",
+    "cxx_standard": "C++17",
+    "build_type": "Release",
+    "common_compile_flags": "-O3 -DNDEBUG -std=c++17 -Wall -Wextra -Wpedantic -Werror",
+    "options": {
+      "warnings_enabled": true,
+      "warnings_as_errors": true,
+      "asan_ubsan_enabled": false,
+      "explicit_neon_requested": true,
+      "explicit_sme2_requested": true
+    },
+    "source_compile_flags": {
+      "reference": "-fno-vectorize -fno-slp-vectorize",
+      "neon": "-mcpu=native+nosve+nosve2+nosme+nosme2",
+      "sme2_control": "generic common flags; no SVE/SME target",
+      "sme2_kernel": "-mcpu=native+sme2"
+    },
+    "source_files": {
+      "reference": "src/acquisition/acquisition_reference.cpp",
+      "neon": "src/acquisition/acquisition_neon.cpp",
+      "sme2_control": "src/acquisition/acquisition_sme2.cpp",
+      "sme2_kernel": "src/acquisition/acquisition_sme2_kernel.cpp"
+    }
+  },
+  "runtime_cpu_features": {
+    "auxiliary_vector_available": false,
+    "auxv_hwcap_hex": "0x0",
+    "auxv_hwcap2_hex": "0x0",
+    "neon_hardware_supported": true,
+    "neon_kernel_compiled": true,
+    "neon_vector_bits": 128,
+    "sve_hardware_supported": false,
+    "sve_acquisition_implementation_included": false,
+    "sme_hardware_supported": true,
+    "sme2_hardware_supported": true,
+    "sme2_kernel_compiled": true,
+    "sme2_runtime_supported": true,
+    "sme_streaming_vector_bits": 512
+  },
+  "workload_definitions": {
+    "small": {
+      "iq_sample_count": 2048,
+      "preamble_length": 64,
+      "timing_hypothesis_count": 1024,
+      "cfo_hypothesis_count": 5,
+      "candidate_correlation_count": 5120,
+      "complex_mac_count": 327680,
+      "sample_rate_hz": 48000.0,
+      "cfo_spacing_hz": 250.0
+    },
+    "medium": {
+      "iq_sample_count": 8192,
+      "preamble_length": 128,
+      "timing_hypothesis_count": 4096,
+      "cfo_hypothesis_count": 9,
+      "candidate_correlation_count": 36864,
+      "complex_mac_count": 4718592,
+      "sample_rate_hz": 48000.0,
+      "cfo_spacing_hz": 250.0
+    },
+    "large": {
+      "iq_sample_count": 32768,
+      "preamble_length": 256,
+      "timing_hypothesis_count": 16384,
+      "cfo_hypothesis_count": 17,
+      "candidate_correlation_count": 278528,
+      "complex_mac_count": 71303168,
+      "sample_rate_hz": 48000.0,
+      "cfo_spacing_hz": 250.0
+    },
+    "very-large": {
+      "iq_sample_count": 65536,
+      "preamble_length": 512,
+      "timing_hypothesis_count": 32768,
+      "cfo_hypothesis_count": 25,
+      "candidate_correlation_count": 819200,
+      "complex_mac_count": 419430400,
+      "sample_rate_hz": 48000.0,
+      "cfo_spacing_hz": 250.0
+    }
+  },
+  "limitations": [
+    "Runs are independent processes on one host.",
+    "No CPU affinity, frequency locking, thermal stabilization, or energy measurement is performed.",
+    "Raw per-process reports are authoritative and are not averaged away."
+  ],
+  "groups": [
+    {
+      "workload": "large",
+      "mode": "per-capture",
+      "implementation": "neon",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 6.9855625,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 7.0844115,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 7.197488,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 7.060067625,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 7.396517857,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 7.0844115,
+      "minimum_run_median_ms": 6.9855625,
+      "maximum_run_median_ms": 7.396517857,
+      "run_median_spread_ms": 0.410955357,
+      "run_median_coefficient_of_variation": 0.022385221,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "large",
+      "mode": "per-capture",
+      "implementation": "reference",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 49.7577085,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 50.097375,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 50.78225,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 50.140583,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 53.492625,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 50.140583,
+      "minimum_run_median_ms": 49.7577085,
+      "maximum_run_median_ms": 53.492625,
+      "run_median_spread_ms": 3.7349165,
+      "run_median_coefficient_of_variation": 0.029904282,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "large",
+      "mode": "per-capture",
+      "implementation": "sme2",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 3.017813765,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 3.039875,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 3.129828471,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 3.044656824,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 3.241929687,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 3.044656824,
+      "minimum_run_median_ms": 3.017813765,
+      "maximum_run_median_ms": 3.241929687,
+      "run_median_spread_ms": 0.224115922,
+      "run_median_coefficient_of_variation": 0.029935379,
+      "sme2_speedup_vs_neon_by_run": [
+        {
+          "run": 1,
+          "speedup_vs_neon": 2.314776
+        },
+        {
+          "run": 2,
+          "speedup_vs_neon": 2.330494
+        },
+        {
+          "run": 3,
+          "speedup_vs_neon": 2.299643
+        },
+        {
+          "run": 4,
+          "speedup_vs_neon": 2.318839
+        },
+        {
+          "run": 5,
+          "speedup_vs_neon": 2.281517
+        }
+      ]
+    },
+    {
+      "workload": "large",
+      "mode": "setup-inclusive",
+      "implementation": "neon",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 7.499196429,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 7.622148857,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 7.886762,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 7.603267857,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 8.078327429,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 7.622148857,
+      "minimum_run_median_ms": 7.499196429,
+      "maximum_run_median_ms": 8.078327429,
+      "run_median_spread_ms": 0.579131,
+      "run_median_coefficient_of_variation": 0.030756062,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "large",
+      "mode": "setup-inclusive",
+      "implementation": "reference",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 50.260084,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 51.059125,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 51.108041,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 50.696958,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 53.792291,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 51.059125,
+      "minimum_run_median_ms": 50.260084,
+      "maximum_run_median_ms": 53.792291,
+      "run_median_spread_ms": 3.532207,
+      "run_median_coefficient_of_variation": 0.027031236,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "large",
+      "mode": "setup-inclusive",
+      "implementation": "sme2",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 3.574029786,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 3.641520857,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 3.756863071,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 3.640336286,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 3.793047643,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 3.641520857,
+      "minimum_run_median_ms": 3.574029786,
+      "maximum_run_median_ms": 3.793047643,
+      "run_median_spread_ms": 0.219017857,
+      "run_median_coefficient_of_variation": 0.02466089,
+      "sme2_speedup_vs_neon_by_run": [
+        {
+          "run": 1,
+          "speedup_vs_neon": 2.098247
+        },
+        {
+          "run": 2,
+          "speedup_vs_neon": 2.093122
+        },
+        {
+          "run": 3,
+          "speedup_vs_neon": 2.099295
+        },
+        {
+          "run": 4,
+          "speedup_vs_neon": 2.088617
+        },
+        {
+          "run": 5,
+          "speedup_vs_neon": 2.129772
+        }
+      ]
+    },
+    {
+      "workload": "large",
+      "mode": "steady-state",
+      "implementation": "neon",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 6.992849,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 7.13396875,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 7.1262865,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 7.06219275,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 7.564506,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 7.1262865,
+      "minimum_run_median_ms": 6.992849,
+      "maximum_run_median_ms": 7.564506,
+      "run_median_spread_ms": 0.571657,
+      "run_median_coefficient_of_variation": 0.031290468,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "large",
+      "mode": "steady-state",
+      "implementation": "reference",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 49.768,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 50.133167,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 50.369334,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 50.162125,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 53.555458,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 50.162125,
+      "minimum_run_median_ms": 49.768,
+      "maximum_run_median_ms": 53.555458,
+      "run_median_spread_ms": 3.787458,
+      "run_median_coefficient_of_variation": 0.030647207,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "large",
+      "mode": "steady-state",
+      "implementation": "sme2",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 3.018485294,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 3.053558824,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 3.137502412,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 3.038757353,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 3.282791688,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 3.053558824,
+      "minimum_run_median_ms": 3.018485294,
+      "maximum_run_median_ms": 3.282791688,
+      "run_median_spread_ms": 0.264306394,
+      "run_median_coefficient_of_variation": 0.034962895,
+      "sme2_speedup_vs_neon_by_run": [
+        {
+          "run": 1,
+          "speedup_vs_neon": 2.316675
+        },
+        {
+          "run": 2,
+          "speedup_vs_neon": 2.33628
+        },
+        {
+          "run": 3,
+          "speedup_vs_neon": 2.271325
+        },
+        {
+          "run": 4,
+          "speedup_vs_neon": 2.32404
+        },
+        {
+          "run": 5,
+          "speedup_vs_neon": 2.304291
+        }
+      ]
+    },
+    {
+      "workload": "medium",
+      "mode": "per-capture",
+      "implementation": "neon",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 0.480086905,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 0.499690594,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 0.51060799,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 0.486453883,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 0.532017287,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 0.499690594,
+      "minimum_run_median_ms": 0.480086905,
+      "maximum_run_median_ms": 0.532017287,
+      "run_median_spread_ms": 0.051930382,
+      "run_median_coefficient_of_variation": 0.041110539,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "medium",
+      "mode": "per-capture",
+      "implementation": "reference",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 3.300476563,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 3.414088933,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 3.483566667,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 3.3344,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 3.649428571,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 3.414088933,
+      "minimum_run_median_ms": 3.300476563,
+      "maximum_run_median_ms": 3.649428571,
+      "run_median_spread_ms": 0.348952008,
+      "run_median_coefficient_of_variation": 0.040370509,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "medium",
+      "mode": "per-capture",
+      "implementation": "sme2",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 0.221337942,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 0.22735625,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 0.231779514,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 0.221849925,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 0.24160628,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 0.22735625,
+      "minimum_run_median_ms": 0.221337942,
+      "maximum_run_median_ms": 0.24160628,
+      "run_median_spread_ms": 0.020268338,
+      "run_median_coefficient_of_variation": 0.03650076,
+      "sme2_speedup_vs_neon_by_run": [
+        {
+          "run": 1,
+          "speedup_vs_neon": 2.169022
+        },
+        {
+          "run": 2,
+          "speedup_vs_neon": 2.197831
+        },
+        {
+          "run": 3,
+          "speedup_vs_neon": 2.20299
+        },
+        {
+          "run": 4,
+          "speedup_vs_neon": 2.192716
+        },
+        {
+          "run": 5,
+          "speedup_vs_neon": 2.202001
+        }
+      ]
+    },
+    {
+      "workload": "medium",
+      "mode": "setup-inclusive",
+      "implementation": "neon",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 0.595835321,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 0.6267349,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 0.635383443,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 0.612831805,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 0.664145276,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 0.6267349,
+      "minimum_run_median_ms": 0.595835321,
+      "maximum_run_median_ms": 0.664145276,
+      "run_median_spread_ms": 0.068309955,
+      "run_median_coefficient_of_variation": 0.040835372,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "medium",
+      "mode": "setup-inclusive",
+      "implementation": "reference",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 3.418594467,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 3.5450194,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 3.655482143,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 3.458188867,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 3.933692308,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 3.5450194,
+      "minimum_run_median_ms": 3.418594467,
+      "maximum_run_median_ms": 3.933692308,
+      "run_median_spread_ms": 0.515097841,
+      "run_median_coefficient_of_variation": 0.057305471,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "medium",
+      "mode": "setup-inclusive",
+      "implementation": "sme2",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 0.348613715,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 0.372704941,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 0.375968669,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 0.358503571,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 0.397697087,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 0.372704941,
+      "minimum_run_median_ms": 0.348613715,
+      "maximum_run_median_ms": 0.397697087,
+      "run_median_spread_ms": 0.049083372,
+      "run_median_coefficient_of_variation": 0.0504169,
+      "sme2_speedup_vs_neon_by_run": [
+        {
+          "run": 1,
+          "speedup_vs_neon": 1.709156
+        },
+        {
+          "run": 2,
+          "speedup_vs_neon": 1.681585
+        },
+        {
+          "run": 3,
+          "speedup_vs_neon": 1.68999
+        },
+        {
+          "run": 4,
+          "speedup_vs_neon": 1.709416
+        },
+        {
+          "run": 5,
+          "speedup_vs_neon": 1.669978
+        }
+      ]
+    },
+    {
+      "workload": "medium",
+      "mode": "steady-state",
+      "implementation": "neon",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 0.479960714,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 0.513897102,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 0.515621557,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 0.48672168,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 0.533470745,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 0.513897102,
+      "minimum_run_median_ms": 0.479960714,
+      "maximum_run_median_ms": 0.533470745,
+      "run_median_spread_ms": 0.053510031,
+      "run_median_coefficient_of_variation": 0.043744305,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "medium",
+      "mode": "steady-state",
+      "implementation": "reference",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 3.300932313,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 3.412238867,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 3.5447528,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 3.3347472,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 3.554736133,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 3.412238867,
+      "minimum_run_median_ms": 3.300932313,
+      "maximum_run_median_ms": 3.554736133,
+      "run_median_spread_ms": 0.25380382,
+      "run_median_coefficient_of_variation": 0.034121236,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "medium",
+      "mode": "steady-state",
+      "implementation": "sme2",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 0.221040198,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 0.227151394,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 0.230934252,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 0.220875551,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 0.240837139,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 0.227151394,
+      "minimum_run_median_ms": 0.220875551,
+      "maximum_run_median_ms": 0.240837139,
+      "run_median_spread_ms": 0.019961588,
+      "run_median_coefficient_of_variation": 0.036219192,
+      "sme2_speedup_vs_neon_by_run": [
+        {
+          "run": 1,
+          "speedup_vs_neon": 2.171373
+        },
+        {
+          "run": 2,
+          "speedup_vs_neon": 2.262355
+        },
+        {
+          "run": 3,
+          "speedup_vs_neon": 2.232763
+        },
+        {
+          "run": 4,
+          "speedup_vs_neon": 2.203601
+        },
+        {
+          "run": 5,
+          "speedup_vs_neon": 2.215068
+        }
+      ]
+    },
+    {
+      "workload": "small",
+      "mode": "per-capture",
+      "implementation": "neon",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 0.035350942,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 0.035554401,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 0.038239106,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 0.036514903,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 0.038155988,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 0.036514903,
+      "minimum_run_median_ms": 0.035350942,
+      "maximum_run_median_ms": 0.038239106,
+      "run_median_spread_ms": 0.002888164,
+      "run_median_coefficient_of_variation": 0.037581691,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "small",
+      "mode": "per-capture",
+      "implementation": "reference",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 0.231050115,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 0.231181069,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 0.250328771,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 0.234944441,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 0.252746843,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 0.234944441,
+      "minimum_run_median_ms": 0.231050115,
+      "maximum_run_median_ms": 0.252746843,
+      "run_median_spread_ms": 0.021696728,
+      "run_median_coefficient_of_variation": 0.044311677,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "small",
+      "mode": "per-capture",
+      "implementation": "sme2",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 0.019952168,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 0.019960296,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 0.020513997,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 0.020181312,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 0.020135886,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 0.020135886,
+      "minimum_run_median_ms": 0.019952168,
+      "maximum_run_median_ms": 0.020513997,
+      "run_median_spread_ms": 0.000561829,
+      "run_median_coefficient_of_variation": 0.011339076,
+      "sme2_speedup_vs_neon_by_run": [
+        {
+          "run": 1,
+          "speedup_vs_neon": 1.771785
+        },
+        {
+          "run": 2,
+          "speedup_vs_neon": 1.781256
+        },
+        {
+          "run": 3,
+          "speedup_vs_neon": 1.864049
+        },
+        {
+          "run": 4,
+          "speedup_vs_neon": 1.809342
+        },
+        {
+          "run": 5,
+          "speedup_vs_neon": 1.894925
+        }
+      ]
+    },
+    {
+      "workload": "small",
+      "mode": "setup-inclusive",
+      "implementation": "neon",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 0.063381759,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 0.06463496,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 0.070605488,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 0.066472996,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 0.069894263,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 0.066472996,
+      "minimum_run_median_ms": 0.063381759,
+      "maximum_run_median_ms": 0.070605488,
+      "run_median_spread_ms": 0.007223729,
+      "run_median_coefficient_of_variation": 0.047399301,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "small",
+      "mode": "setup-inclusive",
+      "implementation": "reference",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 0.259974523,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 0.260914932,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 0.280253721,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 0.264833778,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 0.280802083,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 0.264833778,
+      "minimum_run_median_ms": 0.259974523,
+      "maximum_run_median_ms": 0.280802083,
+      "run_median_spread_ms": 0.02082756,
+      "run_median_coefficient_of_variation": 0.038469705,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "small",
+      "mode": "setup-inclusive",
+      "implementation": "sme2",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 0.06039221,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 0.058691707,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 0.059118351,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 0.056275637,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 0.05776453,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 0.058691707,
+      "minimum_run_median_ms": 0.056275637,
+      "maximum_run_median_ms": 0.06039221,
+      "run_median_spread_ms": 0.004116573,
+      "run_median_coefficient_of_variation": 0.026332161,
+      "sme2_speedup_vs_neon_by_run": [
+        {
+          "run": 1,
+          "speedup_vs_neon": 1.049502
+        },
+        {
+          "run": 2,
+          "speedup_vs_neon": 1.101262
+        },
+        {
+          "run": 3,
+          "speedup_vs_neon": 1.194307
+        },
+        {
+          "run": 4,
+          "speedup_vs_neon": 1.181204
+        },
+        {
+          "run": 5,
+          "speedup_vs_neon": 1.209986
+        }
+      ]
+    },
+    {
+      "workload": "small",
+      "mode": "steady-state",
+      "implementation": "neon",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 0.035352827,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 0.03554676,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 0.038445075,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 0.036072037,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 0.038119156,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 0.036072037,
+      "minimum_run_median_ms": 0.035352827,
+      "maximum_run_median_ms": 0.038445075,
+      "run_median_spread_ms": 0.003092248,
+      "run_median_coefficient_of_variation": 0.039941381,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "small",
+      "mode": "steady-state",
+      "implementation": "reference",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 0.230733106,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 0.231250382,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 0.25030354,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 0.233683411,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 0.251571186,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 0.233683411,
+      "minimum_run_median_ms": 0.230733106,
+      "maximum_run_median_ms": 0.251571186,
+      "run_median_spread_ms": 0.02083808,
+      "run_median_coefficient_of_variation": 0.043848609,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "small",
+      "mode": "steady-state",
+      "implementation": "sme2",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 0.019911558,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 0.019934768,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 0.020373167,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 0.020110458,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 0.020170599,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 0.020110458,
+      "minimum_run_median_ms": 0.019911558,
+      "maximum_run_median_ms": 0.020373167,
+      "run_median_spread_ms": 0.000461609,
+      "run_median_coefficient_of_variation": 0.009391138,
+      "sme2_speedup_vs_neon_by_run": [
+        {
+          "run": 1,
+          "speedup_vs_neon": 1.775493
+        },
+        {
+          "run": 2,
+          "speedup_vs_neon": 1.783154
+        },
+        {
+          "run": 3,
+          "speedup_vs_neon": 1.887045
+        },
+        {
+          "run": 4,
+          "speedup_vs_neon": 1.793695
+        },
+        {
+          "run": 5,
+          "speedup_vs_neon": 1.889838
+        }
+      ]
+    },
+    {
+      "workload": "very-large",
+      "mode": "per-capture",
+      "implementation": "neon",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 40.376208,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 42.091458,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 40.66,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 41.3198955,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 41.6565,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 41.3198955,
+      "minimum_run_median_ms": 40.376208,
+      "maximum_run_median_ms": 42.091458,
+      "run_median_spread_ms": 1.71525,
+      "run_median_coefficient_of_variation": 0.017091962,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "very-large",
+      "mode": "per-capture",
+      "implementation": "reference",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 293.3035,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 315.492958,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 294.477125,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 303.296333,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 300.094875,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 300.094875,
+      "minimum_run_median_ms": 293.3035,
+      "maximum_run_median_ms": 315.492958,
+      "run_median_spread_ms": 22.189458,
+      "run_median_coefficient_of_variation": 0.029560031,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "very-large",
+      "mode": "per-capture",
+      "implementation": "sme2",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 17.010347333,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 17.915805667,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 17.120916667,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 18.215680333,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 17.954555667,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 17.915805667,
+      "minimum_run_median_ms": 17.010347333,
+      "maximum_run_median_ms": 18.215680333,
+      "run_median_spread_ms": 1.205333,
+      "run_median_coefficient_of_variation": 0.030683183,
+      "sme2_speedup_vs_neon_by_run": [
+        {
+          "run": 1,
+          "speedup_vs_neon": 2.373626
+        },
+        {
+          "run": 2,
+          "speedup_vs_neon": 2.349404
+        },
+        {
+          "run": 3,
+          "speedup_vs_neon": 2.374873
+        },
+        {
+          "run": 4,
+          "speedup_vs_neon": 2.26837
+        },
+        {
+          "run": 5,
+          "speedup_vs_neon": 2.320108
+        }
+      ]
+    },
+    {
+      "workload": "very-large",
+      "mode": "setup-inclusive",
+      "implementation": "neon",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 41.488896,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 44.421104,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 41.8026665,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 42.820271,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 41.97525,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 41.97525,
+      "minimum_run_median_ms": 41.488896,
+      "maximum_run_median_ms": 44.421104,
+      "run_median_spread_ms": 2.932208,
+      "run_median_coefficient_of_variation": 0.027782494,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "very-large",
+      "mode": "setup-inclusive",
+      "implementation": "reference",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 295.056833,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 316.676125,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 295.672167,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 301.885958,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 314.5325,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 301.885958,
+      "minimum_run_median_ms": 295.056833,
+      "maximum_run_median_ms": 316.676125,
+      "run_median_spread_ms": 21.619292,
+      "run_median_coefficient_of_variation": 0.033722254,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "very-large",
+      "mode": "setup-inclusive",
+      "implementation": "sme2",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 18.301472333,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 20.059347333,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 18.427639,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 19.231791667,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 18.825805667,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 18.825805667,
+      "minimum_run_median_ms": 18.301472333,
+      "maximum_run_median_ms": 20.059347333,
+      "run_median_spread_ms": 1.757875,
+      "run_median_coefficient_of_variation": 0.037435441,
+      "sme2_speedup_vs_neon_by_run": [
+        {
+          "run": 1,
+          "speedup_vs_neon": 2.26697
+        },
+        {
+          "run": 2,
+          "speedup_vs_neon": 2.214484
+        },
+        {
+          "run": 3,
+          "speedup_vs_neon": 2.268477
+        },
+        {
+          "run": 4,
+          "speedup_vs_neon": 2.226536
+        },
+        {
+          "run": 5,
+          "speedup_vs_neon": 2.229666
+        }
+      ]
+    },
+    {
+      "workload": "very-large",
+      "mode": "steady-state",
+      "implementation": "neon",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 40.4218335,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 44.2914375,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 40.629521,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 41.3599585,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 41.9240835,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 41.3599585,
+      "minimum_run_median_ms": 40.4218335,
+      "maximum_run_median_ms": 44.2914375,
+      "run_median_spread_ms": 3.869604,
+      "run_median_coefficient_of_variation": 0.037239952,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "very-large",
+      "mode": "steady-state",
+      "implementation": "reference",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 292.69425,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 316.189667,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 294.395291,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 300.478458,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 305.442291,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 300.478458,
+      "minimum_run_median_ms": 292.69425,
+      "maximum_run_median_ms": 316.189667,
+      "run_median_spread_ms": 23.495417,
+      "run_median_coefficient_of_variation": 0.031421785,
+      "sme2_speedup_vs_neon_by_run": []
+    },
+    {
+      "workload": "very-large",
+      "mode": "steady-state",
+      "implementation": "sme2",
+      "valid_run_count": 5,
+      "run_medians": [
+        {
+          "run": 1,
+          "median_latency_ms": 17.008402667,
+          "valid": true
+        },
+        {
+          "run": 2,
+          "median_latency_ms": 17.725319333,
+          "valid": true
+        },
+        {
+          "run": 3,
+          "median_latency_ms": 17.104152667,
+          "valid": true
+        },
+        {
+          "run": 4,
+          "median_latency_ms": 18.244944333,
+          "valid": true
+        },
+        {
+          "run": 5,
+          "median_latency_ms": 17.835764,
+          "valid": true
+        }
+      ],
+      "median_of_run_medians_ms": 17.725319333,
+      "minimum_run_median_ms": 17.008402667,
+      "maximum_run_median_ms": 18.244944333,
+      "run_median_spread_ms": 1.236541666,
+      "run_median_coefficient_of_variation": 0.029575126,
+      "sme2_speedup_vs_neon_by_run": [
+        {
+          "run": 1,
+          "speedup_vs_neon": 2.37658
+        },
+        {
+          "run": 2,
+          "speedup_vs_neon": 2.498767
+        },
+        {
+          "run": 3,
+          "speedup_vs_neon": 2.375419
+        },
+        {
+          "run": 4,
+          "speedup_vs_neon": 2.266927
+        },
+        {
+          "run": 5,
+          "speedup_vs_neon": 2.350563
+        }
+      ]
+    }
+  ],
+  "benchmark_command": [
+    "build/final-benchmark-b6ed1ec/benchmark_acquisition",
+    "--warmup-rounds",
+    "2",
+    "--samples",
+    "15",
+    "--min-sample-ms",
+    "50.0",
+    "--seed",
+    "0x534154434F4D4645"
+  ],
+  "runs": [
+    {
+      "run": 1,
+      "path": "run-01.json",
+      "timestamp_utc": "2026-08-14T14:50:24Z",
+      "git_commit_sha": "b6ed1ec073ea4406255c3201a39e81ecc67e21fd",
+      "git_working_tree_dirty_at_build": "false"
+    },
+    {
+      "run": 2,
+      "path": "run-02.json",
+      "timestamp_utc": "2026-08-14T14:51:09Z",
+      "git_commit_sha": "b6ed1ec073ea4406255c3201a39e81ecc67e21fd",
+      "git_working_tree_dirty_at_build": "false"
+    },
+    {
+      "run": 3,
+      "path": "run-03.json",
+      "timestamp_utc": "2026-08-14T14:51:55Z",
+      "git_commit_sha": "b6ed1ec073ea4406255c3201a39e81ecc67e21fd",
+      "git_working_tree_dirty_at_build": "false"
+    },
+    {
+      "run": 4,
+      "path": "run-04.json",
+      "timestamp_utc": "2026-08-14T14:52:40Z",
+      "git_commit_sha": "b6ed1ec073ea4406255c3201a39e81ecc67e21fd",
+      "git_working_tree_dirty_at_build": "false"
+    },
+    {
+      "run": 5,
+      "path": "run-05.json",
+      "timestamp_utc": "2026-08-14T14:53:25Z",
+      "git_commit_sha": "b6ed1ec073ea4406255c3201a39e81ecc67e21fd",
+      "git_working_tree_dirty_at_build": "false"
+    }
+  ]
+}
