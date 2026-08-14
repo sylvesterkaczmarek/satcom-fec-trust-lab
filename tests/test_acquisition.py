@@ -1,5 +1,6 @@
 import csv
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -9,8 +10,17 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 FIXTURE_DIR = ROOT_DIR / "data/synthetic/acquisition"
 GOLDEN_PATH = ROOT_DIR / "tests/golden/acquisition_clean.json"
-ACQUISITION_BINARY = ROOT_DIR / "build/host_replay/acquisition_demo"
-BENCHMARK_BINARY = ROOT_DIR / "build/host_replay/benchmark_acquisition"
+CONFIGURED_BUILD_DIR = Path(
+    os.environ.get("SATCOMFEC_BUILD_DIR", "build/host_replay")
+)
+if not CONFIGURED_BUILD_DIR.is_absolute():
+    CONFIGURED_BUILD_DIR = ROOT_DIR / CONFIGURED_BUILD_DIR
+try:
+    CONFIGURED_BUILD_ARGUMENT = CONFIGURED_BUILD_DIR.relative_to(ROOT_DIR)
+except ValueError:
+    CONFIGURED_BUILD_ARGUMENT = CONFIGURED_BUILD_DIR
+ACQUISITION_BINARY = CONFIGURED_BUILD_DIR / "acquisition_demo"
+BENCHMARK_BINARY = CONFIGURED_BUILD_DIR / "benchmark_acquisition"
 FIXTURE_NAMES = ("clean", "noisy", "frequency_offset", "ambiguous", "weak_faded")
 SCORE_RELATIVE_TOLERANCE = 2.0e-4
 SCORE_ABSOLUTE_TOLERANCE = 1.0e-3
@@ -562,6 +572,10 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
 
     def test_repeatability_helper_preserves_five_process_reports(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
+            environment = os.environ.copy()
+            environment["SATCOMFEC_BUILD_DIR"] = str(
+                Path(temporary_directory) / "wrong-environment-build"
+            )
             completed = subprocess.run(
                 (
                     "python3",
@@ -579,8 +593,11 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
                     "--min-sample-ms",
                     "1",
                     "--skip-build",
+                    "--build-dir",
+                    str(CONFIGURED_BUILD_ARGUMENT),
                 ),
                 cwd=ROOT_DIR,
+                env=environment,
                 check=True,
                 capture_output=True,
                 text=True,
@@ -602,6 +619,10 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
         self.assertEqual(len(reports), 5)
         self.assertTrue(all(report["ok"] for report in reports))
         self.assertEqual(summary["run_count"], 5)
+        self.assertEqual(
+            Path(summary["benchmark_command"][0]),
+            CONFIGURED_BUILD_ARGUMENT / "benchmark_acquisition",
+        )
         self.assertEqual(len(summary["runs"]), 5)
         self.assertEqual(len(summary["groups"]), 9)
         reference_per_capture = next(
@@ -624,6 +645,47 @@ class AcquisitionBenchmarkTests(unittest.TestCase):
             and group["implementation"] == "sme2"
         )
         self.assertEqual(len(sme2_per_capture["sme2_speedup_vs_neon_by_run"]), 5)
+
+    def test_repeatability_skip_build_requires_explicit_build_dir(self) -> None:
+        completed = subprocess.run(
+            (
+                "python3",
+                "scripts/repeat_acquisition_benchmark.py",
+                "--skip-build",
+            ),
+            cwd=ROOT_DIR,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(completed.returncode, 2)
+        self.assertIn(
+            "--skip-build requires an explicit --build-dir PATH",
+            completed.stderr,
+        )
+
+    def test_repeatability_skip_build_rejects_missing_binary(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            missing_build = Path(temporary_directory) / "missing-build"
+            completed = subprocess.run(
+                (
+                    "python3",
+                    "scripts/repeat_acquisition_benchmark.py",
+                    "--skip-build",
+                    "--build-dir",
+                    str(missing_build),
+                ),
+                cwd=ROOT_DIR,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        expected_binary = missing_build / "benchmark_acquisition"
+        self.assertEqual(completed.returncode, 1)
+        self.assertIn(str(expected_binary), completed.stderr)
+        self.assertIn("the file does not exist", completed.stderr)
 
 
 class AcquisitionSme2Tests(unittest.TestCase):

@@ -13,6 +13,9 @@ if [[ -z "${SATCOMFEC_BUILD_DIR:-}" ]]; then
     SATCOMFEC_BUILD_DIR="${ROOT_DIR}/build/benchmark/portable"
   fi
 fi
+if [[ "${SATCOMFEC_BUILD_DIR}" != /* ]]; then
+  SATCOMFEC_BUILD_DIR="${ROOT_DIR}/${SATCOMFEC_BUILD_DIR}"
+fi
 export SATCOMFEC_BUILD_DIR
 
 bash "${ROOT_DIR}/scripts/build_host_tools.sh" benchmark_acquisition

@@ -18,11 +18,16 @@ from typing import Any
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
 
-def benchmark_build_directory() -> Path:
+def repository_path(path: Path) -> Path:
+    return path if path.is_absolute() else ROOT_DIR / path
+
+
+def benchmark_build_directory(arguments: argparse.Namespace) -> Path:
+    if arguments.build_dir is not None:
+        return repository_path(arguments.build_dir)
     configured = os.environ.get("SATCOMFEC_BUILD_DIR")
     if configured:
-        path = Path(configured)
-        return path if path.is_absolute() else ROOT_DIR / path
+        return repository_path(Path(configured))
     if os.environ.get("SATCOMFEC_ENABLE_SME2") == "ON":
         return ROOT_DIR / "build/benchmark/sme2"
     if os.environ.get("SATCOMFEC_ENABLE_NEON") == "ON":
@@ -48,6 +53,14 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--samples", type=int, default=15)
     parser.add_argument("--min-sample-ms", type=float, default=50.0)
     parser.add_argument("--seed", default="0x534154434F4D4645")
+    parser.add_argument(
+        "--build-dir",
+        type=Path,
+        help=(
+            "CMake build directory to create or reuse; relative paths are "
+            "resolved from the repository root"
+        ),
+    )
     parser.add_argument("--skip-build", action="store_true")
     arguments = parser.parse_args()
     if arguments.runs < 5:
@@ -58,6 +71,8 @@ def parse_arguments() -> argparse.Namespace:
         parser.error("--samples must be at least 3")
     if arguments.min_sample_ms <= 0.0:
         parser.error("--min-sample-ms must be positive")
+    if arguments.skip_build and arguments.build_dir is None:
+        parser.error("--skip-build requires an explicit --build-dir PATH")
     return arguments
 
 
@@ -245,7 +260,7 @@ def print_compact_summary(summary: dict[str, Any]) -> None:
 
 def main() -> int:
     arguments = parse_arguments()
-    build_directory = benchmark_build_directory()
+    build_directory = benchmark_build_directory(arguments)
     benchmark_binary = build_directory / "benchmark_acquisition"
     if not arguments.skip_build:
         build_environment = os.environ.copy()
@@ -255,6 +270,21 @@ def main() -> int:
             cwd=ROOT_DIR,
             env=build_environment,
             check=True,
+        )
+    elif not benchmark_binary.is_file():
+        raise RuntimeError(
+            "--skip-build expected benchmark executable at "
+            f"'{benchmark_binary}', but the file does not exist"
+        )
+    elif not os.access(benchmark_binary, os.X_OK):
+        raise RuntimeError(
+            "--skip-build expected an executable benchmark at "
+            f"'{benchmark_binary}', but the file is not executable"
+        )
+
+    if not benchmark_binary.is_file():
+        raise RuntimeError(
+            f"benchmark build did not produce expected executable '{benchmark_binary}'"
         )
 
     output_directory = (

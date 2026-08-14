@@ -160,6 +160,21 @@ each workload/mode/implementation. SME2 entries retain the SME2-versus-NEON
 speedup from every independent run. Raw reports remain authoritative; the
 summary does not replace them.
 
+To reuse an existing configured benchmark without rebuilding, identify that
+build explicitly:
+
+```bash
+python3 scripts/repeat_acquisition_benchmark.py \
+  --skip-build \
+  --build-dir build/my-acquisition-build \
+  --output-dir build/acquisition-repeatability
+```
+
+`--build-dir` accepts repository-relative or absolute paths and takes
+precedence over `SATCOMFEC_BUILD_DIR` and architecture-mode inference. A
+`--skip-build` run fails before timing if the expected
+`benchmark_acquisition` executable is absent or not executable.
+
 Tracked local reports live under `benchmarks/results/`. Hardware identity,
 commit, dirty-tree state, compiler, flags, raw samples, and correctness status
 in those JSON files are authoritative.
