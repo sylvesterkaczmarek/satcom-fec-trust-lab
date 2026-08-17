@@ -271,8 +271,6 @@ If you use or adapt this repository, please cite:
 }
 ```
 
-Citation metadata is also provided in [`CITATION.cff`](CITATION.cff).
-
 ## License
 
 See `LICENSE`.
