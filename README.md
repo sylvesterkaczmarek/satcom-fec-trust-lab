@@ -1,5 +1,7 @@
 # Pocket Satcom Acquisition and Trust Lab
 
+![Pocket Satcom Acquisition and Trust Lab](assets/social/github-social-card-satcom-fec-trust-lab.png)
+
 A host-side C++17 lab for finding a known satellite-signal preamble in complex
 IQ, estimating timing and carrier-frequency offset (CFO), aligning a synthetic
 frame, decoding it, and reporting inspectable trust diagnostics.
@@ -254,6 +256,25 @@ fairness contract. CI timing is used only as a smoke check.
 - [Android native benchmark](docs/android_benchmark.md)
 - [Data sources and licensing](docs/data_sources_and_licensing.md)
 
+## Cite this repository
+
+If you use or adapt this repository, please cite:
+
+> Kaczmarek, S. (2026). *Pocket Satcom Acquisition and Trust Lab*. GitHub. https://github.com/sylvesterkaczmarek/satcom-fec-trust-lab
+
+```bibtex
+@software{Kaczmarek_2026_Pocket_Satcom_Acquisition_Trust_Lab,
+  author = {Sylvester Kaczmarek},
+  title  = {{Pocket Satcom Acquisition and Trust Lab}},
+  year   = {2026},
+  url    = {https://github.com/sylvesterkaczmarek/satcom-fec-trust-lab}
+}
+```
+
+Citation metadata is also provided in [`CITATION.cff`](CITATION.cff).
+
 ## License
 
 See `LICENSE`.
+
+© **Sylvester Kaczmarek** · [https://www.sylvesterkaczmarek.com](https://www.sylvesterkaczmarek.com)
