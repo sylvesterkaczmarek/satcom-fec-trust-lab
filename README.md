@@ -273,6 +273,6 @@ If you use or adapt this repository, please cite:
 
 ## License
 
-See `LICENSE`.
+MIT. See [LICENSE](LICENSE).
 
 © **Sylvester Kaczmarek** · [https://www.sylvesterkaczmarek.com](https://www.sylvesterkaczmarek.com)
