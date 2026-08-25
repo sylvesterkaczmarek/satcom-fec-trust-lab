@@ -30,6 +30,13 @@ make test
 correction, BPSK demodulation, frame sync, scalar Viterbi decode, CRC-8, and
 trust scoring. The expected payload is `SATCOM DEMO OK`.
 
+To install the supported host CLIs (`replay_demo`, `acquisition_demo`, and
+`benchmark_acquisition`) under a local prefix:
+
+```sh
+make install PREFIX="$HOME/.local"
+```
+
 For the complete clean-checkout correctness workflow:
 
 ```sh
