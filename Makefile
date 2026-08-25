@@ -1,9 +1,12 @@
-.PHONY: help build replay replay-impaired replay-ambiguous replay-failed replay-no-signal acquisition check check-acquisition check-acquisition-neon verify-acquisition-neon check-acquisition-sme2 verify-acquisition-sme2 compare-trust align check-metrics verify verify-fixtures verify-arm benchmark benchmark-acquisition benchmark-acquisition-repeat benchmark-android-build benchmark-android-verify benchmark-android-run experiment-viterbi-branch-metrics test regenerate
+PREFIX ?= $(CURDIR)/build/install
+
+.PHONY: help build install replay replay-impaired replay-ambiguous replay-failed replay-no-signal acquisition check check-acquisition check-acquisition-neon verify-acquisition-neon check-acquisition-sme2 verify-acquisition-sme2 compare-trust align check-metrics verify verify-fixtures verify-arm benchmark benchmark-acquisition benchmark-acquisition-repeat benchmark-android-build benchmark-android-verify benchmark-android-run experiment-viterbi-branch-metrics test regenerate
 
 help:
 	@printf '%s\n' \
 	  'Available targets:' \
 	  '  make build           Build the supported host-side tools' \
+	  '  make install PREFIX=/path Install supported host CLIs under PREFIX/bin' \
 	  '  make replay          Run the baseline replay fixture' \
 	  '  make replay-impaired Run the impaired replay fixture' \
 	  '  make replay-ambiguous Run the competing-peak replay fixture' \
@@ -34,6 +37,9 @@ help:
 
 build:
 	bash scripts/build_host_tools.sh all
+
+install:
+	SATCOMFEC_INSTALL_PREFIX="$(PREFIX)" bash scripts/install_host_tools.sh
 
 replay:
 	bash scripts/run_replay_demo.sh

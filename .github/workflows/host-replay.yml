@@ -73,6 +73,85 @@ jobs:
           SATCOMFEC_TEST_BUILD_DIR: build/ci-portable
         run: python3 -m unittest discover -s tests -v
 
+  installed-host-tools:
+    name: Installed host CLIs (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Linux build tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y cmake jq
+
+      - name: Ensure macOS build tools
+        if: runner.os == 'macOS'
+        run: |
+          command -v cmake >/dev/null 2>&1 || brew install cmake
+          command -v jq >/dev/null 2>&1 || brew install jq
+
+      - name: Build and install supported host CLIs
+        env:
+          SATCOMFEC_BUILD_DIR: ${{ runner.temp }}/satcomfec-build
+          SATCOMFEC_INSTALL_PREFIX: ${{ runner.temp }}/satcomfec-install
+          SATCOMFEC_ENABLE_WARNINGS: "ON"
+          SATCOMFEC_WARNINGS_AS_ERRORS: "ON"
+        run: bash scripts/install_host_tools.sh
+
+      - name: Verify installed executable surface
+        run: |
+          prefix="${RUNNER_TEMP}/satcomfec-install"
+          test -x "${prefix}/bin/replay_demo"
+          test -x "${prefix}/bin/acquisition_demo"
+          test -x "${prefix}/bin/benchmark_acquisition"
+          "${prefix}/bin/replay_demo" --help
+          "${prefix}/bin/acquisition_demo" --help
+          "${prefix}/bin/benchmark_acquisition" --help
+
+      - name: Run installed CLIs outside the source tree
+        run: |
+          root="${GITHUB_WORKSPACE}"
+          prefix="${RUNNER_TEMP}/satcomfec-install"
+          runtime_dir="${RUNNER_TEMP}/satcomfec-runtime"
+          mkdir -p "${runtime_dir}"
+          cd "${runtime_dir}"
+
+          replay_output="$("${prefix}/bin/replay_demo" \
+            --iq "${root}/data/synthetic/canned_replay/demo_conv_bpsk.iq" \
+            --metadata "${root}/data/synthetic/canned_replay/demo_conv_bpsk.json" \
+            --preamble "${root}/data/synthetic/canned_replay/preamble_qpsk_256.iq" \
+            --acquisition reference \
+            --decoder viterbi-reference)"
+          printf '%s\n' "${replay_output}"
+          printf '%s\n' "${replay_output}" | jq -e \
+            '.ok == true and .decoded_text == "SATCOM DEMO OK" and .crc_ok == true' >/dev/null
+
+          acquisition_output="$("${prefix}/bin/acquisition_demo" \
+            --iq "${root}/data/synthetic/acquisition/clean.iq" \
+            --metadata "${root}/data/synthetic/acquisition/clean.json" \
+            --implementation reference)"
+          printf '%s\n' "${acquisition_output}"
+          printf '%s\n' "${acquisition_output}" | jq -e \
+            '.ok == true and .acquisition_success == true' >/dev/null
+
+          "${prefix}/bin/benchmark_acquisition" \
+            --workload small \
+            --warmup-rounds 0 \
+            --samples 3 \
+            --min-sample-ms 1 \
+            > benchmark-smoke.json
+          test -s benchmark-smoke.json
+
   arm64-neon:
     name: Native Arm64/Linux NEON correctness
     runs-on: ubuntu-24.04-arm
