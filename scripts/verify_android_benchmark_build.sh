@@ -17,12 +17,29 @@ Builds through scripts/build_android_benchmark.sh, then verifies:
   - the scalar reference object does not contain that NEON kernel sequence;
   - when compiled, the SME2 object contains streaming-mode and ZA VGx4 FMLA/FMLS.
 
-Arguments such as --sme2 auto|on|off and --ndk PATH are forwarded.
+Arguments such as --sme2 auto|on|off, --ndk PATH and --output-dir PATH are forwarded.
 EOF
   exit 0
 fi
 
 bash "${ROOT_DIR}/scripts/build_android_benchmark.sh" "$@"
+
+# The builder has validated these arguments. Match its selected output before
+# reading metadata so a custom build cannot verify stale default artefacts.
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --output-dir)
+      OUTPUT_DIR="$2"
+      shift 2
+      ;;
+    --sme2|--ndk|--platform)
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
 
 BUILD_INFO="${OUTPUT_DIR}/last-build.env"
 if [[ ! -f "${BUILD_INFO}" ]]; then
@@ -73,7 +90,7 @@ for tool in "${READELF}" "${OBJDUMP}" "${NM}"; do
   fi
 done
 
-ELF_HEADER="$(${READELF} -h "${ANDROID_BENCHMARK_BINARY}")"
+ELF_HEADER="$("${READELF}" -h "${ANDROID_BENCHMARK_BINARY}")"
 if ! grep -q 'Machine:.*AArch64' <<<"${ELF_HEADER}"; then
   echo "error: benchmark is not an AArch64 ELF" >&2
   exit 1
@@ -83,13 +100,13 @@ if ! grep -q 'Type:.*DYN' <<<"${ELF_HEADER}"; then
   exit 1
 fi
 
-DYNAMIC_SECTION="$(${READELF} -d "${ANDROID_BENCHMARK_BINARY}")"
+DYNAMIC_SECTION="$("${READELF}" -d "${ANDROID_BENCHMARK_BINARY}")"
 if grep -q 'libc++_shared' <<<"${DYNAMIC_SECTION}"; then
   echo "error: benchmark unexpectedly requires libc++_shared.so" >&2
   exit 1
 fi
 
-DEFINED_SYMBOLS="$(${NM} --defined-only "${ANDROID_BENCHMARK_BINARY}")"
+DEFINED_SYMBOLS="$("${NM}" --defined-only "${ANDROID_BENCHMARK_BINARY}")"
 for symbol in acquisition_neon_kernel_compiled acquisition_sme2_kernel_compiled; do
   if ! grep -q "${symbol}" <<<"${DEFINED_SYMBOLS}"; then
     echo "error: Android benchmark is missing acquisition symbol: ${symbol}" >&2

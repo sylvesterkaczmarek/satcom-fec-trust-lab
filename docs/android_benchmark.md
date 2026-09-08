@@ -34,6 +34,9 @@ translation unit.
 `--sme2 auto` prints whether the resulting binary contains the SME2 kernel.
 Use `--sme2 on` when compilation of that kernel is a test requirement.
 
+Pass `--output-dir PATH` to build and inspect a different output directory.
+Paths containing spaces are supported, including the NDK installation path.
+
 This verifies the AArch64 PIE, static libc++ linkage, NEON instruction evidence,
 scalar-reference isolation, and SME2 streaming/ZA instructions when compiled.
 
@@ -48,6 +51,11 @@ bash scripts/run_android_benchmark.sh \
 Use `--serial SERIAL` when more than one device is connected. The default
 device run uses the fixed `small` workload, one warm-up, seven timed samples,
 and a 20 ms minimum sample duration.
+
+Choose an unused `--output` filename. Each invocation uses a separate temporary
+directory on the device and checks the retrieved report before saving it to
+that filename. An existing local report is preserved if the run fails or the
+requested output already exists. Temporary device files are removed on exit.
 
 The run script verifies the selected device is authorized and reports
 `arm64-v8a`, pushes the executable to `/data/local/tmp`, executes it, and pulls

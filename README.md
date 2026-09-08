@@ -30,6 +30,16 @@ make test
 correction, BPSK demodulation, frame sync, scalar Viterbi decode, CRC-8, and
 trust scoring. The expected payload is `SATCOM DEMO OK`.
 
+IQ files must contain complete interleaved float32 I/Q pairs with finite
+components. Truncated captures and NaN or infinity values are rejected before
+signal processing. These input checks preserve the sample values in valid
+captures.
+
+Fixture metadata must use finite JSON numbers, integer-valued sizes and valid
+acquisition ranges. A rejected automatically discovered replay sidecar leaves
+the default replay settings intact; explicitly supplied invalid metadata
+causes the command to fail.
+
 To install the supported host CLIs (`replay_demo`, `acquisition_demo`, and
 `benchmark_acquisition`) under a local prefix:
 

@@ -1,5 +1,6 @@
 #include "acquisition/acquisition_runner.h"
 #include "json_output.h"
+#include "metadata_numbers.h"
 #include "util/iq_reader.h"
 
 #include <cerrno>
@@ -96,25 +97,16 @@ bool parse_json_number(
     if (!find_json_value(json, key, position)) {
         return false;
     }
-    const char* begin = json.c_str() + position;
-    char* end = nullptr;
-    errno = 0;
-    value = std::strtod(begin, &end);
-    return end != begin && errno != ERANGE && std::isfinite(value);
+    return satcomfec::tools::parse_metadata_number(json, position, value);
 }
 
 bool parse_json_size(
     const std::string& json,
     const std::string& key,
     std::size_t& value) {
-    double parsed = 0.0;
-    if (!parse_json_number(json, key, parsed) || parsed < 0.0 ||
-        parsed > static_cast<double>(std::numeric_limits<std::size_t>::max()) ||
-        std::floor(parsed) != parsed) {
-        return false;
-    }
-    value = static_cast<std::size_t>(parsed);
-    return true;
+    std::size_t position = 0;
+    return find_json_value(json, key, position) &&
+           satcomfec::tools::parse_metadata_size(json, position, value);
 }
 
 bool parse_json_number_array(
@@ -125,29 +117,30 @@ bool parse_json_number_array(
     if (!find_json_value(json, key, position) || json[position] != '[') {
         return false;
     }
-    const std::size_t end_position = json.find(']', position + 1);
-    if (end_position == std::string::npos) {
-        return false;
-    }
-
     values.clear();
     ++position;
-    while (position < end_position) {
-        position = json.find_first_not_of(" \t\r\n,", position);
-        if (position == std::string::npos || position >= end_position) {
-            break;
-        }
-        const char* begin = json.c_str() + position;
-        char* number_end = nullptr;
-        errno = 0;
-        const double parsed = std::strtod(begin, &number_end);
-        if (number_end == begin || errno == ERANGE || !std::isfinite(parsed)) {
+    while (true) {
+        position = json.find_first_not_of(" \t\r\n", position);
+        if (position == std::string::npos) {
             return false;
         }
-        position = static_cast<std::size_t>(number_end - json.c_str());
+        double parsed = 0.0;
+        if (!satcomfec::tools::parse_metadata_number(json, position, parsed, &position)) {
+            return false;
+        }
         values.push_back(parsed);
+        position = json.find_first_not_of(" \t\r\n", position);
+        if (position == std::string::npos) {
+            return false;
+        }
+        if (json[position] == ']') {
+            return satcomfec::tools::json_value_end(json, position + 1);
+        }
+        if (json[position] != ',') {
+            return false;
+        }
+        ++position;
     }
-    return !values.empty();
 }
 
 bool load_fixture_metadata(
@@ -180,7 +173,10 @@ bool load_fixture_metadata(
     }
     if (metadata.sample_count == 0 || metadata.preamble_length == 0 ||
         metadata.sample_rate_hz <= 0.0 || metadata.timing_search_step == 0 ||
-        metadata.timing_search_start > metadata.timing_search_stop_inclusive) {
+        metadata.timing_search_start > metadata.timing_search_stop_inclusive ||
+        metadata.preamble_length > metadata.sample_count ||
+        metadata.timing_search_stop_inclusive >
+            metadata.sample_count - metadata.preamble_length) {
         error_message = "fixture metadata contains an invalid acquisition range";
         return false;
     }
@@ -191,6 +187,11 @@ bool build_timing_hypotheses(
     const FixtureMetadata& metadata,
     std::vector<std::size_t>& timing_offsets,
     std::string& error_message) {
+    if ((metadata.timing_search_stop_inclusive - metadata.timing_search_start) %
+            metadata.timing_search_step != 0) {
+        error_message = "timing search range is not divisible by timing_search_step";
+        return false;
+    }
     timing_offsets.clear();
     for (std::size_t timing = metadata.timing_search_start;;) {
         timing_offsets.push_back(timing);
@@ -198,10 +199,6 @@ bool build_timing_hypotheses(
             break;
         }
         timing += metadata.timing_search_step;
-    }
-    if (timing_offsets.back() != metadata.timing_search_stop_inclusive) {
-        error_message = "timing search range is not divisible by timing_search_step";
-        return false;
     }
     return true;
 }

@@ -648,6 +648,12 @@ endif()
 
 if(BUILD_TESTING AND NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
     find_package(Python3 3 REQUIRED COMPONENTS Interpreter)
+    add_executable(check_iq_reader tests/check_iq_reader.cpp)
+    target_link_libraries(
+        check_iq_reader
+        PRIVATE satcom_replay_core satcomfec_project_options
+    )
+    add_test(NAME iq_reader_integrity COMMAND check_iq_reader)
     if(SATCOMFEC_ENABLE_SME2)
         set(SATCOMFEC_COMPILE_CHECK_MODE "sme2")
     elseif(SATCOMFEC_ENABLE_NEON)
