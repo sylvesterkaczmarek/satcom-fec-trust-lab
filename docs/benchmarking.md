@@ -5,6 +5,10 @@ available SME2 acquisition implementations against fixed synthetic workload
 classes. JSON written to standard output is authoritative; `--json PATH` and
 `--csv PATH` optionally persist the JSON and a compact summary.
 
+JSON and CSV paths must identify different regular files with existing parent
+directories. The CLI rejects aliases through symlinks or hard links before
+running the benchmark and reports buffered write failures when saving results.
+
 The same correctness-gated harness can be built as a minimal `arm64-v8a`
 Android command-line executable and run through ADB. Build/runtime feature
 gating and exact commands are documented in
@@ -162,6 +166,12 @@ minimum, maximum, spread, and coefficient of variation of the run medians for
 each workload/mode/implementation. SME2 entries retain the SME2-versus-NEON
 speedup from every independent run. Raw reports remain authoritative; the
 summary does not replace them.
+
+Use a new or empty `--output-dir` for each run set. Existing reports are
+preserved, and a failed run leaves its raw output for inspection without a
+success summary. The helper rejects inconsistent benchmark settings,
+duplicate observations and invalid timing values before producing a summary.
+The timing defaults and aggregation formulae are unchanged.
 
 To reuse an existing configured benchmark without rebuilding, identify that
 build explicitly:

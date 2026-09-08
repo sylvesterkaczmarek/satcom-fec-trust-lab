@@ -9,6 +9,7 @@
 
 #include "../src/demo/replay_pipeline.h"
 #include "json_output.h"
+#include "metadata_numbers.h"
 
 namespace {
 
@@ -89,11 +90,13 @@ bool parse_bool_field(
     if (!find_json_value(document, key, start)) {
         return false;
     }
-    if (document.compare(start, 4, "true") == 0) {
+    if (document.compare(start, 4, "true") == 0 &&
+        satcomfec::tools::json_value_end(document, start + 4)) {
         value = true;
         return true;
     }
-    if (document.compare(start, 5, "false") == 0) {
+    if (document.compare(start, 5, "false") == 0 &&
+        satcomfec::tools::json_value_end(document, start + 5)) {
         value = false;
         return true;
     }
@@ -109,14 +112,13 @@ bool parse_optional_double_field(
     if (!find_json_value(document, key, start)) {
         return false;
     }
-    if (document.compare(start, 4, "null") == 0) {
+    if (document.compare(start, 4, "null") == 0 &&
+        satcomfec::tools::json_value_end(document, start + 4)) {
         has_value = false;
         value = 0.0;
         return true;
     }
-    char* end = nullptr;
-    value = std::strtod(document.c_str() + start, &end);
-    if (end == document.c_str() + start || !std::isfinite(value)) {
+    if (!satcomfec::tools::parse_metadata_number(document, start, value)) {
         return false;
     }
     has_value = true;
@@ -132,23 +134,16 @@ bool parse_optional_size_field(
     if (!find_json_value(document, key, start)) {
         return false;
     }
-    if (document.compare(start, 4, "null") == 0) {
+    if (document.compare(start, 4, "null") == 0 &&
+        satcomfec::tools::json_value_end(document, start + 4)) {
         has_value = false;
         value = 0;
         return true;
     }
-    if (document[start] == '-') {
-        return false;
-    }
-    char* end = nullptr;
-    const unsigned long long parsed =
-        std::strtoull(document.c_str() + start, &end, 10);
-    if (end == document.c_str() + start ||
-        parsed > std::numeric_limits<std::size_t>::max()) {
+    if (!satcomfec::tools::parse_metadata_size(document, start, value)) {
         return false;
     }
     has_value = true;
-    value = static_cast<std::size_t>(parsed);
     return true;
 }
 
@@ -178,40 +173,46 @@ bool load_fixture_metadata(
         return false;
     }
 
+    FixtureMetadata candidate;
     std::string schema;
     std::string preamble_file;
     if (!parse_string_field(document, "schema", schema) ||
         schema != "satcom-fec-trust-lab/replay-fixture-v2" ||
-        !parse_string_field(document, "scenario", metadata.ground_truth.scenario) ||
-        !parse_bool_field(document, "signal_present", metadata.ground_truth.signal_present) ||
+        !parse_string_field(document, "scenario", candidate.ground_truth.scenario) ||
+        !parse_bool_field(document, "signal_present", candidate.ground_truth.signal_present) ||
         !parse_optional_size_field(
             document,
             "true_timing_offset",
-            metadata.ground_truth.has_timing_offset,
-            metadata.ground_truth.timing_offset) ||
+            candidate.ground_truth.has_timing_offset,
+            candidate.ground_truth.timing_offset) ||
         !parse_optional_double_field(
             document,
             "true_cfo_hz",
-            metadata.ground_truth.has_cfo_hz,
-            metadata.ground_truth.cfo_hz) ||
+            candidate.ground_truth.has_cfo_hz,
+            candidate.ground_truth.cfo_hz) ||
         !parse_required_double_field(
-            document, "sample_rate_hz", metadata.sample_rate_hz) ||
+            document, "sample_rate_hz", candidate.sample_rate_hz) ||
         !parse_required_size_field(
-            document, "samples_per_symbol", metadata.samples_per_symbol) ||
+            document, "samples_per_symbol", candidate.samples_per_symbol) ||
         !parse_string_field(document, "preamble_file", preamble_file)) {
         error_message = "Replay metadata does not match the v2 fixture contract";
         return false;
     }
-    if (metadata.ground_truth.signal_present &&
-        (!metadata.ground_truth.has_timing_offset ||
-         !metadata.ground_truth.has_cfo_hz)) {
+    if (candidate.ground_truth.signal_present &&
+        (!candidate.ground_truth.has_timing_offset ||
+         !candidate.ground_truth.has_cfo_hz)) {
         error_message = "Signal-bearing metadata is missing timing or CFO ground truth";
         return false;
     }
 
-    metadata.ground_truth.available = true;
-    metadata.preamble_path =
+    if (candidate.sample_rate_hz <= 0.0 || candidate.samples_per_symbol == 0) {
+        error_message = "Replay metadata contains an invalid sample rate or symbol size";
+        return false;
+    }
+    candidate.ground_truth.available = true;
+    candidate.preamble_path =
         (std::filesystem::path(path).parent_path() / preamble_file).string();
+    metadata = candidate;
     return true;
 }
 

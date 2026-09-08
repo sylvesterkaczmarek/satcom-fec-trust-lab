@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import statistics
 import subprocess
@@ -69,8 +70,8 @@ def parse_arguments() -> argparse.Namespace:
         parser.error("--warmup-rounds must be non-negative")
     if arguments.samples < 3:
         parser.error("--samples must be at least 3")
-    if arguments.min_sample_ms <= 0.0:
-        parser.error("--min-sample-ms must be positive")
+    if not math.isfinite(arguments.min_sample_ms) or arguments.min_sample_ms <= 0.0:
+        parser.error("--min-sample-ms must be finite and positive")
     if arguments.skip_build and arguments.build_dir is None:
         parser.error("--skip-build requires an explicit --build-dir PATH")
     return arguments
@@ -97,15 +98,43 @@ def benchmark_arguments(
 
 def mode_lookup(report: dict[str, Any]) -> dict[tuple[str, str, str], dict[str, Any]]:
     modes: dict[tuple[str, str, str], dict[str, Any]] = {}
+    workload_names: set[str] = set()
     for workload in report["workloads"]:
+        name = workload["name"]
+        if not isinstance(name, str) or not name or name in workload_names:
+            raise RuntimeError("benchmark report has an invalid or duplicate workload name")
+        workload_names.add(name)
+        implementation_names: set[str] = set()
         for implementation in workload["implementations"]:
+            requested = implementation["requested_implementation"]
+            if (
+                not isinstance(requested, str)
+                or not requested
+                or requested in implementation_names
+            ):
+                raise RuntimeError("benchmark report has an invalid or duplicate implementation")
+            implementation_names.add(requested)
             for mode in implementation["modes"]:
                 key = (
                     workload["name"],
                     mode["name"],
                     implementation["requested_implementation"],
                 )
+                if not isinstance(mode["name"], str) or not mode["name"] or key in modes:
+                    raise RuntimeError("benchmark report has an invalid or duplicate mode")
+                if type(mode["valid"]) is not bool:
+                    raise RuntimeError("benchmark mode valid must be a boolean")
+                if mode["valid"]:
+                    median = mode["timing"]["latency_ms"]["median"]
+                    if (
+                        type(median) not in (int, float)
+                        or not math.isfinite(median)
+                        or median <= 0.0
+                    ):
+                        raise RuntimeError("valid benchmark mode requires a finite positive median")
                 modes[key] = mode
+    if not modes:
+        raise RuntimeError("benchmark report contains no implementation/mode observations")
     return modes
 
 
@@ -113,7 +142,18 @@ def nullable_round(value: float | None, digits: int = 9) -> float | None:
     return None if value is None else round(value, digits)
 
 
+def reject_json_constant(value: str) -> None:
+    raise ValueError(f"benchmark JSON contains a non-finite number: {value}")
+
+
 def summarize_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
+    if not reports or any(
+        not isinstance(report, dict)
+        or report.get("ok") is not True
+        or not isinstance(report.get("benchmark"), dict)
+        for report in reports
+    ):
+        raise RuntimeError("benchmark reports must explicitly report ok=true")
     first_modes = mode_lookup(reports[0])
     expected_keys = set(first_modes)
     source_commits = {
@@ -140,12 +180,21 @@ def summarize_reports(reports: list[dict[str, Any]]) -> dict[str, Any]:
         json.dumps(report["runtime_cpu_features"], sort_keys=True)
         for report in reports
     }
+    benchmark_metadata = {
+        json.dumps(
+            {key: value for key, value in report["benchmark"].items() if key != "timestamp_utc"},
+            sort_keys=True,
+        )
+        for report in reports
+    }
     if len(source_commits) != 1 or len(dirty_states) != 1:
         raise RuntimeError("benchmark source metadata changed between process runs")
     if len(workload_definitions) != 1:
         raise RuntimeError("workload definitions changed between process runs")
     if len(host_metadata) != 1 or len(build_metadata) != 1 or len(runtime_metadata) != 1:
         raise RuntimeError("host, build, or runtime feature metadata changed between runs")
+    if len(benchmark_metadata) != 1:
+        raise RuntimeError("benchmark settings changed between process runs")
 
     lookups = [mode_lookup(report) for report in reports]
     if any(set(lookup) != expected_keys for lookup in lookups):
@@ -260,6 +309,14 @@ def print_compact_summary(summary: dict[str, Any]) -> None:
 
 def main() -> int:
     arguments = parse_arguments()
+    output_directory = repository_path(arguments.output_dir)
+    if output_directory.exists() and (
+        not output_directory.is_dir() or any(output_directory.iterdir())
+    ):
+        raise RuntimeError(
+            f"output directory must be new or empty: '{output_directory}'; "
+            "choose a new directory to preserve previous reports"
+        )
     build_directory = benchmark_build_directory(arguments)
     benchmark_binary = build_directory / "benchmark_acquisition"
     if not arguments.skip_build:
@@ -287,11 +344,6 @@ def main() -> int:
             f"benchmark build did not produce expected executable '{benchmark_binary}'"
         )
 
-    output_directory = (
-        arguments.output_dir
-        if arguments.output_dir.is_absolute()
-        else ROOT_DIR / arguments.output_dir
-    )
     output_directory.mkdir(parents=True, exist_ok=True)
     command = benchmark_arguments(arguments, benchmark_binary)
     reports: list[dict[str, Any]] = []
@@ -307,19 +359,21 @@ def main() -> int:
         )
         run_name = f"run-{run_index:02d}.json"
         run_path = output_directory / run_name
-        run_path.write_text(completed.stdout, encoding="utf-8")
+        with run_path.open("x", encoding="utf-8") as output:
+            output.write(completed.stdout)
         if completed.stderr:
-            (output_directory / f"run-{run_index:02d}.stderr.txt").write_text(
-                completed.stderr, encoding="utf-8"
-            )
+            stderr_path = output_directory / f"run-{run_index:02d}.stderr.txt"
+            with stderr_path.open("x", encoding="utf-8") as output:
+                output.write(completed.stderr)
         if completed.returncode != 0:
             raise RuntimeError(
                 f"benchmark process {run_index} failed with exit code "
                 f"{completed.returncode}; output preserved at {run_path}"
             )
-        report = json.loads(completed.stdout)
-        if not report.get("ok"):
+        report = json.loads(completed.stdout, parse_constant=reject_json_constant)
+        if not isinstance(report, dict) or report.get("ok") is not True:
             raise RuntimeError(f"benchmark process {run_index} reported ok=false")
+        mode_lookup(report)
         reports.append(report)
         run_entries.append(
             {
@@ -342,10 +396,9 @@ def main() -> int:
     summary["benchmark_command"] = [reported_binary, *command[1:]]
     summary["runs"] = run_entries
     summary_path = output_directory / "summary.json"
-    summary_path.write_text(
-        json.dumps(summary, indent=2, sort_keys=False) + "\n",
-        encoding="utf-8",
-    )
+    summary_json = json.dumps(summary, indent=2, sort_keys=False, allow_nan=False) + "\n"
+    with summary_path.open("x", encoding="utf-8") as output:
+        output.write(summary_json)
     print_compact_summary(summary)
     print(f"raw reports and summary: {output_directory}")
     return 0
@@ -354,6 +407,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (json.JSONDecodeError, OSError, RuntimeError, subprocess.SubprocessError) as error:
+    except (ValueError, KeyError, TypeError, OSError, RuntimeError, subprocess.SubprocessError) as error:
         print(f"error: {error}", file=sys.stderr)
         raise SystemExit(1)
