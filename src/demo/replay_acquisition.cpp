@@ -51,6 +51,24 @@ double normalized_candidate_score(
     return clamp_unit(candidate.score / denominator);
 }
 
+acquisition::AcquisitionCandidate find_distinct_competitor(
+    const acquisition::AcquisitionResult& result,
+    double cfo_guard_hz) {
+    acquisition::AcquisitionCandidate competitor;
+    for (const acquisition::FrequencyPeaks& row : result.peaks_by_frequency) {
+        // At most one timing in a frequency row belongs to the winning peak.
+        const bool same_peak =
+            row.best.hypothesis.timing_offset == result.best.hypothesis.timing_offset &&
+            std::abs(row.best.hypothesis.frequency_offset_hz -
+                     result.best.hypothesis.frequency_offset_hz) < cfo_guard_hz;
+        const auto& candidate = same_peak ? row.second_best : row.best;
+        if (candidate.valid && (!competitor.valid || candidate.score > competitor.score)) {
+            competitor = candidate;
+        }
+    }
+    return competitor;
+}
+
 void attach_ground_truth(
     const ReplayAcquisitionGroundTruth& ground_truth,
     ReplayAcquisitionDiagnostics& diagnostics) {
@@ -144,6 +162,7 @@ bool acquire_and_align_replay_frame(
         return false;
     }
 
+    plan.retain_frequency_peaks = true;
     const acquisition::AcquisitionResult acquisition_result =
         acquisition::run_acquisition(
             normalized_iq, plan, config.implementation);
@@ -178,13 +197,20 @@ bool acquire_and_align_replay_frame(
         normalized_iq, preamble, acquisition_result.best, preamble_energy);
     diagnostics.second_best_normalized_peak = normalized_candidate_score(
         normalized_iq, preamble, acquisition_result.second_best, preamble_energy);
+    diagnostics.cfo_guard_hz = config.sample_rate_hz / static_cast<double>(preamble.size());
+    diagnostics.distinct_competitor = find_distinct_competitor(
+        acquisition_result, diagnostics.cfo_guard_hz);
+    if (diagnostics.distinct_competitor.valid && acquisition_result.best.score > 0.0) {
+        diagnostics.distinct_peak_separation = clamp_unit(
+            (acquisition_result.best.score - diagnostics.distinct_competitor.score) /
+            acquisition_result.best.score);
+    }
     diagnostics.confidence = clamp_unit(
         std::sqrt(diagnostics.normalized_peak) *
-        diagnostics.normalized_peak_separation);
+        diagnostics.distinct_peak_separation);
     diagnostics.accepted =
         diagnostics.normalized_peak >= config.minimum_normalized_peak &&
-        diagnostics.normalized_peak_separation >=
-            config.minimum_peak_separation;
+        diagnostics.distinct_peak_separation >= config.minimum_peak_separation;
     attach_ground_truth(ground_truth, diagnostics);
 
     if (!diagnostics.accepted) {

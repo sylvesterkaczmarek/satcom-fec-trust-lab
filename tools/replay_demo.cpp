@@ -1,11 +1,15 @@
+#include <cerrno>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <limits>
+#include <set>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #include "../src/demo/replay_pipeline.h"
 #include "json_output.h"
@@ -15,7 +19,7 @@ namespace {
 
 struct FixtureMetadata {
     satcomfec::ReplayAcquisitionGroundTruth ground_truth;
-    double sample_rate_hz = 48000.0;
+    satcomfec::ReplayAcquisitionConfig acquisition;
     std::size_t samples_per_symbol = 8;
     std::string preamble_path;
 };
@@ -49,29 +53,12 @@ bool read_text_file(const std::string& path, std::string& text) {
     return input.good() || input.eof();
 }
 
-bool find_json_value(
-    const std::string& document,
-    const std::string& key,
-    std::size_t& value_start) {
-    const std::string quoted_key = "\"" + key + "\"";
-    const std::size_t key_position = document.find(quoted_key);
-    if (key_position == std::string::npos) {
-        return false;
-    }
-    const std::size_t colon = document.find(':', key_position + quoted_key.size());
-    if (colon == std::string::npos) {
-        return false;
-    }
-    value_start = document.find_first_not_of(" \t\r\n", colon + 1);
-    return value_start != std::string::npos;
-}
-
 bool parse_string_field(
     const std::string& document,
     const std::string& key,
     std::string& value) {
     std::size_t start = 0;
-    if (!find_json_value(document, key, start) || document[start] != '"') {
+    if (!satcomfec::tools::find_metadata_field(document, key, start) || document[start] != '"') {
         return false;
     }
     const std::size_t end = document.find('"', start + 1);
@@ -87,7 +74,7 @@ bool parse_bool_field(
     const std::string& key,
     bool& value) {
     std::size_t start = 0;
-    if (!find_json_value(document, key, start)) {
+    if (!satcomfec::tools::find_metadata_field(document, key, start)) {
         return false;
     }
     if (document.compare(start, 4, "true") == 0 &&
@@ -109,7 +96,7 @@ bool parse_optional_double_field(
     bool& has_value,
     double& value) {
     std::size_t start = 0;
-    if (!find_json_value(document, key, start)) {
+    if (!satcomfec::tools::find_metadata_field(document, key, start)) {
         return false;
     }
     if (document.compare(start, 4, "null") == 0 &&
@@ -131,7 +118,7 @@ bool parse_optional_size_field(
     bool& has_value,
     std::size_t& value) {
     std::size_t start = 0;
-    if (!find_json_value(document, key, start)) {
+    if (!satcomfec::tools::find_metadata_field(document, key, start)) {
         return false;
     }
     if (document.compare(start, 4, "null") == 0 &&
@@ -191,7 +178,7 @@ bool load_fixture_metadata(
             candidate.ground_truth.has_cfo_hz,
             candidate.ground_truth.cfo_hz) ||
         !parse_required_double_field(
-            document, "sample_rate_hz", candidate.sample_rate_hz) ||
+            document, "sample_rate_hz", candidate.acquisition.sample_rate_hz) ||
         !parse_required_size_field(
             document, "samples_per_symbol", candidate.samples_per_symbol) ||
         !parse_string_field(document, "preamble_file", preamble_file)) {
@@ -205,9 +192,18 @@ bool load_fixture_metadata(
         return false;
     }
 
-    if (candidate.sample_rate_hz <= 0.0 || candidate.samples_per_symbol == 0) {
+    if (candidate.acquisition.sample_rate_hz <= 0.0 || candidate.samples_per_symbol == 0) {
         error_message = "Replay metadata contains an invalid sample rate or symbol size";
         return false;
+    }
+    std::size_t grid_start = 0;
+    if (satcomfec::tools::find_metadata_field(document, "cfo_hypotheses_hz", grid_start)) {
+        auto& grid = candidate.acquisition.cfo_hypotheses_hz;
+        if (!satcomfec::tools::parse_metadata_number_array(document, grid_start, grid) ||
+            std::set<double>(grid.begin(), grid.end()).size() != grid.size()) {
+            error_message = "Replay metadata requires a nonempty grid of distinct, finite CFO values";
+            return false;
+        }
     }
     candidate.ground_truth.available = true;
     candidate.preamble_path =
@@ -255,6 +251,7 @@ int main(int argc, char** argv) {
     std::string decoder_name = "viterbi-reference";
     std::string acquisition_name = "reference";
     bool metadata_explicit = false;
+    satcomfec::ReplayConfig config;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -271,6 +268,19 @@ int main(int argc, char** argv) {
             preamble_path = argv[++i];
             continue;
         }
+        if (arg == "--symbol-full-scale" && (i + 1) < argc) {
+            const char* text = argv[++i];
+            char* end = nullptr;
+            errno = 0;
+            const float limit = std::strtof(text, &end);
+            if (end == text || *end != '\0' || errno == ERANGE ||
+                !std::isfinite(limit) || limit <= 0.0f) {
+                std::cerr << "--symbol-full-scale requires a finite positive number\n";
+                return EXIT_FAILURE;
+            }
+            config.full_scale_symbol_mean = limit;
+            continue;
+        }
         if (arg == "--decoder" && (i + 1) < argc) {
             decoder_name = argv[++i];
             continue;
@@ -283,7 +293,7 @@ int main(int argc, char** argv) {
             std::cout
                 << "Usage: replay_demo [--iq path] [--metadata path] "
                    "[--preamble path] [--acquisition reference|neon|sme2] "
-                   "[--decoder viterbi-reference|viterbi-neon]\n";
+                   "[--decoder viterbi-reference|viterbi-neon] [--symbol-full-scale N]\n";
             return 0;
         }
         std::cerr << "Unknown or incomplete argument: " << arg << "\n";
@@ -326,16 +336,12 @@ int main(int argc, char** argv) {
                             : metadata.preamble_path;
     }
 
-    satcomfec::ReplayConfig config;
     config.iq_path = iq_path;
     config.preamble_iq_path = preamble_path;
     config.decoder = parse_decoder(decoder_name);
     config.samples_per_symbol = metadata.samples_per_symbol;
-    config.acquisition.sample_rate_hz = metadata.sample_rate_hz;
+    config.acquisition = std::move(metadata.acquisition);
     config.acquisition.implementation = parse_acquisition(acquisition_name);
-    config.acquisition.cfo_hypotheses_hz = {
-        -500.0, -250.0, 0.0, 250.0, 500.0,
-    };
     config.ground_truth = metadata.ground_truth;
 
     const satcomfec::ReplayResult result = satcomfec::run_demo_replay(config);
@@ -414,6 +420,22 @@ int main(int argc, char** argv) {
               << satcomfec::tools::format_float(
                      acquisition.normalized_peak_separation)
               << ",\n";
+    const auto& competitor = acquisition.distinct_competitor;
+    std::cout << "    \"distinct_competitor\": ";
+    if (competitor.valid) {
+        std::cout << "{\"timing_offset\": " << competitor.hypothesis.timing_offset
+                  << ", \"cfo_hz\": " << satcomfec::tools::format_float(
+                         competitor.hypothesis.frequency_offset_hz)
+                  << ", \"score\": " << satcomfec::tools::format_float(competitor.score)
+                  << "}";
+    } else {
+        std::cout << "null";
+    }
+    std::cout << ",\n    \"distinct_peak_separation\": ";
+    print_nullable_float(competitor.valid, acquisition.distinct_peak_separation);
+    std::cout << ",\n    \"cfo_guard_hz\": ";
+    print_nullable_float(acquisition.search_completed, acquisition.cfo_guard_hz);
+    std::cout << ",\n";
     std::cout << "    \"confidence\": "
               << satcomfec::tools::format_float(acquisition.confidence) << ",\n";
     std::cout << "    \"confidence_calibrated\": false,\n";
@@ -457,6 +479,16 @@ int main(int argc, char** argv) {
     std::cout << "\n    }\n";
     std::cout << "  },\n";
 
+    const auto& features = result.trust_features;
+    auto measured_float = [](bool measured, float value, int precision = 6) {
+        return measured ? satcomfec::tools::format_float(value, precision) : std::string("null");
+    };
+    auto measured_flag = [](bool measured, bool flag) {
+        if (!measured) {
+            return "null";
+        }
+        return flag ? "true" : "false";
+    };
     std::cout << "  \"front_end\": {\n";
     std::cout << "    \"sample_count\": " << result.front_end_stats.sample_count << ",\n";
     std::cout << "    \"dc_i\": " << satcomfec::tools::format_float(result.front_end_stats.dc_i)
@@ -475,11 +507,21 @@ int main(int argc, char** argv) {
     std::cout << "    \"symbol_count\": " << result.demod_stats.symbol_count << ",\n";
     std::cout << "    \"samples_per_symbol\": " << result.demod_stats.samples_per_symbol
               << ",\n";
+    std::cout << "    \"full_scale_symbol_mean\": ";
+    if (config.full_scale_symbol_mean) {
+        std::cout << std::setprecision(std::numeric_limits<float>::max_digits10)
+                  << *config.full_scale_symbol_mean;
+    } else {
+        std::cout << "null";
+    }
+    std::cout << ",\n";
     std::cout << "    \"max_abs_symbol_mean\": "
               << satcomfec::tools::format_float(result.demod_stats.max_abs_symbol_mean)
               << ",\n";
-    std::cout << "    \"clipped_symbol_count\": "
-              << result.demod_stats.clipped_symbol_count << "\n  },\n";
+    std::cout << "    \"clipped_symbol_count\": ";
+    print_nullable_size(result.demod_stats.clipped_symbol_count.has_value(),
+                        result.demod_stats.clipped_symbol_count.value_or(0));
+    std::cout << "\n  },\n";
     std::cout << "  \"framing\": {\n";
     std::cout << "    \"sync_start_index\": " << result.frame.sync_start_index << ",\n";
     std::cout << "    \"frame_start_index\": " << result.frame.start_index << ",\n";
@@ -487,52 +529,54 @@ int main(int argc, char** argv) {
     std::cout << "    \"sync_score\": " << result.frame.correlation_score << ",\n";
     std::cout << "    \"has_second_best_correlation\": "
               << (result.frame.has_second_best_correlation ? "true" : "false") << ",\n";
-    std::cout << "    \"second_best_sync_start_index\": "
-              << result.frame.second_best_sync_start_index << ",\n";
-    std::cout << "    \"second_best_sync_score\": "
-              << result.frame.second_best_correlation_score << "\n  },\n";
+    std::cout << "    \"second_best_sync_start_index\": ";
+    print_nullable_size(result.frame.has_second_best_correlation, result.frame.second_best_sync_start_index);
+    std::cout << ",\n    \"second_best_sync_score\": ";
+    print_nullable_integer(result.frame.has_second_best_correlation, result.frame.second_best_correlation_score);
+    std::cout << "\n  },\n";
     std::cout << "  \"trust_features\": {\n";
     std::cout << "    \"mean_abs_soft_decision\": "
-              << satcomfec::tools::format_float(
-                     result.trust_features.mean_abs_soft_decision, 3)
+              << measured_float(features.soft_decisions_measured,
+                                features.mean_abs_soft_decision, 3)
               << ",\n";
     std::cout << "    \"normalized_mean_abs_soft_decision\": "
-              << satcomfec::tools::format_float(
-                     result.trust_features.normalized_mean_abs_soft_decision)
+              << measured_float(features.soft_decisions_measured,
+                                features.normalized_mean_abs_soft_decision)
               << ",\n";
     std::cout << "    \"weak_soft_decision_fraction\": "
-              << satcomfec::tools::format_float(
-                     result.trust_features.weak_soft_decision_fraction)
+              << measured_float(features.soft_decisions_measured,
+                                features.weak_soft_decision_fraction)
               << ",\n";
     std::cout << "    \"normalized_acquisition_peak\": "
-              << satcomfec::tools::format_float(
-                     result.trust_features.normalized_acquisition_peak)
+              << measured_float(features.acquisition_measured,
+                                features.normalized_acquisition_peak)
               << ",\n";
     std::cout << "    \"acquisition_peak_separation\": "
-              << satcomfec::tools::format_float(
-                     result.trust_features.acquisition_peak_separation)
+              << measured_float(features.acquisition_separation_measured,
+                                features.acquisition_peak_separation)
               << ",\n";
     std::cout << "    \"timing_ambiguity\": "
-              << satcomfec::tools::format_float(result.trust_features.timing_ambiguity)
+              << measured_float(features.acquisition_separation_measured,
+                                features.timing_ambiguity)
               << ",\n";
     std::cout << "    \"residual_acquisition_uncertainty\": "
-              << satcomfec::tools::format_float(
-                     result.trust_features.residual_acquisition_uncertainty)
+              << measured_float(features.acquisition_separation_measured,
+                                features.residual_acquisition_uncertainty)
               << ",\n";
     std::cout << "    \"acquisition_accepted\": "
               << satcomfec::tools::format_float(result.trust_features.acquisition_accepted)
               << ",\n";
     std::cout << "    \"normalized_frame_sync_score\": "
-              << satcomfec::tools::format_float(
-                     result.trust_features.normalized_frame_sync_score)
+              << measured_float(features.frame_sync_measured,
+                                features.normalized_frame_sync_score)
               << ",\n";
     std::cout << "    \"normalized_frame_sync_margin\": "
-              << satcomfec::tools::format_float(
-                     result.trust_features.normalized_frame_sync_margin)
+              << measured_float(features.frame_sync_margin_measured,
+                                features.normalized_frame_sync_margin)
               << ",\n";
     std::cout << "    \"clipped_symbol_fraction\": "
-              << satcomfec::tools::format_float(
-                     result.trust_features.clipped_symbol_fraction)
+              << measured_float(features.clipping_measured,
+                                features.clipped_symbol_fraction)
               << ",\n";
     std::cout << "    \"crc_evaluated\": "
               << satcomfec::tools::format_float(result.trust_features.crc_evaluated)
@@ -542,38 +586,40 @@ int main(int argc, char** argv) {
               << "\n  },\n";
     std::cout << "  \"trust_breakdown\": {\n";
     std::cout << "    \"soft_decision_strength\": "
-              << satcomfec::tools::format_float(
-                     result.trust_breakdown.soft_decision_strength)
+              << measured_float(features.soft_decisions_measured,
+                                result.trust_breakdown.soft_decision_strength)
               << ",\n";
     std::cout << "    \"soft_decision_consistency\": "
-              << satcomfec::tools::format_float(
-                     result.trust_breakdown.soft_decision_consistency)
+              << measured_float(features.soft_decisions_measured,
+                                result.trust_breakdown.soft_decision_consistency)
               << ",\n";
     std::cout << "    \"acquisition_strength\": "
-              << satcomfec::tools::format_float(
-                     result.trust_breakdown.acquisition_strength)
+              << measured_float(features.acquisition_measured,
+                                result.trust_breakdown.acquisition_strength)
               << ",\n";
     std::cout << "    \"acquisition_separation\": "
-              << satcomfec::tools::format_float(
-                     result.trust_breakdown.acquisition_separation)
+              << measured_float(features.acquisition_separation_measured,
+                                result.trust_breakdown.acquisition_separation)
               << ",\n";
     std::cout << "    \"acquisition_certainty\": "
-              << satcomfec::tools::format_float(
-                     result.trust_breakdown.acquisition_certainty)
+              << measured_float(features.acquisition_separation_measured,
+                                result.trust_breakdown.acquisition_certainty)
               << ",\n";
     std::cout << "    \"frame_sync_quality\": "
-              << satcomfec::tools::format_float(
-                     result.trust_breakdown.frame_sync_quality)
+              << measured_float(features.frame_sync_measured,
+                                result.trust_breakdown.frame_sync_quality)
               << ",\n";
     std::cout << "    \"frame_sync_margin_quality\": "
-              << satcomfec::tools::format_float(
-                     result.trust_breakdown.frame_sync_margin_quality)
+              << measured_float(features.frame_sync_margin_measured,
+                                result.trust_breakdown.frame_sync_margin_quality)
               << ",\n";
     std::cout << "    \"demod_quality\": "
-              << satcomfec::tools::format_float(result.trust_breakdown.demod_quality)
+              << measured_float(features.clipping_measured,
+                                result.trust_breakdown.demod_quality)
               << ",\n";
     std::cout << "    \"crc_quality\": "
-              << satcomfec::tools::format_float(result.trust_breakdown.crc_quality)
+              << measured_float(features.crc_evaluated >= 0.5f,
+                                result.trust_breakdown.crc_quality)
               << ",\n";
     std::cout << "    \"capped_by_acquisition_rejection\": "
               << (result.trust_breakdown.capped_by_acquisition_rejection
@@ -590,19 +636,19 @@ int main(int argc, char** argv) {
     std::cout << "    \"band\": \""
               << satcomfec::tools::escape_json(result.trust_assessment.band) << "\",\n";
     std::cout << "    \"weak_soft_decisions\": "
-              << (result.trust_assessment.weak_soft_decisions ? "true" : "false")
+              << measured_flag(features.soft_decisions_measured, result.trust_assessment.weak_soft_decisions)
               << ",\n";
     std::cout << "    \"ambiguous_acquisition\": "
-              << (result.trust_assessment.ambiguous_acquisition ? "true" : "false")
+              << measured_flag(features.acquisition_separation_measured, result.trust_assessment.ambiguous_acquisition)
               << ",\n";
     std::cout << "    \"acquisition_rejected\": "
               << (result.trust_assessment.acquisition_rejected ? "true" : "false")
               << ",\n";
     std::cout << "    \"ambiguous_frame_sync\": "
-              << (result.trust_assessment.ambiguous_frame_sync ? "true" : "false")
+              << measured_flag(features.frame_sync_margin_measured, result.trust_assessment.ambiguous_frame_sync)
               << ",\n";
     std::cout << "    \"demod_clipping\": "
-              << (result.trust_assessment.demod_clipping ? "true" : "false") << ",\n";
+              << measured_flag(features.clipping_measured, result.trust_assessment.demod_clipping) << ",\n";
     std::cout << "    \"crc_not_evaluated\": "
               << (result.trust_assessment.crc_not_evaluated ? "true" : "false")
               << ",\n";

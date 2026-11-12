@@ -93,6 +93,11 @@ class HostReplayTests(unittest.TestCase):
         )
         self.assertGreater(result["framing"]["sync_score"], 0)
         self.assertFalse(result["framing"]["has_second_best_correlation"])
+        self.assertIsNone(result["framing"]["second_best_sync_score"])
+        self.assertIsNone(result["trust_features"]["normalized_frame_sync_margin"])
+        self.assertIsNone(result["trust_breakdown"]["frame_sync_margin_quality"])
+        self.assertIsNone(result["demod"]["clipped_symbol_count"])
+        self.assertIsNone(result["trust_breakdown"]["demod_quality"])
         self.assertEqual(
             result["acquisition"]["selected_implementation"], "reference"
         )
@@ -123,6 +128,19 @@ class HostReplayTests(unittest.TestCase):
             result["trust_breakdown"]["score"],
             places=6,
         )
+
+    def test_fixed_demodulator_full_scale_reports_measured_clipping(self) -> None:
+        result = run_json_command(
+            "bash", "scripts/run_replay_demo.sh", "--symbol-full-scale", "0.5"
+        )
+        count = result["demod"]["clipped_symbol_count"]
+        total = result["demod"]["symbol_count"]
+        self.assertEqual(result["demod"]["full_scale_symbol_mean"], 0.5)
+        self.assertGreater(count, 0)
+        self.assertLessEqual(count, total)
+        self.assertAlmostEqual(result["trust_features"]["clipped_symbol_fraction"], count / total, places=6)
+        self.assertTrue(result["trust_assessment"]["demod_clipping"])
+        self.assertTrue(result["crc_ok"])
 
     def test_replay_detection_does_not_require_fixture_metadata(self) -> None:
         source_iq = ROOT_DIR / "data/synthetic/canned_replay/demo_conv_bpsk.iq"
@@ -402,6 +420,9 @@ class HostReplayTests(unittest.TestCase):
             result["acquisition"]["minimum_normalized_peak"],
         )
         self.assertEqual(result["demod"]["symbol_count"], 0)
+        self.assertIsNone(result["trust_breakdown"]["demod_quality"])
+        self.assertIsNone(result["trust_breakdown"]["crc_quality"])
+        self.assertIsNone(result["trust_assessment"]["demod_clipping"])
         self.assertEqual(result["frame_soft_bits"], 0)
         self.assertTrue(result["trust_assessment"]["acquisition_rejected"])
         self.assertTrue(result["trust_assessment"]["crc_not_evaluated"])

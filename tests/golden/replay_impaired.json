@@ -23,8 +23,8 @@
     "weak_soft_decisions": true,
     "ambiguous_acquisition": false,
     "acquisition_rejected": false,
-    "ambiguous_frame_sync": false,
-    "demod_clipping": false,
+    "ambiguous_frame_sync": null,
+    "demod_clipping": null,
     "crc_not_evaluated": false,
     "crc_failed": false
   }

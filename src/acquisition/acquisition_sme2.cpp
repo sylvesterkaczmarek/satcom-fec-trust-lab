@@ -1,8 +1,8 @@
 #include "acquisition/acquisition_sme2.h"
 
+#include "acquisition/acquisition_peaks.h"
 #include "acquisition/acquisition_sme2_kernel.h"
 
-#include <algorithm>
 #include <cmath>
 #include <complex>
 #include <limits>
@@ -115,20 +115,6 @@ bool validate_plan_and_input(
 
 #if SATCOMFEC_ACQUISITION_HAS_SME2
 
-void consider_candidate(
-    const AcquisitionCandidate& candidate,
-    AcquisitionCandidate& best,
-    AcquisitionCandidate& second_best) {
-    if (!best.valid || candidate.score > best.score) {
-        second_best = best;
-        best = candidate;
-        return;
-    }
-    if (!second_best.valid || candidate.score > second_best.score) {
-        second_best = candidate;
-    }
-}
-
 AcquisitionResult result_from_workspace(
     const AcquisitionPlan& plan,
     const Sme2AcquisitionWorkspace& workspace) {
@@ -156,25 +142,12 @@ AcquisitionResult result_from_workspace(
             consider_candidate(candidate, result.best, result.second_best);
             ++result.evaluated_candidate_count;
         }
+        if (plan.retain_frequency_peaks) {
+            retain_frequency_peaks(result);
+        }
     }
 
-    result.ok = result.best.valid;
-    if (!result.ok) {
-        result.error_message = "no acquisition candidate was evaluated";
-        return result;
-    }
-    if (result.second_best.valid) {
-        const double denominator = std::max(
-            result.second_best.score, std::numeric_limits<double>::min());
-        result.peak_ratio = result.best.score / denominator;
-        result.normalized_peak_separation = result.best.score > 0.0
-                                                ? (result.best.score - result.second_best.score) /
-                                                      result.best.score
-                                                : 0.0;
-    } else {
-        result.peak_ratio = std::numeric_limits<double>::infinity();
-        result.normalized_peak_separation = 1.0;
-    }
+    finish_candidate_ranking(result);
     return result;
 }
 

@@ -20,6 +20,11 @@ bool soft_demodulate_bpsk(const std::vector<ComplexF>& iq,
         log_error("soft_demodulate_bpsk: samples_per_symbol must be > 0");
         return false;
     }
+    if (cfg.full_scale_symbol_mean &&
+        (!std::isfinite(*cfg.full_scale_symbol_mean) || *cfg.full_scale_symbol_mean <= 0.0f)) {
+        log_error("soft_demodulate_bpsk: fixed quantiser full scale must be finite and positive");
+        return false;
+    }
     if (iq.size() < cfg.samples_per_symbol) {
         log_error("soft_demodulate_bpsk: IQ buffer shorter than one symbol");
         return false;
@@ -46,19 +51,24 @@ bool soft_demodulate_bpsk(const std::vector<ComplexF>& iq,
                             ? (127.0f / max_abs_symbol_mean)
                             : 0.0f;
     for (float mean : symbol_means) {
-        const float scaled = mean * scale;
-        const float clipped = std::max(std::min(scaled, 127.0f), -127.0f);
-        if (clipped != scaled) {
-            ++clipped_symbol_count;
+        double scaled = mean * scale;
+        if (cfg.full_scale_symbol_mean) {
+            const float full_scale = *cfg.full_scale_symbol_mean;
+            if (std::abs(mean) > full_scale) {
+                ++clipped_symbol_count;
+            }
+            scaled = 127.0 * static_cast<double>(mean) / full_scale;
         }
-        const int8_t soft = static_cast<int8_t>(std::lround(clipped));
+        const int8_t soft = static_cast<int8_t>(std::lround(std::clamp(scaled, -127.0, 127.0)));
         soft_bits.push_back(soft);
     }
 
     if (stats != nullptr) {
         stats->symbol_count = symbol_count;
         stats->samples_per_symbol = cfg.samples_per_symbol;
-        stats->clipped_symbol_count = clipped_symbol_count;
+        if (cfg.full_scale_symbol_mean) {
+            stats->clipped_symbol_count = clipped_symbol_count;
+        }
         stats->max_abs_symbol_mean = max_abs_symbol_mean;
     }
 

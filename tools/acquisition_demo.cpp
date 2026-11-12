@@ -59,26 +59,12 @@ bool read_text_file(const std::filesystem::path& path, std::string& text) {
     return input.good() || input.eof();
 }
 
-bool find_json_value(const std::string& json, const std::string& key, std::size_t& position) {
-    const std::string quoted_key = "\"" + key + "\"";
-    const std::size_t key_position = json.find(quoted_key);
-    if (key_position == std::string::npos) {
-        return false;
-    }
-    const std::size_t colon_position = json.find(':', key_position + quoted_key.size());
-    if (colon_position == std::string::npos) {
-        return false;
-    }
-    position = json.find_first_not_of(" \t\r\n", colon_position + 1);
-    return position != std::string::npos;
-}
-
 bool parse_json_string(
     const std::string& json,
     const std::string& key,
     std::string& value) {
     std::size_t position = 0;
-    if (!find_json_value(json, key, position) || json[position] != '"') {
+    if (!satcomfec::tools::find_metadata_field(json, key, position) || json[position] != '"') {
         return false;
     }
     const std::size_t end = json.find('"', position + 1);
@@ -94,7 +80,7 @@ bool parse_json_number(
     const std::string& key,
     double& value) {
     std::size_t position = 0;
-    if (!find_json_value(json, key, position)) {
+    if (!satcomfec::tools::find_metadata_field(json, key, position)) {
         return false;
     }
     return satcomfec::tools::parse_metadata_number(json, position, value);
@@ -105,42 +91,8 @@ bool parse_json_size(
     const std::string& key,
     std::size_t& value) {
     std::size_t position = 0;
-    return find_json_value(json, key, position) &&
+    return satcomfec::tools::find_metadata_field(json, key, position) &&
            satcomfec::tools::parse_metadata_size(json, position, value);
-}
-
-bool parse_json_number_array(
-    const std::string& json,
-    const std::string& key,
-    std::vector<double>& values) {
-    std::size_t position = 0;
-    if (!find_json_value(json, key, position) || json[position] != '[') {
-        return false;
-    }
-    values.clear();
-    ++position;
-    while (true) {
-        position = json.find_first_not_of(" \t\r\n", position);
-        if (position == std::string::npos) {
-            return false;
-        }
-        double parsed = 0.0;
-        if (!satcomfec::tools::parse_metadata_number(json, position, parsed, &position)) {
-            return false;
-        }
-        values.push_back(parsed);
-        position = json.find_first_not_of(" \t\r\n", position);
-        if (position == std::string::npos) {
-            return false;
-        }
-        if (json[position] == ']') {
-            return satcomfec::tools::json_value_end(json, position + 1);
-        }
-        if (json[position] != ',') {
-            return false;
-        }
-        ++position;
-    }
 }
 
 bool load_fixture_metadata(
@@ -153,6 +105,7 @@ bool load_fixture_metadata(
         return false;
     }
 
+    std::size_t grid_start = 0;
     const bool complete =
         parse_json_string(json, "scenario", metadata.scenario) &&
         parse_json_string(json, "preamble_file", metadata.preamble_file) &&
@@ -163,8 +116,9 @@ bool load_fixture_metadata(
         parse_json_size(
             json, "timing_search_stop_inclusive", metadata.timing_search_stop_inclusive) &&
         parse_json_size(json, "timing_search_step", metadata.timing_search_step) &&
-        parse_json_number_array(
-            json, "cfo_hypotheses_hz", metadata.cfo_hypotheses_hz) &&
+        satcomfec::tools::find_metadata_field(json, "cfo_hypotheses_hz", grid_start) &&
+        satcomfec::tools::parse_metadata_number_array(
+            json, grid_start, metadata.cfo_hypotheses_hz) &&
         parse_json_size(json, "true_timing_offset", metadata.true_timing_offset) &&
         parse_json_number(json, "true_cfo_hz", metadata.true_cfo_hz);
     if (!complete) {

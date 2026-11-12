@@ -50,7 +50,11 @@ struct ReplayAcquisitionDiagnostics {
     double peak_ratio = 0.0;
     double normalized_peak = 0.0;
     double second_best_normalized_peak = 0.0;
+    // Raw separation between the two best grid cells.
     double normalized_peak_separation = 0.0;
+    double cfo_guard_hz = 0.0;
+    acquisition::AcquisitionCandidate distinct_competitor;
+    double distinct_peak_separation = 0.0;
     double confidence = 0.0;
     double minimum_normalized_peak = 0.0;
     double minimum_peak_separation = 0.0;

@@ -5,8 +5,42 @@
 #include <cstdlib>
 #include <limits>
 #include <string>
+#include <vector>
 
 namespace satcomfec::tools {
+
+// Locate a top-level fixture field, skipping strings and nested metadata.
+inline bool find_metadata_field(
+    const std::string& text, const std::string& key, std::size_t& value_start) {
+    std::size_t depth = 0;
+    for (std::size_t pos = 0; pos < text.size(); ++pos) {
+        const char ch = text[pos];
+        if (ch == '{' || ch == '[') {
+            ++depth;
+        } else if (ch == '}' || ch == ']') {
+            if (depth == 0) {
+                return false;
+            }
+            --depth;
+        } else if (ch == '"') {
+            const auto begin = ++pos;
+            while (pos < text.size() && text[pos] != '"') {
+                if (text[pos] == '\\') {
+                    ++pos;
+                }
+                ++pos;
+            }
+            if (depth == 1 && text.compare(begin, pos - begin, key) == 0) {
+                const auto colon = text.find_first_not_of(" \t\r\n", pos + 1);
+                if (colon != std::string::npos && text[colon] == ':') {
+                    value_start = text.find_first_not_of(" \t\r\n", colon + 1);
+                    return value_start != std::string::npos;
+                }
+            }
+        }
+    }
+    return false;
+}
 
 inline bool json_value_end(const std::string& text, std::size_t position) {
     position = text.find_first_not_of(" \t\r\n", position);
@@ -81,6 +115,39 @@ inline bool parse_metadata_number(
         *token_end = end;
     }
     return true;
+}
+
+inline bool parse_metadata_number_array(
+    const std::string& json,
+    std::size_t position,
+    std::vector<double>& values) {
+    if (position >= json.size() || json[position] != '[') {
+        return false;
+    }
+    values.clear();
+    ++position;
+    while (true) {
+        position = json.find_first_not_of(" \t\r\n", position);
+        if (position == std::string::npos) {
+            return false;
+        }
+        double parsed = 0.0;
+        if (!parse_metadata_number(json, position, parsed, &position)) {
+            return false;
+        }
+        values.push_back(parsed);
+        position = json.find_first_not_of(" \t\r\n", position);
+        if (position == std::string::npos) {
+            return false;
+        }
+        if (json[position] == ']') {
+            return json_value_end(json, position + 1);
+        }
+        if (json[position] != ',') {
+            return false;
+        }
+        ++position;
+    }
 }
 
 // Convert integer-valued JSON numbers exactly, including decimal/exponent forms.

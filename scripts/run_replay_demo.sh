@@ -13,6 +13,7 @@ ACQUISITION="reference"
 METADATA_PATH=""
 PREAMBLE_PATH=""
 POSITIONAL_ARGS=()
+CLI_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -26,6 +27,14 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       ACQUISITION="$2"
+      shift 2
+      ;;
+    --symbol-full-scale)
+      if [[ $# -lt 2 ]]; then
+        echo "error: --symbol-full-scale requires a limit" >&2
+        exit 1
+      fi
+      CLI_ARGS+=("$1" "$2")
       shift 2
       ;;
     --metadata)
@@ -48,7 +57,7 @@ while [[ $# -gt 0 ]]; do
       cat <<'EOF'
 Usage: scripts/run_replay_demo.sh [--allow-failure]
        [--acquisition reference|neon|sme2] [--metadata path]
-       [--preamble path] [iq_path] [decoder]
+       [--preamble path] [--symbol-full-scale N] [iq_path] [decoder]
 
 Supported decoders:
   viterbi-reference
@@ -97,14 +106,7 @@ case "${ACQUISITION}" in
     ;;
 esac
 
-if [[ -z "${METADATA_PATH}" ]]; then
-  INFERRED_METADATA="${IQ_PATH%.*}.json"
-  if [[ -f "${INFERRED_METADATA}" ]]; then
-    METADATA_PATH="${INFERRED_METADATA}"
-  fi
-fi
-
-CLI_ARGS=(
+CLI_ARGS+=(
   --iq "${IQ_PATH}"
   --acquisition "${ACQUISITION}"
   --decoder "${DECODER}"

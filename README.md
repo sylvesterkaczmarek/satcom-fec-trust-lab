@@ -36,9 +36,10 @@ signal processing. These input checks preserve the sample values in valid
 captures.
 
 Fixture metadata must use finite JSON numbers, integer-valued sizes and valid
-acquisition ranges. A rejected automatically discovered replay sidecar leaves
-the default replay settings intact; explicitly supplied invalid metadata
-causes the command to fail.
+acquisition ranges. Replay searches the frequencies listed in `cfo_hypotheses_hz`.
+If the field is absent, it uses the default five frequencies. Invalid metadata
+causes an error when supplied explicitly. An invalid auto-discovered sidecar
+leaves the default settings intact.
 
 To install the supported host CLIs (`replay_demo`, `acquisition_demo`, and
 `benchmark_acquisition`) under a local prefix:
@@ -63,9 +64,10 @@ C(tau, f) = sum(n=0..L-1) r[tau+n] * conj(p[n]) * exp(-j 2 pi f n / Fs)
 S(tau, f) = |C(tau, f)|^2
 ```
 
-The highest score selects timing and CFO. The second-highest score provides an
-explicit ambiguity signal. The replay rejects weak or insufficiently separated
-peaks before demodulation.
+The highest score selects timing and CFO. Acquisition reports the raw runner-up.
+Replay compares the winner with the strongest distinct peak before demodulation.
+At the same timing, frequencies less than `Fs / L` from the winner belong to
+the same peak for this check.
 
 Implemented acquisition paths:
 
@@ -154,8 +156,8 @@ bash scripts/verify_android_benchmark_build.sh --sme2 auto
 
 Device execution additionally requires an authorized Arm64 phone visible to
 ADB. The exact build, push, runtime-gating, and result-retrieval procedure is in
-[docs/android_benchmark.md](docs/android_benchmark.md). No Android performance
-result is checked into this repository.
+[docs/android_benchmark.md](docs/android_benchmark.md). Arm published the vivo
+X300 acquisition timings in the [companion article](https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/accelerating-digital-signal-processing-with-arm-sme2-for-satellite-signal-acquisition).
 
 ## Replay and trust cases
 
@@ -169,9 +171,9 @@ The checked replay fixtures exercise distinct outcomes:
 | failed | accepted | corrupted frame, CRC failure | low-confidence |
 | no-signal | rejected | demodulation not attempted | low-confidence |
 
-Trust inputs include normalized acquisition peak, best-to-second-best
-separation, residual uncertainty, bounded soft-decision strength, secondary
-frame-sync evidence, demodulation clipping, and CRC state. The score and bands
+Trust inputs include normalized acquisition peak, separation from a competing
+peak, residual uncertainty, soft-decision strength, frame sync, and CRC state.
+Frame-sync margin and demodulator clipping contribute only when measured. The score and bands
 are deterministic demo heuristics, not calibrated probabilities or operational
 assurance levels. See [docs/trust_monitors.md](docs/trust_monitors.md).
 

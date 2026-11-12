@@ -125,6 +125,23 @@ class MetadataValidationTests(unittest.TestCase):
                 actual.pop("metadata_path")
                 self.assertEqual(actual, expected)
 
+    def test_replay_uses_only_declared_frequencies(self) -> None:
+        metadata = json.loads((REPLAY_DIR / "demo_conv_bpsk.json").read_text())
+        # An extension may describe a different search. Only the top-level grid applies.
+        metadata = {"comparison": {"cfo_hypotheses_hz": [-500.0]}} | metadata
+        for grid in ([250.0], [0.0]):
+            with self.subTest(grid=grid):
+                completed = self.run_metadata("replay_demo", metadata | {"cfo_hypotheses_hz": grid})
+                acquisition = json.loads(completed.stdout)["acquisition"]
+                self.assertEqual(acquisition["cfo_hypothesis_count"], 1)
+                self.assertEqual(acquisition["detected_cfo_hz"], grid[0])
+                self.assertEqual(acquisition["evaluated_candidate_count"],
+                                 acquisition["timing_hypothesis_count"])
+        del metadata["cfo_hypotheses_hz"]
+        completed = self.run_metadata("replay_demo", metadata)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(json.loads(completed.stdout)["acquisition"]["cfo_hypothesis_count"], 5)
+
     def test_replay_rejects_invalid_numeric_and_literal_tokens(self) -> None:
         metadata = json.loads((REPLAY_DIR / "demo_conv_bpsk.json").read_text())
         for field, token in (
@@ -138,6 +155,10 @@ class MetadataValidationTests(unittest.TestCase):
             ("true_cfo_hz", "250e"),
             ("true_cfo_hz", "nulljunk"),
             ("signal_present", "truejunk"),
+            ("cfo_hypotheses_hz", "[]"),
+            ("cfo_hypotheses_hz", "[0,0]"),
+            ("cfo_hypotheses_hz", "[1e9999]"),
+            ("cfo_hypotheses_hz", "[0,]"),
         ):
             with self.subTest(field=field, token=token):
                 completed = self.run_metadata("replay_demo", metadata, raw_field=(field, token))
@@ -158,6 +179,14 @@ class MetadataValidationTests(unittest.TestCase):
                 actual = json.loads(completed.stdout)
                 actual.pop("metadata_path")
                 self.assertEqual(actual, expected)
+
+    def test_replay_quantiser_limit(self) -> None:
+        command = [str(BUILD_DIR / "replay_demo"), "--symbol-full-scale"]
+        for limit in ("0", "-1", "nan", "inf", "1x"):
+            with self.subTest(limit=limit):
+                completed = subprocess.run(command + [limit], cwd=ROOT_DIR, capture_output=True)
+                self.assertNotEqual(completed.returncode, 0)
+                self.assertIn(b"--symbol-full-scale", completed.stderr)
 
     def test_failed_inferred_metadata_preserves_all_default_configuration(self) -> None:
         metadata = json.loads((REPLAY_DIR / "demo_conv_bpsk.json").read_text())

@@ -1,6 +1,7 @@
 #include "acquisition/acquisition_neon.h"
 
-#include <algorithm>
+#include "acquisition/acquisition_peaks.h"
+
 #include <array>
 #include <cmath>
 #include <complex>
@@ -143,20 +144,6 @@ bool consecutive_timings(
     return true;
 }
 
-void consider_candidate(
-    const AcquisitionCandidate& candidate,
-    AcquisitionCandidate& best,
-    AcquisitionCandidate& second_best) {
-    if (!best.valid || candidate.score > best.score) {
-        second_best = best;
-        best = candidate;
-        return;
-    }
-    if (!second_best.valid || candidate.score > second_best.score) {
-        second_best = candidate;
-    }
-}
-
 template <std::size_t GroupCount>
 void evaluate_consecutive_timing_batch(
     const std::vector<ComplexF>& received_iq,
@@ -256,6 +243,9 @@ AcquisitionResult run_neon_acquisition_steady_state(
         if (plan.timing_offsets_contiguous) {
             evaluate_contiguous_timing_grid(
                 received_iq, plan, frequency, result);
+            if (plan.retain_frequency_peaks) {
+                retain_frequency_peaks(result);
+            }
             continue;
         }
         std::size_t timing_index = 0;
@@ -305,26 +295,12 @@ AcquisitionResult run_neon_acquisition_steady_state(
             ++result.evaluated_candidate_count;
             ++timing_index;
         }
+        if (plan.retain_frequency_peaks) {
+            retain_frequency_peaks(result);
+        }
     }
 
-    result.ok = result.best.valid;
-    if (!result.ok) {
-        result.error_message = "no acquisition candidate was evaluated";
-        return result;
-    }
-
-    if (result.second_best.valid) {
-        const double denominator = std::max(
-            result.second_best.score, std::numeric_limits<double>::min());
-        result.peak_ratio = result.best.score / denominator;
-        result.normalized_peak_separation = result.best.score > 0.0
-                                                ? (result.best.score - result.second_best.score) /
-                                                      result.best.score
-                                                : 0.0;
-    } else {
-        result.peak_ratio = std::numeric_limits<double>::infinity();
-        result.normalized_peak_separation = 1.0;
-    }
+    finish_candidate_ranking(result);
 #else
     static_cast<void>(received_iq);
     static_cast<void>(plan);

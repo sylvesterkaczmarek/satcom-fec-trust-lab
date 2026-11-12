@@ -26,6 +26,8 @@ struct AcquisitionPlan {
     std::vector<PreparedFrequencyHypothesis> frequency_hypotheses;
     std::vector<float> matched_filter_weights_real_f32;
     std::vector<float> matched_filter_weights_imag_f32;
+    // Replay uses the two best timings at each CFO to assess competing peaks.
+    bool retain_frequency_peaks = false;
 };
 
 bool prepare_acquisition_plan(
