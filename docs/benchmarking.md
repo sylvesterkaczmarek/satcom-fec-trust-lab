@@ -106,7 +106,10 @@ counts, candidate correlations/s, complex MACs/s, and median-latency speedups
 relative to reference and NEON. It also records the commit, dirty-tree state,
 timestamp, OS, architecture, CPU model, compiler, source-specific flags,
 runtime feature detection, vector width where available, workload definition,
-correctness evidence, and implementation actually executed.
+correctness evidence, and implementation actually executed. Each benchmark
+build refreshes the Git revision and working-tree status, including incremental
+builds. Source archives and builds without Git report `unavailable` for the
+revision and `unknown` for the working-tree status.
 
 The `build` object also records the CMake version and generator, compiler path,
 compiler ID and target, target system/processor, warning and sanitizer options,

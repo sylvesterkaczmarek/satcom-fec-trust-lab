@@ -34,6 +34,11 @@ enum class AcquisitionImplementation {
     kSme2,
 };
 
+struct FrequencyPeaks {
+    AcquisitionCandidate best;
+    AcquisitionCandidate second_best;
+};
+
 struct AcquisitionResult {
     bool ok = false;
     std::size_t evaluated_candidate_count = 0;
@@ -43,6 +48,7 @@ struct AcquisitionResult {
     double normalized_peak_separation = 0.0;
     std::string implementation = "reference";
     std::string error_message;
+    std::vector<FrequencyPeaks> peaks_by_frequency;
 };
 
 }  // namespace satcomfec::acquisition

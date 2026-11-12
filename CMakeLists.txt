@@ -459,36 +459,22 @@ target_link_libraries(
     PRIVATE satcom_replay_core satcomfec_project_options
 )
 
-set(SATCOMFEC_BENCHMARK_GIT_SHA "unavailable")
-set(SATCOMFEC_BENCHMARK_GIT_DIRTY "unknown")
-if(Git_FOUND)
-    execute_process(
-        COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        RESULT_VARIABLE SATCOMFEC_GIT_SHA_RESULT
-        OUTPUT_VARIABLE SATCOMFEC_BENCHMARK_GIT_SHA
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_QUIET
-    )
-    if(NOT SATCOMFEC_GIT_SHA_RESULT EQUAL 0)
-        set(SATCOMFEC_BENCHMARK_GIT_SHA "unavailable")
-    endif()
-    execute_process(
-        COMMAND "${GIT_EXECUTABLE}" status --porcelain --untracked-files=normal
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        RESULT_VARIABLE SATCOMFEC_GIT_DIRTY_RESULT
-        OUTPUT_VARIABLE SATCOMFEC_GIT_STATUS
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_QUIET
-    )
-    if(SATCOMFEC_GIT_DIRTY_RESULT EQUAL 0)
-        if(SATCOMFEC_GIT_STATUS)
-            set(SATCOMFEC_BENCHMARK_GIT_DIRTY "true")
-        else()
-            set(SATCOMFEC_BENCHMARK_GIT_DIRTY "false")
-        endif()
-    endif()
-endif()
+# Check Git on each benchmark build, including incremental builds. The header
+# timestamp changes only when the embedded revision or worktree state changes.
+set(provenance_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+set(provenance_header "${provenance_dir}/satcomfec_benchmark_provenance.h")
+add_custom_target(benchmark_provenance
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+        "-DGIT_EXECUTABLE=${GIT_EXECUTABLE}"
+        "-DOUTPUT_HEADER=${provenance_header}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/benchmark_provenance.cmake"
+    BYPRODUCTS "${provenance_header}"
+    VERBATIM
+)
+add_dependencies(benchmark_acquisition benchmark_provenance)
+target_include_directories(benchmark_acquisition PRIVATE "${provenance_dir}")
+target_compile_definitions(benchmark_acquisition PRIVATE SATCOMFEC_HAS_BENCHMARK_PROVENANCE=1)
 
 if(CMAKE_BUILD_TYPE)
     string(TOUPPER "${CMAKE_BUILD_TYPE}" SATCOMFEC_BUILD_TYPE_UPPER)
@@ -530,14 +516,6 @@ function(satcomfec_add_string_definition target name value)
     target_compile_definitions("${target}" PRIVATE "${name}=\"${escaped_value}\"")
 endfunction()
 
-satcomfec_add_string_definition(
-    benchmark_acquisition SATCOMFEC_BENCHMARK_GIT_SHA
-    "${SATCOMFEC_BENCHMARK_GIT_SHA}"
-)
-satcomfec_add_string_definition(
-    benchmark_acquisition SATCOMFEC_BENCHMARK_GIT_DIRTY
-    "${SATCOMFEC_BENCHMARK_GIT_DIRTY}"
-)
 satcomfec_add_string_definition(
     benchmark_acquisition SATCOMFEC_BENCHMARK_BUILD_TYPE
     "${SATCOMFEC_BENCHMARK_BUILD_TYPE}"
@@ -654,6 +632,9 @@ if(BUILD_TESTING AND NOT SATCOMFEC_ANDROID_BENCHMARK_ONLY)
         PRIVATE satcom_replay_core satcomfec_project_options
     )
     add_test(NAME iq_reader_integrity COMMAND check_iq_reader)
+    add_executable(check_trust_measurements tests/check_trust_measurements.cpp)
+    target_link_libraries(check_trust_measurements PRIVATE satcom_replay_core satcomfec_project_options)
+    add_test(NAME trust_measurements COMMAND check_trust_measurements)
     if(SATCOMFEC_ENABLE_SME2)
         set(SATCOMFEC_COMPILE_CHECK_MODE "sme2")
     elseif(SATCOMFEC_ENABLE_NEON)

@@ -55,9 +55,18 @@ five CFO hypotheses from `-500 Hz` through `500 Hz`.
 
 After selecting the best candidate, the replay adapter uses the complex
 correlation phase and selected CFO to correct the aligned frame. It accepts a
-candidate only when normalized peak energy is at least `0.10` and raw-score
-peak separation is at least `0.05`. These fixed thresholds are deterministic
-demo checks, not receiver-operating-characteristic calibration. The subsequent
+candidate only when normalized peak energy is at least `0.10` and separation
+from a distinct competitor is at least `0.05`. At the winning timing, CFO bins
+closer to the winning frequency than `sample_rate_hz / preamble_length`
+(187.5 Hz for these fixtures) sample the same frequency peak. The guard is the
+first-null spacing for the constant-amplitude preamble. Every different timing
+and every frequency at or beyond the guard can compete. Replay keeps the top
+two timings per frequency to find the strongest such competitor in one search.
+If none exists, replay reports a null distinct separation, assigns zero
+confidence and rejects acquisition at the default threshold. Native callers
+can disable the separation gate by setting `minimum_peak_separation` to zero.
+The raw runner-up and its separation remain available for grid comparisons.
+The thresholds are deterministic checks for these fixtures. The subsequent
 16-bit soft sync must appear at aligned symbol offset zero.
 
 ## Correctness criteria

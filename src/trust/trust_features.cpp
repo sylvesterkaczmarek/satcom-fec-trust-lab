@@ -26,7 +26,8 @@ TrustFeatures compute_trust_features(const SoftBitBuffer& soft_bits,
                                      bool crc_ok) {
     TrustFeatures f;
 
-    if (!soft_bits.empty()) {
+    f.soft_decisions_measured = !soft_bits.empty();
+    if (f.soft_decisions_measured) {
         long sum = 0;
         size_t weak_count = 0;
         for (auto s : soft_bits) {
@@ -47,43 +48,43 @@ TrustFeatures compute_trust_features(const SoftBitBuffer& soft_bits,
     f.normalized_mean_abs_soft_decision = std::min(
         f.mean_abs_soft_decision / kTrustSoftDecisionNormalization, 1.0f);
 
-    if (max_sync_score > 0 && frame.length > 0) {
+    f.frame_sync_measured = max_sync_score > 0 && frame.length > 0;
+    if (f.frame_sync_measured) {
         f.normalized_frame_sync_score =
             static_cast<float>(frame.correlation_score) /
             static_cast<float>(max_sync_score);
         if (frame.has_second_best_correlation) {
+            f.frame_sync_margin_measured = true;
             const int sync_margin =
                 frame.correlation_score - frame.second_best_correlation_score;
             f.normalized_frame_sync_margin =
                 std::max(0.0f, std::min(static_cast<float>(sync_margin) /
                                             static_cast<float>(max_sync_score),
                                         1.0f));
-        } else {
-            f.normalized_frame_sync_margin = 1.0f;
         }
-    } else {
-        f.normalized_frame_sync_score = 0.0f;
-        f.normalized_frame_sync_margin = 0.0f;
     }
 
-    if (acquisition.search_completed) {
+    f.acquisition_measured = acquisition.search_completed;
+    if (f.acquisition_measured) {
         f.normalized_acquisition_peak = static_cast<float>(
             std::max(0.0, std::min(acquisition.normalized_peak, 1.0)));
+    }
+    f.acquisition_separation_measured = f.acquisition_measured && acquisition.distinct_competitor.valid;
+    if (f.acquisition_separation_measured) {
         f.acquisition_peak_separation = static_cast<float>(
             std::max(0.0, std::min(
-                acquisition.normalized_peak_separation, 1.0)));
+                acquisition.distinct_peak_separation, 1.0)));
         f.timing_ambiguity = 1.0f - f.acquisition_peak_separation;
         f.residual_acquisition_uncertainty = 1.0f - static_cast<float>(
             std::max(0.0, std::min(acquisition.confidence, 1.0)));
     }
     f.acquisition_accepted = acquisition.accepted ? 1.0f : 0.0f;
 
-    if (demod_stats.symbol_count > 0) {
+    f.clipping_measured = demod_stats.symbol_count > 0 && demod_stats.clipped_symbol_count.has_value();
+    if (f.clipping_measured) {
         f.clipped_symbol_fraction =
-            static_cast<float>(demod_stats.clipped_symbol_count) /
+            static_cast<float>(*demod_stats.clipped_symbol_count) /
             static_cast<float>(demod_stats.symbol_count);
-    } else {
-        f.clipped_symbol_fraction = 0.0f;
     }
 
     f.crc_evaluated = crc_evaluated ? 1.0f : 0.0f;

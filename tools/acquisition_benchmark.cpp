@@ -48,6 +48,10 @@
 #include <sys/utsname.h>
 #endif
 
+#ifdef SATCOMFEC_HAS_BENCHMARK_PROVENANCE
+#include "satcomfec_benchmark_provenance.h"
+#endif
+
 #ifndef SATCOMFEC_BENCHMARK_GIT_SHA
 #define SATCOMFEC_BENCHMARK_GIT_SHA "unavailable"
 #endif

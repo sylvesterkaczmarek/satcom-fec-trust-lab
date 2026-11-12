@@ -55,7 +55,7 @@ jq -n \
       weak_soft_decision_fraction: .trust_features.weak_soft_decision_fraction,
       mean_abs_soft_decision: .trust_features.mean_abs_soft_decision,
       acquisition_confidence: .acquisition.confidence,
-      acquisition_peak_separation: .acquisition.normalized_peak_separation,
+      acquisition_peak_separation: .acquisition.distinct_peak_separation,
       decoded_text
     }),
     impaired: ($impaired[0] | {
@@ -67,7 +67,7 @@ jq -n \
       weak_soft_decision_fraction: .trust_features.weak_soft_decision_fraction,
       mean_abs_soft_decision: .trust_features.mean_abs_soft_decision,
       acquisition_confidence: .acquisition.confidence,
-      acquisition_peak_separation: .acquisition.normalized_peak_separation,
+      acquisition_peak_separation: .acquisition.distinct_peak_separation,
       decoded_text
     }),
     ambiguous: ($ambiguous[0] | {
@@ -78,7 +78,7 @@ jq -n \
       trust_band: .trust_assessment.band,
       ambiguous_acquisition: .trust_assessment.ambiguous_acquisition,
       acquisition_confidence: .acquisition.confidence,
-      acquisition_peak_separation: .acquisition.normalized_peak_separation,
+      acquisition_peak_separation: .acquisition.distinct_peak_separation,
       decoded_text
     }),
     failed: ($failed[0] | {

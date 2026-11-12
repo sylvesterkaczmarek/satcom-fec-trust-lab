@@ -12,6 +12,12 @@ struct FrameDescriptor;
 struct ReplayAcquisitionDiagnostics;
 
 struct TrustFeatures {
+    bool soft_decisions_measured = false;
+    bool acquisition_measured = false;
+    bool acquisition_separation_measured = false;
+    bool frame_sync_measured = false;
+    bool frame_sync_margin_measured = false;
+    bool clipping_measured = false;
     float mean_abs_soft_decision = 0.0f;
     float normalized_mean_abs_soft_decision = 0.0f;
     float weak_soft_decision_fraction = 0.0f;

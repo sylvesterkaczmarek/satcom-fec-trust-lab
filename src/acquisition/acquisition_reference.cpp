@@ -1,29 +1,15 @@
 #include "acquisition/acquisition_reference.h"
 
-#include <algorithm>
+#include "acquisition/acquisition_peaks.h"
+
 #include <cmath>
 #include <complex>
-#include <limits>
 
 namespace satcomfec::acquisition {
 namespace {
 
 bool finite_iq(const ComplexF& sample) {
     return std::isfinite(sample.real()) && std::isfinite(sample.imag());
-}
-
-void consider_candidate(
-    const AcquisitionCandidate& candidate,
-    AcquisitionCandidate& best,
-    AcquisitionCandidate& second_best) {
-    if (!best.valid || candidate.score > best.score) {
-        second_best = best;
-        best = candidate;
-        return;
-    }
-    if (!second_best.valid || candidate.score > second_best.score) {
-        second_best = candidate;
-    }
 }
 
 }  // namespace
@@ -53,26 +39,12 @@ AcquisitionResult run_reference_acquisition_steady_state(
             consider_candidate(candidate, result.best, result.second_best);
             ++result.evaluated_candidate_count;
         }
+        if (plan.retain_frequency_peaks) {
+            retain_frequency_peaks(result);
+        }
     }
 
-    result.ok = result.best.valid;
-    if (!result.ok) {
-        result.error_message = "no acquisition candidate was evaluated";
-        return result;
-    }
-
-    if (result.second_best.valid) {
-        const double denominator = std::max(
-            result.second_best.score, std::numeric_limits<double>::min());
-        result.peak_ratio = result.best.score / denominator;
-        result.normalized_peak_separation = result.best.score > 0.0
-                                                ? (result.best.score - result.second_best.score) /
-                                                      result.best.score
-                                                : 0.0;
-    } else {
-        result.peak_ratio = std::numeric_limits<double>::infinity();
-        result.normalized_peak_separation = 1.0;
-    }
+    finish_candidate_ranking(result);
 
     return result;
 }

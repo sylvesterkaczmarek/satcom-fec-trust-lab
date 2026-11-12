@@ -29,7 +29,8 @@ The replay workflow is:
 8. The decoded bytes are checked with CRC-8.
 9. `compute_trust_features` and `compute_trust_score` summarize normalized
    acquisition strength, peak separation, residual uncertainty, soft-decision
-   evidence, secondary frame sync, demod clipping, and CRC state.
+   evidence, secondary frame sync, and CRC state. A fixed demodulator full
+   scale also enables a soft-decision clipping measurement.
 
 The host-side entrypoint for this flow is `tools/replay_demo.cpp`, built and
 run by `scripts/run_replay_demo.sh`. Decoder alignment remains a functional FEC

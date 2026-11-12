@@ -1,6 +1,7 @@
 #ifndef SATCOMFEC_REPLAY_PIPELINE_H
 #define SATCOMFEC_REPLAY_PIPELINE_H
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -27,6 +28,7 @@ struct ReplayConfig {
     size_t samples_per_symbol = 8;
     ReplayAcquisitionConfig acquisition;
     ReplayAcquisitionGroundTruth ground_truth;
+    std::optional<float> full_scale_symbol_mean;
 };
 
 struct PreparedReplayFrame {

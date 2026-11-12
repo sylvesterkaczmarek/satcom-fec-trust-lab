@@ -118,7 +118,7 @@ PreparedReplayFrame prepare_demo_frame(const ReplayConfig& config) {
 
     SoftBitBuffer soft_bits;
     if (!soft_demodulate_bpsk(aligned_frame_iq, soft_bits,
-                              DemodConfig {config.samples_per_symbol},
+                              DemodConfig {config.samples_per_symbol, config.full_scale_symbol_mean},
                               &prepared.demod_stats)) {
         prepared.error_message = "Soft demodulation failed";
         return prepared;
