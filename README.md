@@ -30,15 +30,23 @@ verification, and benchmark evidence accompanying the publication.
 
 ## Research highlights
 
-- **2.14–2.42× SME2 speedup over NEON** on the vivo X300 for the medium fixed
-  acquisition workload, across five runs measured by Arm in the
-  [published article](https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/accelerating-digital-signal-processing-with-arm-sme2-for-satellite-signal-acquisition).
+- **2.14–2.42× SME2 speedup over NEON** across five Arm-measured vivo X300
+  runs of the medium fixed synthetic workload. The search evaluates a 128-sample
+  preamble across 4,096 timing offsets and nine CFO hypotheses (36,864 candidate
+  correlations). Median per-capture latency fell from **3.591 ms with NEON**
+  to **1.580 ms with SME2**, as reported in the
+  [published Arm article](https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/accelerating-digital-signal-processing-with-arm-sme2-for-satellite-signal-acquisition).
 - **Three validated acquisition paths:** portable scalar reference, Arm NEON,
   and ZA-backed Arm SME2, with accelerated results checked against the scalar
   reference before benchmark timings are accepted.
 - **End-to-end synthetic IQ → CRC-8 replay:** acquisition, carrier-frequency
   and phase correction, demodulation, frame synchronization, decoding, and
   inspectable trust diagnostics.
+
+For portable ground-station development and satellite commissioning, lower
+acquisition latency can return a result sooner or permit a wider timing/CFO
+search within the same processing budget. Live-RF operation and mission-specific
+waveforms remain future work.
 
 ## Quick start
 
@@ -272,9 +280,12 @@ fairness contract. CI timing is used only as a smoke check.
 - Calibrated acquisition probability, trust probability, or security/anomaly
   detection performance.
 - Full Viterbi, full FEC, or LDPC acceleration with SME2.
-- Android application support or Android performance.
-- General NEON/SME2 speedup, thermal behavior, power, energy, or performance on
-  hardware other than the checked result host.
+- An Android application or end-to-end mobile replay. Arm's published vivo X300
+  acquisition timings are external measurements; raw Android device reports
+  are not tracked in this repository.
+- General NEON/SME2 speedups beyond the fixed acquisition workloads and the
+  recorded Apple M5 Pro or Arm-published vivo X300 measurements. Power, energy,
+  and thermal behaviour were not measured.
 - Optimality of direct correlation for long windows, long preambles, or dense
   CFO grids; FFT/filter-bank and hierarchical alternatives are not implemented.
 
