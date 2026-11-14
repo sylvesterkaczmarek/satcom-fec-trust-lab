@@ -2,17 +2,43 @@
 
 ![Pocket Satcom Acquisition and Trust Lab](assets/social/github-social-card-satcom-fec-trust-lab.png)
 
-A host-side C++17 lab for finding a known satellite-signal preamble in complex
-IQ, estimating timing and carrier-frequency offset (CFO), aligning a synthetic
-frame, decoding it, and reporting inspectable trust diagnostics.
+[![CI](https://github.com/sylvesterkaczmarek/satcom-fec-trust-lab/actions/workflows/host-replay.yml/badge.svg?branch=main)](https://github.com/sylvesterkaczmarek/satcom-fec-trust-lab/actions/workflows/host-replay.yml)
+![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=c%2B%2B&logoColor=white)
+![Arm NEON / SME2](https://img.shields.io/badge/Arm-NEON%20%2F%20SME2-0091BD?logo=arm&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
+[![Arm Developer Publication](https://img.shields.io/badge/Arm%20Developer-Publication-0091BD?logo=arm&logoColor=white)](https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/accelerating-digital-signal-processing-with-arm-sme2-for-satellite-signal-acquisition)
 
-The primary engineering workload is a bank of matched-filter correlations over
-many timing offsets and CFO hypotheses. The repository provides a scalar
-correctness oracle, an Arm NEON implementation, and an opt-in Arm SME2
-implementation that accumulates four scalable vectors in ZA.
+An open-source C++17 research implementation for satellite signal acquisition,
+combining validated Arm NEON and SME2 acceleration, reproducible performance
+benchmarks, end-to-end signal decoding, and inspectable trust diagnostics.
+
+The core workload searches for known signal preambles across timing and
+carrier-frequency hypotheses. Three implementations are provided: a portable
+scalar reference, an optimised Arm NEON kernel, and an SME2 kernel using ZA-backed
+vector operations. Accelerated results are verified against the scalar reference.
 
 All public captures are deterministic synthetic fixtures. This is not a live
 receiver or an operational satellite waveform implementation.
+
+**Published on Arm Developer · November 2026**
+
+[**Accelerating digital signal processing with Arm SME2 for satellite signal acquisition**](https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/accelerating-digital-signal-processing-with-arm-sme2-for-satellite-signal-acquisition)
+
+Research by **Sylvester Kaczmarek, Arm Ambassador**. This repository provides
+the open-source implementation, reproducible experiments, correctness
+verification, and benchmark evidence accompanying the publication.
+
+## Research highlights
+
+- **2.14–2.42× SME2 speedup over NEON** on the vivo X300 for the medium fixed
+  acquisition workload, across five runs measured by Arm in the
+  [published article](https://developer.arm.com/community/arm-community-blogs/b/architectures-and-processors-blog/posts/accelerating-digital-signal-processing-with-arm-sme2-for-satellite-signal-acquisition).
+- **Three validated acquisition paths:** portable scalar reference, Arm NEON,
+  and ZA-backed Arm SME2, with accelerated results checked against the scalar
+  reference before benchmark timings are accepted.
+- **End-to-end synthetic IQ → CRC-8 replay:** acquisition, carrier-frequency
+  and phase correction, demodulation, frame synchronization, decoding, and
+  inspectable trust diagnostics.
 
 ## Quick start
 
@@ -26,20 +52,9 @@ make check-acquisition
 make test
 ```
 
-`make replay` runs checked-in float32 IQ through acquisition, CFO/phase
-correction, BPSK demodulation, frame sync, scalar Viterbi decode, CRC-8, and
+`make replay` processes checked-in float32 IQ through acquisition, CFO/phase
+correction, BPSK demodulation, frame sync, scalar Viterbi decoding, CRC-8, and
 trust scoring. The expected payload is `SATCOM DEMO OK`.
-
-IQ files must contain complete interleaved float32 I/Q pairs with finite
-components. Truncated captures and NaN or infinity values are rejected before
-signal processing. These input checks preserve the sample values in valid
-captures.
-
-Fixture metadata must use finite JSON numbers, integer-valued sizes and valid
-acquisition ranges. Replay searches the frequencies listed in `cfo_hypotheses_hz`.
-If the field is absent, it uses the default five frequencies. Invalid metadata
-causes an error when supplied explicitly. An invalid auto-discovered sidecar
-leaves the default settings intact.
 
 To install the supported host CLIs (`replay_demo`, `acquisition_demo`, and
 `benchmark_acquisition`) under a local prefix:
@@ -53,6 +68,19 @@ For the complete clean-checkout correctness workflow:
 ```sh
 make verify
 ```
+
+### Input and fixture validation
+
+IQ files must contain complete interleaved float32 I/Q pairs with finite
+components. Truncated captures and NaN or infinity values are rejected before
+signal processing. These input checks preserve the sample values in valid
+captures.
+
+Fixture metadata must use finite JSON numbers, integer-valued sizes and valid
+acquisition ranges. Replay searches the frequencies listed in `cfo_hypotheses_hz`.
+If the field is absent, it uses the default five frequencies. Invalid metadata
+causes an error when supplied explicitly. An invalid auto-discovered sidecar
+leaves the default settings intact.
 
 ## Problem and scope
 
